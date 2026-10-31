@@ -1,0 +1,80 @@
+<script setup lang="ts">
+import { computed, reactive, watch } from "vue";
+import { meshAsk, submitAsk } from "../ask";
+
+const picks = reactive<Record<string, string[]>>({});
+
+watch(
+  () => meshAsk.prompt,
+  (prompt) => {
+    for (const key of Object.keys(picks)) delete picks[key];
+    if (!prompt) return;
+    for (const q of prompt.questions) {
+      picks[q.id || q.prompt] = [];
+    }
+  },
+  { immediate: true },
+);
+
+const ready = computed(() => {
+  const prompt = meshAsk.prompt;
+  if (!prompt) return false;
+  return prompt.questions.every((q) => (picks[q.id || q.prompt] || []).length > 0);
+});
+
+function keyOf(q: { id?: string; prompt: string }): string {
+  return q.id || q.prompt;
+}
+
+function chosen(qkey: string, id: string): boolean {
+  return (picks[qkey] || []).includes(id);
+}
+
+function toggle(qkey: string, id: string, multi: boolean): void {
+  const cur = picks[qkey] ? picks[qkey].slice() : [];
+  if (!multi) {
+    picks[qkey] = [id];
+    return;
+  }
+  const i = cur.indexOf(id);
+  if (i >= 0) cur.splice(i, 1);
+  else cur.push(id);
+  picks[qkey] = cur;
+}
+
+async function confirm(): Promise<void> {
+  if (!meshAsk.prompt || !ready.value || meshAsk.answering) return;
+  await submitAsk(meshAsk.prompt, { ...picks });
+}
+</script>
+
+<template>
+  <div v-if="meshAsk.prompt" class="mesh-ask" role="group" :aria-label="meshAsk.prompt.title || '需要选择'">
+    <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? "等你确认" : "等你选一项" }}</div>
+    <div v-if="meshAsk.prompt.title" class="mesh-ask-title">{{ meshAsk.prompt.title }}</div>
+    <div v-for="q in meshAsk.prompt.questions" :key="keyOf(q)" class="mesh-ask-q">
+      <p>{{ q.prompt }}</p>
+      <button
+        v-for="opt in q.options"
+        :key="opt.id"
+        type="button"
+        class="mesh-ask-opt"
+        :class="{ on: chosen(keyOf(q), opt.id) }"
+        :aria-pressed="chosen(keyOf(q), opt.id)"
+        @click="toggle(keyOf(q), opt.id, !!q.multi)"
+      >
+        <span class="mesh-ask-mark" aria-hidden="true"></span>
+        <span class="mesh-ask-opt-body">
+          <span class="mesh-ask-opt-label">{{ opt.label }}</span>
+          <span v-if="opt.hint" class="mesh-ask-opt-hint">{{ opt.hint }}</span>
+        </span>
+      </button>
+    </div>
+    <div class="mesh-ask-bar">
+      <p v-if="meshAsk.error" class="mesh-ask-err">{{ meshAsk.error }}</p>
+      <button type="button" class="mesh-ask-go" :disabled="!ready || meshAsk.answering" @click="confirm">
+        {{ meshAsk.answering ? "正在提交" : "就选这个" }}
+      </button>
+    </div>
+  </div>
+</template>

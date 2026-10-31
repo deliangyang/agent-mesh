@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>对话 · Agent Mesh</title>
+    <script>
+      try {
+        if (localStorage.getItem("mesh.theme") === "dark") {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = "dark";
+        }
+      } catch (e) {}
+      (function () {
+        var opt = { capture: true, passive: false };
+        function pinch(e) {
+          if (e.touches && e.touches.length > 1) e.preventDefault();
+          if (typeof e.scale === "number" && e.scale !== 1) e.preventDefault();
+        }
+        function block(e) { e.preventDefault(); }
+        document.addEventListener("touchstart", pinch, opt);
+        document.addEventListener("touchmove", pinch, opt);
+        document.addEventListener("gesturestart", block, opt);
+        document.addEventListener("gesturechange", block, opt);
+        document.addEventListener("gestureend", block, opt);
+      })();
+    </script>
+    <style>
+      html, body, #app { height: 100%; margin: 0; background: #F1F3F2; color: #1E2B27; touch-action: pan-x pan-y; }
+      html.dark, html.dark body, html.dark #app { background: #121816; color: #E3EBE6; }
+      #app:empty { display: flex; align-items: flex-end; justify-content: flex-start; padding: 12vh 10vw; color: #5E6D67; font: 14px/1.4 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+      html.dark #app:empty { color: #8A9A93; }
+      #app:empty::after { content: "正在打开对话…"; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

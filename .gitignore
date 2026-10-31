@@ -1,0 +1,36 @@
+# binaries
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# node
+node_modules/
+dist-ssr/
+*.local
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# python
+__pycache__/
+*.py[cod]
+.Python
+
+# desktop / wails
+desktop/build/
+desktop/frontend/wailsjs/go/bindings.js
+
+# env and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# editor / os
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

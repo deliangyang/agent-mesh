@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import {
-  CopilotChat,
-  CopilotChatAssistantMessage,
-  CopilotChatUserMessage,
-  useDefaultRenderTool,
-} from "@copilotkit/vue/v2";
+import { CopilotChat, CopilotChatUserMessage, useDefaultRenderTool } from "@copilotkit/vue/v2";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { catalog, connectCatalog, meshLink, refreshCatalog, watchSession } from "../catalog";
@@ -100,13 +95,12 @@ function lastAssistantId(messages: { id?: string; role?: string }[] | undefined)
   return last;
 }
 
-function showThinkAtBottom(
-  message: { id?: string },
-  messages: { id?: string; role?: string }[] | undefined,
-): boolean {
+function showThinkAfter(message: { id?: string; role?: string }): boolean {
   if (!meshLive.thinking) return false;
-  const id = lastAssistantId(messages);
-  return !!message.id && message.id === id;
+  const rows = meshAgent.messages || [];
+  const lastAsst = lastAssistantId(rows);
+  if (lastAsst) return message.role === "assistant" && message.id === lastAsst;
+  return rows.length > 0 && message.id === rows[rows.length - 1]?.id;
 }
 
 const thinkInComposer = computed(() => meshLive.thinking && !lastAssistantId(meshAgent.messages));
@@ -862,47 +856,8 @@ onBeforeUnmount(() => {
             </div>
           </template>
           <template #reasoning-message></template>
-          <template #assistant-message="{ message, messages, isRunning }">
-            <div class="mesh-asst-wrap">
-              <CopilotChatAssistantMessage
-                :message="message"
-                :messages="messages || []"
-                :is-running="!!isRunning"
-              >
-                <template #tool-calls-view="{ message: toolMessage, messages: toolMessages }">
-                  <MeshToolCallsView :message="toolMessage" :messages="toolMessages || []" />
-                </template>
-                <template #copy-button="{ onCopy, copied, label }">
-                  <button
-                    type="button"
-                    class="mesh-copy"
-                    :aria-label="label"
-                    :title="copied ? '已复制' : label"
-                    @click="onCopy"
-                  >
-                    <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M3.5 8.5 6.5 11.5 12.5 4.5"
-                        stroke="currentColor"
-                        stroke-width="1.6"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                    <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <rect x="5.5" y="5.5" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.4" />
-                      <path
-                        d="M3.5 10.5V3.8A1.3 1.3 0 0 1 4.8 2.5h6.7"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                      />
-                    </svg>
-                  </button>
-                </template>
-              </CopilotChatAssistantMessage>
-              <MeshThinkWindow v-if="showThinkAtBottom(message, messages)" :streaming="true" />
-            </div>
+          <template #message-after="{ message }">
+            <MeshThinkWindow v-if="showThinkAfter(message)" :streaming="true" />
           </template>
           <template #user-message="{ message }">
             <CopilotChatUserMessage :message="message">
@@ -941,6 +896,37 @@ onBeforeUnmount(() => {
                 </button>
               </template>
             </CopilotChatUserMessage>
+          </template>
+          <template #tool-calls-view="{ message, messages }">
+            <MeshToolCallsView :message="message" :messages="messages || []" />
+          </template>
+          <template #copy-button="{ onCopy, copied, label }">
+            <button
+              type="button"
+              class="mesh-copy"
+              :aria-label="label"
+              :title="copied ? '已复制' : label"
+              @click="onCopy"
+            >
+              <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="5.5" y="5.5" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.4" />
+                <path
+                  d="M3.5 10.5V3.8A1.3 1.3 0 0 1 4.8 2.5h6.7"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
           </template>
           <template #input="slot">
             <div class="mesh-composer">

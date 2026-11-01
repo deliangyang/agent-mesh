@@ -32,7 +32,7 @@ func newIngestHub() *ingestHub {
 }
 
 func (h *ingestHub) subscribe() (int, <-chan openai.Chunk) {
-	ch := make(chan openai.Chunk, 256)
+	ch := make(chan openai.Chunk, 1024)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.next++
@@ -43,25 +43,43 @@ func (h *ingestHub) subscribe() (int, <-chan openai.Chunk) {
 
 func (h *ingestHub) unsubscribe(id int) {
 	h.mu.Lock()
-	delete(h.subs, id)
+	ch, ok := h.subs[id]
+	if ok {
+		delete(h.subs, id)
+	}
 	h.mu.Unlock()
+	if ok {
+		defer func() { _ = recover() }()
+		close(ch)
+	}
 }
 
 func (h *ingestHub) publish(chunk openai.Chunk) {
 	h.mu.Lock()
-	subs := make([]chan openai.Chunk, 0, len(h.subs))
-	for _, ch := range h.subs {
-		subs = append(subs, ch)
+	type sub struct {
+		id int
+		ch chan openai.Chunk
+	}
+	subs := make([]sub, 0, len(h.subs))
+	for id, ch := range h.subs {
+		subs = append(subs, sub{id: id, ch: ch})
 	}
 	h.mu.Unlock()
-	for _, ch := range subs {
-		func(ch chan openai.Chunk) {
+	var drop []int
+	for _, item := range subs {
+		func(item sub) {
 			defer func() { _ = recover() }()
+			timer := time.NewTimer(2 * time.Second)
+			defer timer.Stop()
 			select {
-			case ch <- chunk:
-			default:
+			case item.ch <- chunk:
+			case <-timer.C:
+				drop = append(drop, item.id)
 			}
-		}(ch)
+		}(item)
+	}
+	for _, id := range drop {
+		h.unsubscribe(id)
 	}
 }
 
@@ -193,8 +211,7 @@ func (s *Server) handleOpenWS(w http.ResponseWriter, r *http.Request) {
 					defer cancel()
 					evs, err := s.loadHistory(ctx, node, engine, session)
 					if err != nil {
-						s.catalogs.commitEvents(cid, nil)
-						_ = write(BusMsg{Type: "conversation", NodeID: node, Engine: engine, Session: session, Events: []protocol.Event{}, Reset: true})
+						s.Log.Debug("history", "node", node, "session", session, "err", err)
 						return
 					}
 					added, reset := s.catalogs.commitEvents(cid, evs)
@@ -339,7 +356,7 @@ func (s *Server) lookupNode(nodeID string) (Record, error) {
 
 func (s *Server) handleOpenHistory(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.URL.Query().Get("node")
-	rec, err := s.lookup(nodeID)
+	rec, err := s.lookupNode(nodeID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -460,11 +477,14 @@ func (s *Server) getPath(ctx context.Context, rec Record, path string) ([]byte, 
 
 func (s *Server) pipeNode(ctx context.Context, rec Record, method, path string, body []byte, w http.ResponseWriter) error {
 	if s.tunnels != nil && s.tunnels.get(rec.Info.ID) != nil {
-		if err := s.tunnels.Pipe(ctx, rec.Info.ID, method, path, body, w); err == nil {
+		err := s.tunnels.Pipe(ctx, rec.Info.ID, method, path, body, w)
+		if err == nil {
 			return nil
-		} else {
-			s.Log.Debug("tunnel pipe", "node", rec.Info.ID, "path", path, "err", err)
 		}
+		if pipeHasStarted(err) {
+			return err
+		}
+		s.Log.Debug("tunnel pipe", "node", rec.Info.ID, "path", path, "err", err)
 	}
 	return s.httpPipe(ctx, rec, method, path, body, w)
 }

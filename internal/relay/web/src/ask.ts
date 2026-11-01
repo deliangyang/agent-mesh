@@ -1,11 +1,14 @@
 import { reactive } from "vue";
-import { meshTarget } from "./target";
-import type { AskOption, AskPrompt, AskQuestion, MeshEvent } from "./types";
+import { fetchJSON } from "./http.ts";
+import { meshTarget } from "./target.ts";
+import { toastError } from "./toast.ts";
+import type { AskOption, AskPrompt, AskQuestion, MeshEvent } from "./types.ts";
 
 export const meshAsk = reactive({
   prompt: null as AskPrompt | null,
   answering: false,
   error: "",
+  dismissed: "",
 });
 
 function asObject(v: unknown): Record<string, unknown> {
@@ -102,21 +105,64 @@ export function parseAskPrompt(raw: unknown, fallbackName = ""): AskPrompt | nul
   return null;
 }
 
+function promptKey(p: AskPrompt): string {
+  return p.id || p.title || p.questions.map((q) => q.prompt).join("\n");
+}
+
+function showPrompt(prompt: AskPrompt | null): void {
+  if (!prompt) return;
+  const key = promptKey(prompt);
+  if (key && key === meshAsk.dismissed) return;
+  if (key && meshAsk.dismissed && meshAsk.dismissed !== key) meshAsk.dismissed = "";
+  meshAsk.prompt = prompt;
+  meshAsk.error = "";
+}
+
+function settleAsk(): void {
+  if (!meshAsk.prompt) return;
+  meshAsk.prompt = null;
+  meshAsk.answering = false;
+  meshAsk.error = "";
+}
+
+function isAskToolCall(type: string, tool: string): boolean {
+  return (
+    (type === "tool_call" || type === "tool_use" || type === "tool-call" || type === "function_call") &&
+    askToolName(tool)
+  );
+}
+
+function isToolCall(type: string): boolean {
+  return type === "tool_call" || type === "tool_use" || type === "tool-call" || type === "function_call";
+}
+
+function isToolResult(type: string): boolean {
+  return type === "tool_result" || type === "tool-result" || type === "function_call_result";
+}
+
 export function noteAskEvent(ev: MeshEvent): void {
   if (!ev) return;
-  if (ev.type === "ask") {
-    const prompt = parseAskPrompt(ev.text);
-    if (prompt) meshAsk.prompt = prompt;
+  const type = ev.type || "";
+  const tool = ev.tool || "";
+  if (type === "ask") {
+    showPrompt(parseAskPrompt(ev.text));
     return;
   }
-  if (ev.type === "tool_call" && askToolName(ev.tool || "") && ev.text) {
-    const prompt = parseAskPrompt(ev.text, ev.tool);
-    if (prompt) meshAsk.prompt = prompt;
+  if (isAskToolCall(type, tool) && ev.text) {
+    showPrompt(parseAskPrompt(ev.text, tool));
     return;
   }
-  if (ev.type === "tool_result" && askToolName(ev.tool || "")) {
-    meshAsk.prompt = null;
-    meshAsk.error = "";
+  if (!meshAsk.prompt) return;
+  if (isToolResult(type) || type === "user" || ev.role === "user") {
+    settleAsk();
+    return;
+  }
+  if (isToolCall(type) && tool && tool !== "tool" && !askToolName(tool)) {
+    settleAsk();
+    return;
+  }
+  if ((type === "assistant" || type === "delta") && (ev.text || "").trim()) {
+    settleAsk();
   }
 }
 
@@ -129,17 +175,28 @@ export function noteAskEvents(evs: MeshEvent[], reset: boolean): void {
 }
 
 export function noteAskFromTool(name: string, args: unknown, id?: string): void {
-  if (!askToolName(name)) return;
+  if (!askToolName(name)) {
+    if (name && name !== "tool") settleAsk();
+    return;
+  }
   const prompt = parseAskPrompt(args, name);
   if (!prompt) return;
   if (id) prompt.id = id;
-  meshAsk.prompt = prompt;
+  showPrompt(prompt);
+}
+
+export function dismissAsk(): void {
+  if (meshAsk.prompt) meshAsk.dismissed = promptKey(meshAsk.prompt);
+  meshAsk.prompt = null;
+  meshAsk.answering = false;
+  meshAsk.error = "";
 }
 
 export function clearAsk(): void {
   meshAsk.prompt = null;
   meshAsk.answering = false;
   meshAsk.error = "";
+  meshAsk.dismissed = "";
 }
 
 export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[]>): string {
@@ -177,7 +234,7 @@ export async function submitAsk(prompt: AskPrompt, picks: Record<string, string[
   meshAsk.answering = true;
   meshAsk.error = "";
   try {
-    const resp = await fetch("/v1/openai/choice", {
+    const resp = await fetchJSON("/v1/openai/choice", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -190,10 +247,11 @@ export async function submitAsk(prompt: AskPrompt, picks: Record<string, string[
       }),
     });
     if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
-    meshAsk.prompt = null;
+    dismissAsk();
     return true;
   } catch (err) {
     meshAsk.error = err instanceof Error ? err.message : String(err);
+    toastError(err);
     return false;
   } finally {
     meshAsk.answering = false;

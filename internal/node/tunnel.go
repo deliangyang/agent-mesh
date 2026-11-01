@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-mesh/internal/driver"
 	"agent-mesh/internal/protocol"
 
 	"github.com/gorilla/websocket"
@@ -230,20 +231,57 @@ func (w *tunnelRW) send(f protocol.TunnelFrame) error {
 }
 
 func (s *Server) snapshot(ctx context.Context) protocol.NodeSnapshot {
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	snap := protocol.NodeSnapshot{}
 	if s.Drivers == nil {
 		return snap
 	}
-	snap.Engines = s.Drivers.Engines(ctx)
-	snap.Dirs = s.Drivers.Directories(ctx)
-	if rows, err := s.Drivers.ListAll(ctx, "", true); err == nil {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		engines := s.Drivers.Engines(ctx)
+		if engines == nil {
+			engines = []protocol.EngineInfo{}
+		}
+		mu.Lock()
+		snap.Engines = engines
+		mu.Unlock()
+	}()
+	go func() {
+		defer wg.Done()
+		rows, err := s.Drivers.ListAll(ctx, "", true)
+		if err != nil {
+			return
+		}
+		if rows == nil {
+			rows = []protocol.Session{}
+		}
+		dirs := driver.DirsOf(rows)
+		if dirs == nil {
+			dirs = []protocol.WorkDir{}
+		}
+		mu.Lock()
 		snap.Sessions = rows
-	}
-	if rows, err := s.Drivers.Models(ctx, ""); err == nil {
+		snap.Dirs = dirs
+		mu.Unlock()
+	}()
+	go func() {
+		defer wg.Done()
+		rows, err := s.Drivers.Models(ctx, "")
+		if err != nil {
+			return
+		}
+		if rows == nil {
+			rows = []protocol.Model{}
+		}
+		mu.Lock()
 		snap.Models = rows
-	}
+		mu.Unlock()
+	}()
+	wg.Wait()
 	return snap
 }
 
@@ -267,9 +305,13 @@ func (s *Server) peekSnapshot() protocol.NodeSnapshot {
 }
 
 func (s *Server) refreshSnapshot(ctx context.Context) {
-	snap := s.snapshot(ctx)
-	raw, _ := json.Marshal(snap)
 	s.mu.Lock()
+	prev := s.snap
+	s.mu.Unlock()
+	snap := s.snapshot(ctx)
+	s.mu.Lock()
+	snap.Followups = s.snap.Followups
+	raw, _ := json.Marshal(snap)
 	same := bytes.Equal(raw, s.snapRaw)
 	if !same {
 		s.snap = snap
@@ -279,6 +321,7 @@ func (s *Server) refreshSnapshot(ctx context.Context) {
 	if !same {
 		s.pushSnapshot(snap)
 	}
+	s.drainIdle(prev.Sessions, snap.Sessions)
 }
 
 func (s *Server) snapshotLoop(ctx context.Context) {

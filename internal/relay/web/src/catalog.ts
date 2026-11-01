@@ -1,5 +1,7 @@
 import { reactive } from "vue";
-import { applyHistory } from "./meshAgent";
+import { applyHistory, meshLive, pushLiveChunk } from "./meshAgent";
+import { applyFollowups } from "./followup";
+import { showToast } from "./toast";
 import type { CatalogState, DirRow, EngineRow, MeshEvent, ModelCard, NodeInfo, Session } from "./types";
 
 export const catalog = reactive<CatalogState>({
@@ -10,26 +12,74 @@ export const catalog = reactive<CatalogState>({
   sessions: [],
 });
 
+export const meshLink = reactive({
+  state: "connecting" as "connecting" | "live" | "down",
+  attempt: 0,
+});
+
 let ws: WebSocket | null = null;
 let watched = "";
+let reconnectTimer = 0;
 
 function sessionKey(s: Session | null): string {
   if (!s) return "";
   return (s.node_id || "") + "|" + (s.engine || "") + "|" + (s.id || "");
 }
 
+const SESSION_CAP_PER_ENGINE = 80;
+
 function sortSessions(rows: Session[]): Session[] {
-  return (rows || [])
-    .slice()
-    .sort((a, b) => {
-      const ua = a.updated_at || 0;
-      const ub = b.updated_at || 0;
-      if (ua !== ub) return ub - ua;
-      const la = a.live || a.busy ? 1 : 0;
-      const lb = b.live || b.busy ? 1 : 0;
-      return lb - la;
-    })
-    .slice(0, 20);
+  const sorted = (rows || []).slice().sort((a, b) => {
+    const ua = a.updated_at || 0;
+    const ub = b.updated_at || 0;
+    if (ua !== ub) return ub - ua;
+    const la = a.live || a.busy ? 1 : 0;
+    const lb = b.live || b.busy ? 1 : 0;
+    return lb - la;
+  });
+  const n: Record<string, number> = {};
+  const out: Session[] = [];
+  for (const s of sorted) {
+    if (s.live || s.busy) {
+      out.push(s);
+      continue;
+    }
+    const eng = s.engine || "";
+    if ((n[eng] || 0) >= SESSION_CAP_PER_ENGINE) continue;
+    n[eng] = (n[eng] || 0) + 1;
+    out.push(s);
+  }
+  return out;
+}
+
+function mergeSession(prev: Session | undefined, row: Session): Session {
+  if (!prev) return row;
+  return {
+    ...prev,
+    ...row,
+    title: row.title || prev.title,
+    cwd: row.cwd || prev.cwd,
+    updated_at: Math.max(row.updated_at || 0, prev.updated_at || 0) || undefined,
+  };
+}
+
+function mergeSessionRows(cur: Session[], incoming: Session[] | undefined, reset: boolean, removed: string[]): Session[] {
+  const rows = incoming || [];
+  const prev = new Map<string, Session>();
+  for (const row of cur) {
+    const k = sessionKey(row);
+    if (k) prev.set(k, row);
+  }
+  if (reset) {
+    return rows.map((row) => mergeSession(prev.get(sessionKey(row)), row));
+  }
+  const map = new Map(prev);
+  for (const row of rows) {
+    const k = sessionKey(row);
+    if (k) map.set(k, mergeSession(map.get(k), row));
+  }
+  for (const id of removed) map.delete(id);
+  return Array.from(map.values());
 }
 
 function mergeRows<T>(cur: T[], incoming: T[] | undefined, reset: boolean, removed: string[], keyOf: (row: T) => string): T[] {
@@ -48,8 +98,36 @@ function mergeRows<T>(cur: T[], incoming: T[] | undefined, reset: boolean, remov
   return Array.from(map.values());
 }
 
+function watching(node: string, engine: string, session: string): boolean {
+  if (session && meshLive.session && session === meshLive.session) return true;
+  if (!watched) return false;
+  const [wNode, wEngine, ...rest] = watched.split("|");
+  const wSess = rest.join("|");
+  if (session && wSess && session !== wSess) return false;
+  if (engine && wEngine && engine !== wEngine) return false;
+  if (node && wNode && node !== wNode) return false;
+  return true;
+}
+
+function applyChunk(msg: Record<string, unknown>): void {
+  const chunk = ((msg.chunk as Record<string, unknown> | undefined) || msg) as Record<string, unknown>;
+  const mesh = (chunk.agent_mesh || chunk.mesh || {}) as {
+    session?: string;
+    engine?: string;
+    node_id?: string;
+  };
+  if (!watching(String(mesh.node_id || ""), String(mesh.engine || ""), String(mesh.session || ""))) {
+    return;
+  }
+  pushLiveChunk(chunk);
+}
+
 function applyPart(msg: Record<string, unknown>): void {
   if (!msg || !msg.type) return;
+  if (msg.type === "chunk" || msg.object === "chat.completion.chunk") {
+    applyChunk(msg);
+    return;
+  }
   const reset = Boolean(msg.reset);
   const removed = Array.isArray(msg.removed) ? (msg.removed as string[]) : [];
   if (msg.type === "nodes" && (reset || Array.isArray(msg.nodes) || removed.length)) {
@@ -78,18 +156,17 @@ function applyPart(msg: Record<string, unknown>): void {
   }
   if (msg.type === "sessions" && (reset || Array.isArray(msg.sessions) || removed.length)) {
     catalog.sessions = sortSessions(
-      mergeRows(catalog.sessions, msg.sessions as Session[] | undefined, reset, removed, sessionKey),
+      mergeSessionRows(catalog.sessions, msg.sessions as Session[] | undefined, reset, removed),
     );
+  }
+  if (msg.type === "followups" && (reset || Array.isArray(msg.followups) || removed.length)) {
+    applyFollowups(msg);
   }
   if (msg.type === "conversation") {
     const sid = String(msg.session || "");
     const engine = String(msg.engine || "");
     const node = String(msg.node_id || "");
-    if (!watched) return;
-    const [wNode, wEngine, wSess] = watched.split("|");
-    if (sid && wSess && sid !== wSess) return;
-    if (engine && wEngine && engine !== wEngine) return;
-    if (node && wNode && node !== wNode) return;
+    if (!watching(node, engine, sid)) return;
     const evs = (msg.events || []) as MeshEvent[];
     if (!evs.length && !msg.reset) return;
     applyHistory(evs, Boolean(msg.reset));
@@ -119,39 +196,76 @@ export function refreshCatalog(): void {
   connectCatalog();
 }
 
+function resendWatch(sock: WebSocket): void {
+  const parts = watched.split("|");
+  if (parts.length >= 3 && parts[2]) {
+    sock.send(
+      JSON.stringify({
+        type: "watch",
+        node: parts[0],
+        engine: parts[1],
+        session: parts.slice(2).join("|"),
+      }),
+    );
+  }
+}
+
 export function connectCatalog(): void {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return;
   }
+  meshLink.state = meshLink.state === "live" ? "live" : "connecting";
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const sock = new WebSocket(proto + "//" + location.host + "/v1/openai/ws");
   sock.onmessage = (ev) => {
     if (!ev.data) return;
     try {
       const msg = JSON.parse(String(ev.data)) as Record<string, unknown>;
-      if (msg.type === "chunk" || msg.object === "chat.completion.chunk") return;
       applyPart(msg);
     } catch {
       /* ignore */
     }
   };
   sock.onopen = () => {
-    const parts = watched.split("|");
-    if (parts.length >= 3 && parts[2]) {
-      sock.send(
-        JSON.stringify({
-          type: "watch",
-          node: parts[0],
-          engine: parts[1],
-          session: parts.slice(2).join("|"),
-        }),
-      );
+    const wasDown = meshLink.state !== "live";
+    meshLink.state = "live";
+    meshLink.attempt = 0;
+    resendWatch(sock);
+    if (wasDown) {
+      sock.send(JSON.stringify({ type: "refresh" }));
+      window.dispatchEvent(new Event("mesh-link-up"));
     }
   };
   sock.onclose = () => {
-    ws = null;
-    setTimeout(connectCatalog, 1500);
+    const wasLive = meshLink.state === "live";
+    if (ws === sock) ws = null;
+    meshLink.state = "down";
+    meshLink.attempt += 1;
+    if (wasLive) showToast("节点连接已断开，正在重连", "error");
+    const delay = Math.min(1200 * Math.max(1, meshLink.attempt), 8000);
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = window.setTimeout(connectCatalog, delay);
   };
   sock.onerror = () => {};
   ws = sock;
+}
+
+function onBrowserResume(): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "refresh" }));
+    resendWatch(ws);
+    window.dispatchEvent(new Event("mesh-link-up"));
+    return;
+  }
+  connectCatalog();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", onBrowserResume);
+  window.addEventListener("offline", () => {
+    showToast("网络已断开，请检查网络后重试", "error");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") onBrowserResume();
+  });
 }

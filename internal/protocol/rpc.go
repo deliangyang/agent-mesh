@@ -8,16 +8,19 @@ package protocol
 import "encoding/json"
 
 const (
-	MethodList    = "list"
-	MethodStatus  = "status"
-	MethodHistory = "history"
-	MethodWatch   = "watch"
-	MethodReply   = "reply"
-	MethodSend    = "send"
-	MethodHealth  = "health"
-	MethodInfo    = "info"
-	MethodEngines = "engines"
-	MethodModels  = "models"
+	MethodList      = "list"
+	MethodStatus    = "status"
+	MethodHistory   = "history"
+	MethodWatch     = "watch"
+	MethodReply     = "reply"
+	MethodSend      = "send"
+	MethodHealth    = "health"
+	MethodInfo      = "info"
+	MethodEngines   = "engines"
+	MethodModels    = "models"
+	MethodCommands  = "commands"
+	MethodFollowups = "followups"
+	MethodChoice    = "choice"
 )
 
 // Request 加密前的 RPC 请求。
@@ -154,6 +157,30 @@ type WatchParams struct {
 	SessionID string `json:"session_id"`
 }
 
+// CommandsParams 查询斜杠命令。
+type CommandsParams struct {
+	Engine string `json:"engine,omitempty"`
+	CWD    string `json:"cwd,omitempty"`
+}
+
+// FollowupsParams 追加队列。
+type FollowupsParams struct {
+	Action  string `json:"action,omitempty"`
+	Engine  string `json:"engine,omitempty"`
+	Session string `json:"session,omitempty"`
+	CWD     string `json:"cwd,omitempty"`
+	ID      string `json:"id,omitempty"`
+	Text    string `json:"text,omitempty"`
+}
+
+// ChoiceParams 回答 Ask / 权限卡。
+type ChoiceParams struct {
+	Engine  string `json:"engine"`
+	Session string `json:"session,omitempty"`
+	CWD     string `json:"cwd,omitempty"`
+	Text    string `json:"text"`
+}
+
 // NodeInfo 节点公开信息（不含私钥）。
 type NodeInfo struct {
 	ID       string   `json:"id"`
@@ -173,12 +200,29 @@ type RegisterRequest struct {
 	Snapshot  NodeSnapshot `json:"snapshot,omitempty"`
 }
 
+// FollowItem 一条等待处理的追加消息。
+type FollowItem struct {
+	ID      string `json:"id"`
+	Text    string `json:"text"`
+	Created int64  `json:"created"`
+}
+
+// FollowQueue 一个会话的追加队列快照。
+type FollowQueue struct {
+	Engine  string       `json:"engine"`
+	Session string       `json:"session"`
+	CWD     string       `json:"cwd,omitempty"`
+	Items   []FollowItem `json:"items"`
+	NodeID  string       `json:"node_id,omitempty"`
+}
+
 // NodeSnapshot 节点推给中继的只读快照，供公网中继在无法回连时展示。
 type NodeSnapshot struct {
-	Models   []Model      `json:"models,omitempty"`
-	Engines  []EngineInfo `json:"engines,omitempty"`
-	Sessions []Session    `json:"sessions,omitempty"`
-	Dirs     []WorkDir    `json:"directories,omitempty"`
+	Models    []Model       `json:"models"`
+	Engines   []EngineInfo  `json:"engines"`
+	Sessions  []Session     `json:"sessions"`
+	Dirs      []WorkDir     `json:"directories"`
+	Followups []FollowQueue `json:"followups"`
 }
 
 // TunnelFrame 节点反向隧道上的请求/响应帧。

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -221,7 +222,7 @@ func splitPatches(raw string) map[string]string {
 			part = "diff --git " + part
 		}
 		if len(part) > maxPatch {
-			part = part[:maxPatch] + "\n…(已截断)"
+			part = cutBytes(part, maxPatch) + "\n…(已截断)"
 		}
 		out[patchPath(part)] = part
 	}
@@ -283,6 +284,20 @@ func untrackedPatch(ctx context.Context, repo, rel string) string {
 		b.WriteString("+" + line + "\n")
 	}
 	return b.String()
+}
+
+func cutBytes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 func itoa(n int) string {

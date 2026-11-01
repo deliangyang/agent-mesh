@@ -166,8 +166,20 @@ func TestRankSessionsLatestFirst(t *testing.T) {
 		{ID: "new", Title: "b", UpdatedAt: 30, Live: true},
 		{ID: "mid", Title: "c", UpdatedAt: 20},
 	}
-	got := rankSessions(rows, 2)
+	got := rankSessions(rows, 1)
 	if len(got) != 2 || got[0].ID != "new" || got[1].ID != "mid" {
+		t.Fatalf("%#v", got)
+	}
+}
+
+func TestRankSessionsUpdatedAtBeatsLive(t *testing.T) {
+	rows := []protocol.Session{
+		{ID: "live-old", Title: "old live", UpdatedAt: 10, Live: true},
+		{ID: "fresh", Title: "fresh", UpdatedAt: 40},
+		{ID: "mid", Title: "mid", UpdatedAt: 20, Busy: true},
+	}
+	got := rankSessions(rows, 10)
+	if len(got) != 3 || got[0].ID != "fresh" || got[1].ID != "mid" || got[2].ID != "live-old" {
 		t.Fatalf("%#v", got)
 	}
 }

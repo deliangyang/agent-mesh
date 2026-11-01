@@ -159,6 +159,7 @@ html.dark #app {
 }
 
 .mesh-app {
+  position: relative;
   display: flex;
   height: 100%;
   overflow: hidden;
@@ -227,7 +228,7 @@ html.dark #app {
 
 .mesh-picks {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   padding: 0 10px 10px;
 }
 
@@ -237,6 +238,54 @@ html.dark #app {
   color: var(--mute);
   font-size: 12px;
   font-weight: 500;
+}
+
+.mesh-pick-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 8px 6px;
+  color: var(--mute);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mesh-pick-toggle:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+}
+
+.mesh-pick-kicker {
+  flex: none;
+}
+
+.mesh-pick-current {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mesh-pick-chevron {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.mesh-pick-toggle.open .mesh-pick-chevron {
+  transform: rotate(90deg);
 }
 
 .mesh-cards {
@@ -344,6 +393,7 @@ html.dark #app {
   gap: 8px;
   width: 100%;
   padding: 7px 10px 7px 12px;
+  overflow: hidden;
   color: var(--ink);
   background: transparent;
   border: 0;
@@ -364,6 +414,7 @@ html.dark #app {
 }
 
 .mesh-thread-name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -400,16 +451,39 @@ html.dark #app {
 .mesh-chat-title {
   position: absolute;
   left: 50%;
-  display: inline-flex;
+  z-index: 1;
+  display: flex;
   align-items: center;
   gap: 8px;
   max-width: calc(100% - 168px);
+  padding: 4px 8px;
+  overflow: hidden;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.02em;
   text-align: center;
   transform: translateX(-50%);
-  pointer-events: none;
+  cursor: pointer;
+}
+
+.mesh-chat-title:hover .mesh-chat-title-text {
+  color: var(--signal);
+}
+
+.mesh-chat-title.copied .mesh-chat-title-text {
+  color: var(--signal);
+}
+
+.mesh-ended {
+  flex: none;
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
 }
 
 .mesh-chat-title-text {
@@ -480,6 +554,73 @@ html.dark #app {
   min-height: 0;
   height: 100%;
   width: 100%;
+}
+
+.mesh-link-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.mesh-link-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(360px, 100%);
+  padding: 28px 24px 22px;
+  color: var(--ink);
+  background: var(--lamp);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  text-align: center;
+}
+
+.mesh-link-lamp {
+  width: 10px;
+  height: 10px;
+}
+
+.mesh-link-title {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.mesh-link-copy {
+  margin: 0;
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mesh-link-reload {
+  margin-top: 6px;
+  height: 34px;
+  padding: 0 14px;
+  color: var(--on-signal);
+  background: var(--signal);
+  border: 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mesh-link-reload:hover {
+  filter: brightness(1.06);
+}
+
+[data-testid="copilot-chat-input-disclaimer"] {
+  margin: 0;
+  padding: 4px 8px 2px;
+  color: var(--mute);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .mesh-composer {
@@ -887,6 +1028,8 @@ html.dark #app {
 
 .mesh-nav-toggle,
 .mesh-nav-close {
+  position: relative;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1048,25 +1191,125 @@ html.dark #app {
   height: 13px;
 }
 
-.copilot-chat-assistant-markdown [data-streamdown="code-header"],
-.copilot-chat-assistant-markdown [data-streamdown="code-actions"] {
-  min-height: 0;
-}
-
-.copilot-chat-assistant-markdown [data-streamdown="code-actions"] {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.copilot-chat-assistant-markdown [data-streamdown="code"]:hover [data-streamdown="code-actions"],
-.copilot-chat-assistant-markdown [data-streamdown="code-actions"]:focus-within {
-  opacity: 1;
-}
-
 .mesh-chat .copilot-chat-assistant-markdown p,
 .mesh-chat .copilot-chat-assistant-markdown li {
   margin-block: 0.2em;
   line-height: 1.45;
+}
+
+/* 代码块：单层井，密排等宽，避免 Shiki .line 块级化后再叠加 pre 换行 */
+.copilot-chat-assistant-markdown [data-streamdown="code-block"] {
+  position: relative;
+  width: 100%;
+  margin-block: 0.45em;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--wall);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-block-header"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 0;
+  padding: 0 6px;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-lang"] {
+  margin: 0 auto 0 2px;
+  padding: 0;
+  color: var(--mute);
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 22px;
+  text-transform: none;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-lang-empty"] {
+  display: none;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-block"]:has([data-streamdown="code-lang-empty"])
+  [data-streamdown="code-block-header"] {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  width: auto;
+  padding: 0;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-block"]:not(:has([data-streamdown="code-lang-empty"]))
+  [data-streamdown="code-block-header"] {
+  height: 22px;
+  box-shadow: inset 0 -1px 0 var(--rule);
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-actions"] {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-block"]:hover [data-streamdown="code-actions"],
+.copilot-chat-assistant-markdown [data-streamdown="code-actions"]:focus-within {
+  opacity: 1;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-body"] {
+  padding: 0 !important;
+  overflow-x: auto;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-body"] pre,
+.mesh-chat .copilot-chat-assistant-markdown pre {
+  margin: 0 !important;
+  padding: 8px 12px !important;
+  overflow-x: auto;
+  color: var(--ink);
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 8;
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="code-body"] code,
+.mesh-chat .copilot-chat-assistant-markdown pre code {
+  display: block;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 8;
+}
+
+/* CopilotKit 把 .line 设成 block，Shiki 行间又留了换行，行距会被算两次 */
+.copilot-chat-assistant-markdown [data-streamdown="code-body"] .line,
+.copilot-chat-assistant-markdown [data-streamdown="code"] .line,
+.copilot-chat-assistant-markdown .shiki .line {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  line-height: inherit;
 }
 
 .mesh-act {
@@ -1103,10 +1346,21 @@ html.dark #app {
 
 .mesh-act-body.tools {
   max-height: 54px;
+  scroll-behavior: auto;
+}
+
+.mesh-act-tool {
+  height: 18px;
+}
+
+.mesh-composer > .mesh-act[data-variant="think"] {
+  margin: 0 8px 8px;
+  pointer-events: auto;
 }
 
 .mesh-act-body.think {
-  max-height: 18px;
+  max-height: 90px;
+  scroll-behavior: auto;
 }
 
 .mesh-act-row {
@@ -1120,6 +1374,24 @@ html.dark #app {
   white-space: nowrap;
 }
 
+.mesh-act-out {
+  margin: 0 0 8px;
+  padding: 4px 0 2px;
+  max-height: 16em;
+  overflow: auto;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre;
+  tab-size: 8;
+}
+
+.mesh-act:has(.mesh-act-head) .mesh-act-out {
+  padding-left: 16px;
+}
+
 .mesh-act:has(.mesh-act-head) .mesh-act-row {
   padding-left: 16px;
 }
@@ -1130,15 +1402,53 @@ html.dark #app {
 }
 
 .mesh-act-think {
-  height: 18px;
   padding: 0;
   color: var(--mute);
   font-size: 12.5px;
   line-height: 18px;
+}
+
+.mesh-act-think .copilot-chat-assistant-markdown,
+.mesh-act-think .copilot-chat-assistant-markdown p,
+.mesh-act-think .copilot-chat-assistant-markdown li {
+  margin: 0;
+  color: var(--mute);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.copilot-chat-assistant-markdown table,
+.copilot-chat-assistant-markdown [data-streamdown="table"] {
+  width: 100%;
+  margin: 0.4em 0 0.7em;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.copilot-chat-assistant-markdown th,
+.copilot-chat-assistant-markdown td,
+.copilot-chat-assistant-markdown [data-streamdown="table"] th,
+.copilot-chat-assistant-markdown [data-streamdown="table"] td {
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.copilot-chat-assistant-markdown th,
+.copilot-chat-assistant-markdown [data-streamdown="table"] th {
+  color: var(--ink);
+  background: var(--wall);
+  font-weight: 600;
+}
+
+.copilot-chat-assistant-markdown strong {
+  font-weight: 600;
+}
+
+.mesh-act-think-wait {
+  color: var(--mute);
   font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mesh-follow {
@@ -1245,10 +1555,32 @@ html.dark #app {
   box-shadow: inset 2px 0 0 var(--signal), inset 0 0 0 1px var(--rule);
 }
 
+.mesh-ask-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .mesh-ask-kicker {
   color: var(--signal);
   font-size: 12px;
   font-weight: 500;
+}
+
+.mesh-ask-close {
+  padding: 0;
+  color: var(--mute);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mesh-ask-close:hover,
+.mesh-ask-close:focus-visible {
+  color: var(--ink);
 }
 
 .mesh-ask-title {
@@ -1594,4 +1926,34 @@ html.dark #app {
   .mesh-chat-title {
     max-width: calc(100% - 148px);
   }
+}
+
+.mesh-toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 120;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.mesh-toast {
+  pointer-events: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  text-align: left;
+  color: var(--ink);
+  background: var(--lamp);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.mesh-toast[data-kind="error"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 55%, var(--rule));
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"agent-mesh/internal/driver"
 )
@@ -63,6 +64,9 @@ func safeName(s string) string {
 	}
 	if len(s) > 160 {
 		s = s[:160]
+		for len(s) > 0 && !utf8.ValidString(s) {
+			s = s[:len(s)-1]
+		}
 	}
 	return s
 }

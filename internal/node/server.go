@@ -52,8 +52,10 @@ func New(ident *e2e.Identity, listen, name string, drivers *driver.Set, log *slo
 		Log:      log,
 		sessions: make(map[string]*e2e.Session),
 		follow:   newFollowRuns(),
+		snap:     protocol.NodeSnapshot{Followups: []protocol.FollowQueue{}},
 	}
 	s.Hub = hub.New(drivers, ident.ID, name, log)
+	s.Hub.SetPushIngest(s.pushIngestChunk)
 	return s
 }
 
@@ -238,11 +240,7 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 	case protocol.MethodHistory:
 		var p protocol.HistoryParams
 		_ = json.Unmarshal(req.Params, &p)
-		d, err := s.Drivers.Get(p.Engine)
-		if err != nil {
-			return protocol.Response{ID: req.ID, Error: err.Error()}
-		}
-		evs, err := d.History(ctx, p.SessionID, p.Tail)
+		evs, err := s.sessionHistory(ctx, p.Engine, p.SessionID, p.Tail)
 		if err != nil {
 			return protocol.Response{ID: req.ID, Error: err.Error()}
 		}
@@ -257,6 +255,14 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 			return protocol.Response{ID: req.ID, Error: err.Error()}
 		}
 		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(rows)}
+	case protocol.MethodCommands:
+		var p protocol.CommandsParams
+		_ = json.Unmarshal(req.Params, &p)
+		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(s.Drivers.SlashItems(ctx, p.Engine, p.CWD))}
+	case protocol.MethodFollowups:
+		return s.dispatchFollowups(ctx, req)
+	case protocol.MethodChoice:
+		return s.dispatchChoice(ctx, req)
 	default:
 		return protocol.Response{ID: req.ID, Error: "unknown method"}
 	}
@@ -302,9 +308,12 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 // ListenAndServe 启动节点 HTTP。
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	hs := &http.Server{Addr: s.Listen, Handler: s.Handler()}
+	s.mu.Lock()
+	s.snap.Followups = followQueues()
+	s.mu.Unlock()
 	go s.Hub.Start(ctx)
 	go s.snapshotLoop(ctx)
-	go s.followLoop(ctx)
+	go s.drainAll(ctx)
 	go func() {
 		<-ctx.Done()
 		shctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestListAndDiff(t *testing.T) {
@@ -63,5 +65,17 @@ func TestListAndDiff(t *testing.T) {
 	}
 	if !sawEdit || !sawNew {
 		t.Fatalf("diff %#v", bundle.Files)
+	}
+}
+
+func TestCutBytesKeepsChineseRune(t *testing.T) {
+	got := cutBytes("显示", 4)
+	if got != "显" || !utf8.ValidString(got) {
+		t.Fatalf("cut %q", got)
+	}
+	long := strings.Repeat("格口大小", 80*1024)
+	got = cutBytes(long, maxPatch)
+	if !utf8.ValidString(got) || strings.ContainsRune(got, '\uFFFD') {
+		t.Fatalf("invalid %q", got[:32])
 	}
 }

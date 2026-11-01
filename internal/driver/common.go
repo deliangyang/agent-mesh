@@ -6,12 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"agent-mesh/internal/protocol"
 )
@@ -29,27 +33,59 @@ func PIDAlive(pid int) bool {
 	return err == nil
 }
 
-// Truncate 压缩空白并截断。
+// Truncate 压缩空白并按字符截断，不会切开中文。
 func Truncate(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if len(s) <= n {
+	if n <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= n {
 		return s
 	}
-	if n < 2 {
-		return s
+	if n == 1 {
+		return "…"
 	}
-	return s[:n-1] + "…"
+	return string(runes[:n-1]) + "…"
 }
 
 const maxEventText = 512 * 1024
 
-// FullText 保留换行，仅在超长时截断。
+func cutBytes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
+func cutByteSlice(b []byte, n int) []byte {
+	if n <= 0 {
+		return []byte{}
+	}
+	if len(b) <= n {
+		return b
+	}
+	b = b[:n]
+	for len(b) > 0 && !utf8.Valid(b) {
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
+// FullText 保留换行，仅在超长时按完整字符截断。
 func FullText(s string) string {
 	s = strings.TrimRight(s, "\n")
 	if len(s) <= maxEventText {
 		return s
 	}
-	return s[:maxEventText] + "\n…(已截断)"
+	return cutBytes(s, maxEventText) + "\n…(已截断)"
 }
 
 // EventTime 从 jsonl 对象取时间戳。
@@ -178,11 +214,7 @@ func ContentToText(content any) string {
 	case string:
 		return v
 	case []any:
-		var b strings.Builder
-		for _, item := range v {
-			b.WriteString(ContentToText(item))
-		}
-		return b.String()
+		return joinContentParts(v)
 	case map[string]any:
 		if t, ok := v["text"].(string); ok {
 			return t
@@ -195,6 +227,40 @@ func ContentToText(content any) string {
 		}
 	}
 	return ""
+}
+
+func joinContentParts(items []any) string {
+	parts := make([]string, 0, len(items))
+	allStr := true
+	for _, item := range items {
+		if _, ok := item.(string); !ok {
+			allStr = false
+		}
+		s := ContentToText(item)
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if allStr && len(parts) > 1 {
+		atomic := true
+		for _, p := range parts {
+			if strings.ContainsAny(p, " \t\n\r") {
+				atomic = false
+				break
+			}
+		}
+		if atomic {
+			return strings.Join(parts, "\n")
+		}
+	}
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(p)
+	}
+	return b.String()
 }
 
 func strField(obj map[string]any, keys ...string) string {
@@ -216,7 +282,7 @@ func previewArgs(v any) string {
 		}
 		return t
 	case map[string]any:
-		for _, k := range []string{"command", "cmd", "path", "file_path", "filePath", "target_file", "query", "pattern", "glob", "url", "description"} {
+		for _, k := range []string{"command", "cmd", "path", "file_path", "filePath", "target_file", "glob_pattern", "globPattern", "query", "pattern", "glob", "url", "description", "target_directory"} {
 			if s, ok := t[k].(string); ok && s != "" {
 				return s
 			}
@@ -240,10 +306,7 @@ func parseContentBlocks(content any) []protocol.Event {
 	}
 	arr, ok := content.([]any)
 	if !ok {
-		text := ExtractUserText(ContentToText(content))
-		if text == "" {
-			text = ContentToText(content)
-		}
+		text := ContentToText(content)
 		if strings.TrimSpace(text) == "" {
 			return nil
 		}
@@ -285,10 +348,7 @@ func parseContentBlocks(content any) []protocol.Event {
 				out = append(out, protocol.Event{Type: "thinking", Role: "assistant", Text: FullText(text)})
 			}
 		case "text", "input_text", "output_text":
-			text := ExtractUserText(strField(m, "text"))
-			if text == "" {
-				text = strField(m, "text")
-			}
+			text := strField(m, "text")
 			if text != "" {
 				out = append(out, protocol.Event{Type: "assistant", Role: "assistant", Text: FullText(text)})
 			}
@@ -318,7 +378,7 @@ func compactToolArgs(args any, display string) any {
 	m := argsMap(args)
 	if m != nil {
 		out := map[string]any{}
-		for _, k := range []string{"command", "cmd", "path", "file_path", "filePath", "target_file", "query", "pattern", "glob", "url", "uri"} {
+		for _, k := range []string{"command", "cmd", "path", "file_path", "filePath", "target_file", "glob_pattern", "globPattern", "query", "pattern", "glob", "url", "uri", "target_directory", "targetDirectory"} {
 			if s, ok := m[k].(string); ok && s != "" {
 				out[k] = s
 			}
@@ -359,6 +419,142 @@ func workbuddyFunctionResult(obj map[string]any) protocol.Event {
 		text = strField(obj, "status")
 	}
 	return toolEvent("tool_result", name, text)
+}
+
+func cursorStreamToolEvents(obj map[string]any) []protocol.Event {
+	inner, _ := obj["tool_call"].(map[string]any)
+	if inner == nil {
+		return nil
+	}
+	name, body := cursorToolPart(inner)
+	if name == "" || body == nil {
+		return nil
+	}
+	args := body["args"]
+	if args == nil {
+		args = body["arguments"]
+	}
+	if args == nil {
+		args = map[string]any{}
+	}
+	out := []protocol.Event{toolEvent("tool_call", name, args)}
+	if strField(obj, "subtype") != "completed" {
+		if ask, ok := AskFromTool(name, args, strField(obj, "call_id", "id")); ok {
+			out = append(out, ask)
+		}
+		return out
+	}
+	if text := cursorToolResultText(body["result"]); text != "" {
+		out = append(out, toolEvent("tool_result", name, text))
+	}
+	return out
+}
+
+func cursorToolPart(inner map[string]any) (string, map[string]any) {
+	for k, v := range inner {
+		body, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.HasSuffix(k, "ToolCall") {
+			name := strings.TrimSuffix(k, "ToolCall")
+			if name == "" {
+				continue
+			}
+			return strings.ToUpper(name[:1]) + name[1:], body
+		}
+	}
+	fn, _ := inner["function"].(map[string]any)
+	if fn == nil {
+		return "", nil
+	}
+	name := strField(fn, "name")
+	if name == "" {
+		name = "tool"
+	}
+	return name, fn
+}
+
+func cursorToolResultText(result any) string {
+	if result == nil {
+		return ""
+	}
+	if s, ok := result.(string); ok {
+		return s
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		return ContentToText(result)
+	}
+	if success, ok := m["success"].(map[string]any); ok {
+		if t := cursorSuccessText(success); t != "" {
+			return t
+		}
+	}
+	if t := cursorSuccessText(m); t != "" {
+		return t
+	}
+	for _, key := range []string{"error", "failure"} {
+		fail := m[key]
+		if fail == nil {
+			continue
+		}
+		if s := ContentToText(fail); s != "" {
+			return s
+		}
+		if fm, ok := fail.(map[string]any); ok {
+			if s := strField(fm, "message", "stderr", "error"); s != "" {
+				return s
+			}
+		}
+	}
+	return strings.TrimSpace(ContentToText(m))
+}
+
+func cursorSuccessText(success map[string]any) string {
+	parts := make([]string, 0, 2)
+	for _, k := range []string{"stdout", "content", "output", "text", "diff", "markdown"} {
+		if s, ok := success[k].(string); ok && s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if s, ok := success["stderr"].(string); ok && s != "" {
+		parts = append(parts, s)
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "\n")
+	}
+	for _, k := range []string{"files", "entries", "names"} {
+		if t := joinListItems(success[k]); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+func joinListItems(v any) string {
+	if v == nil {
+		return ""
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return ""
+	}
+	parts := make([]string, 0, len(arr))
+	for _, item := range arr {
+		switch t := item.(type) {
+		case string:
+			if t != "" {
+				parts = append(parts, t)
+			}
+		case map[string]any:
+			name := strField(t, "name", "path", "file", "filename")
+			if name != "" {
+				parts = append(parts, name)
+			}
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func toolCallEvent(obj map[string]any) protocol.Event {
@@ -424,6 +620,173 @@ func payloadText(v any) string {
 	}
 }
 
+func parseVendorJSONL(obj map[string]any, kind string) []protocol.Event {
+	switch kind {
+	case "step_start":
+		if sid := sessionIDOf(obj); sid != "" {
+			return []protocol.Event{{Type: "session", Session: sid}}
+		}
+		return []protocol.Event{}
+	case "step_finish":
+		part, _ := obj["part"].(map[string]any)
+		if strField(part, "reason") == "stop" {
+			return []protocol.Event{{Type: "log", Done: true}}
+		}
+		return []protocol.Event{}
+	case "tool_use":
+		return openCodeToolEvents(obj)
+	case "thinking":
+		if strField(obj, "subtype") == "completed" && strField(obj, "text", "thinking") == "" && ContentToText(obj["content"]) == "" {
+			return []protocol.Event{}
+		}
+		return nil
+	case "tool_call", "tool_call_update", "tool-call":
+		if evs := cursorStreamToolEvents(obj); evs != nil {
+			return evs
+		}
+		return nil
+	case "error":
+		if text := nestedErrorText(obj); text != "" {
+			return []protocol.Event{{Type: "log", Text: text}}
+		}
+		return nil
+	case "session":
+		sid := strField(obj, "id", "sessionID", "sessionId")
+		name := strField(obj, "name", "title")
+		var evs []protocol.Event
+		if sid != "" {
+			evs = append(evs, protocol.Event{Type: "session", Session: sid})
+		}
+		if name != "" {
+			evs = append(evs, protocol.Event{Type: "title", Text: Truncate(name, 80)})
+		}
+		if len(evs) == 0 {
+			return []protocol.Event{}
+		}
+		return evs
+	case "session_info_changed":
+		name := strField(obj, "name", "title")
+		if name == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "title", Text: Truncate(name, 80)}}
+	case "message_update":
+		return piMessageUpdate(obj)
+	case "tool_execution_start":
+		name := strField(obj, "toolName", "tool")
+		return []protocol.Event{toolEvent("tool_call", name, payloadText(obj["args"]))}
+	case "tool_execution_end":
+		name := strField(obj, "toolName", "tool")
+		text := payloadText(obj["result"])
+		if text == "" {
+			text = payloadText(obj["partialResult"])
+		}
+		return []protocol.Event{toolEvent("tool_result", name, text)}
+	case "agent_settled":
+		return []protocol.Event{{Type: "log", Done: true}}
+	case "auto_retry_start":
+		text := strField(obj, "errorMessage")
+		if text == "" {
+			text = "正在重试"
+		}
+		return []protocol.Event{{Type: "log", Text: Truncate(text, 160)}}
+	case "event_msg":
+		part, _ := obj["payload"].(map[string]any)
+		if strField(part, "type") != "user_message" {
+			return []protocol.Event{}
+		}
+		text := ExtractUserText(strField(part, "message", "text"))
+		if text == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+	}
+	if kind == "text" {
+		part, _ := obj["part"].(map[string]any)
+		text := strField(part, "text")
+		if text == "" {
+			text = strField(obj, "text")
+		}
+		if text == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "assistant", Role: "assistant", Text: FullText(text)}}
+	}
+	if kind == "message" {
+		msg, _ := obj["message"].(map[string]any)
+		if msg == nil {
+			return nil
+		}
+		return ParseJSONL(msg)
+	}
+	return nil
+}
+
+func openCodeToolEvents(obj map[string]any) []protocol.Event {
+	part, _ := obj["part"].(map[string]any)
+	if part == nil {
+		part = obj
+	}
+	name := strField(part, "tool", "toolName", "name")
+	state, _ := part["state"].(map[string]any)
+	input := any(nil)
+	output := ""
+	if state != nil {
+		input = state["input"]
+		output = strField(state, "output", "title")
+		if output == "" {
+			output = payloadText(state["output"])
+		}
+	}
+	if input == nil {
+		input = part["input"]
+	}
+	ev := toolEvent("tool_call", name, payloadText(input))
+	if output == "" || output == "null" {
+		return []protocol.Event{ev}
+	}
+	return []protocol.Event{ev, toolEvent("tool_result", name, output)}
+}
+
+func nestedErrorText(obj map[string]any) string {
+	if s := strField(obj, "message", "error"); s != "" && !strings.HasPrefix(s, "{") {
+		return s
+	}
+	raw, _ := obj["error"].(map[string]any)
+	if raw == nil {
+		return ""
+	}
+	if s := strField(raw, "message"); s != "" {
+		return s
+	}
+	data, _ := raw["data"].(map[string]any)
+	return strField(data, "message")
+}
+
+func piMessageUpdate(obj map[string]any) []protocol.Event {
+	asst, _ := obj["assistantMessageEvent"].(map[string]any)
+	if asst == nil {
+		return []protocol.Event{}
+	}
+	switch strField(asst, "type") {
+	case "text_delta":
+		t := strField(asst, "delta")
+		if t == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "delta", Role: "assistant", Text: t}}
+	case "thinking_delta":
+		t := strField(asst, "delta")
+		if t == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "thinking", Role: "assistant", Text: FullText(t)}}
+	case "toolcall_start":
+		return []protocol.Event{toolEvent("tool_call", strField(asst, "toolName"), "")}
+	}
+	return []protocol.Event{}
+}
+
 // ParseJSONL 把一条 jsonl 解析为结构化事件（含工具调用/结果）。
 func ParseJSONL(obj map[string]any) []protocol.Event {
 	if obj == nil {
@@ -438,6 +801,9 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 		if evs := askFromControl(obj); len(evs) > 0 {
 			return evs
 		}
+	}
+	if evs := parseVendorJSONL(obj, kind); evs != nil {
+		return evs
 	}
 	switch kind {
 	case "file-history-snapshot", "mode", "last-prompt", "queue-operation", "available_commands_update":
@@ -589,7 +955,7 @@ func sessionIDOf(obj map[string]any) string {
 	if obj == nil {
 		return ""
 	}
-	if s := strField(obj, "session_id", "sessionId"); s != "" {
+	if s := strField(obj, "session_id", "sessionId", "sessionID"); s != "" {
 		return s
 	}
 	if msg, ok := obj["message"].(map[string]any); ok {
@@ -620,35 +986,61 @@ func EventsFromJSONL(obj map[string]any, engine, session string) []protocol.Even
 	return rows
 }
 
+type jsonlTitleHit struct {
+	mtime int64
+	title string
+}
+
+var jsonlTitleCache sync.Map
+
 // JSONLTitle 从会话记录里取最新标题，没有则用首条用户消息。
 func JSONLTitle(path string) string {
 	if path == "" {
 		return ""
 	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	mtime := st.ModTime().UnixNano()
+	if hit, ok := jsonlTitleCache.Load(path); ok {
+		cached := hit.(jsonlTitleHit)
+		if cached.mtime == mtime {
+			return cached.title
+		}
+	}
+	title := readJSONLTitle(path, st.Size())
+	jsonlTitleCache.Store(path, jsonlTitleHit{mtime: mtime, title: title})
+	return title
+}
+
+func readJSONLTitle(path string, size int64) string {
 	f, err := os.Open(path)
 	if err != nil {
 		return ""
 	}
 	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		return ""
-	}
-	const max = 64 << 10
-	start := st.Size() - max
-	if start < 0 {
-		start = 0
-	}
-	if start > 0 {
-		if _, err := f.Seek(start, 0); err != nil {
-			return ""
+	const win = 64 << 10
+	title, user := scanJSONLTitle(f, 0, win, false)
+	if size > win {
+		later, _ := scanJSONLTitle(f, size-win, win, true)
+		if later != "" {
+			title = later
 		}
 	}
-	sc := bufio.NewScanner(f)
+	if title != "" {
+		return title
+	}
+	return user
+}
+
+func scanJSONLTitle(f *os.File, start, limit int64, skipPartial bool) (title, user string) {
+	if _, err := f.Seek(start, 0); err != nil {
+		return "", ""
+	}
+	r := io.LimitReader(f, limit)
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	title := ""
-	user := ""
-	skipPartial := start > 0
 	for sc.Scan() {
 		if skipPartial {
 			skipPartial = false
@@ -667,10 +1059,32 @@ func JSONLTitle(path string) string {
 			}
 		}
 	}
-	if title != "" {
-		return title
+	return title, user
+}
+
+// MatchSession 按完整 ID 优先、前缀次之匹配唯一会话。
+func MatchSession(rows []protocol.Session, id string) (protocol.Session, error) {
+	if id == "" {
+		return protocol.Session{}, fmt.Errorf("session %s not unique or missing", id)
 	}
-	return user
+	exact := []protocol.Session{}
+	prefix := []protocol.Session{}
+	for _, s := range rows {
+		if s.ID == id {
+			exact = append(exact, s)
+			continue
+		}
+		if strings.HasPrefix(s.ID, id) {
+			prefix = append(prefix, s)
+		}
+	}
+	if len(exact) == 1 {
+		return exact[0], nil
+	}
+	if len(exact) == 0 && len(prefix) == 1 {
+		return prefix[0], nil
+	}
+	return protocol.Session{}, fmt.Errorf("session %s not unique or missing", id)
 }
 
 // WithJSONLTitle 会话标题为空时从 jsonl 补上。
@@ -841,8 +1255,44 @@ func TitleOf(name string) string {
 		return "Cursor Agent"
 	case "codex":
 		return "Codex"
+	case "opencode":
+		return "OpenCode"
+	case "pi":
+		return "Pi"
 	default:
 		return name
+	}
+}
+
+// DataHome 用户数据目录。
+func DataHome() string {
+	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
+		return x
+	}
+	return filepath.Join(Home(), ".local", "share")
+}
+
+// StreamJSONL 把 stdout 里的 JSONL 转成事件。
+func StreamJSONL(r io.Reader, engine, session string, emit func(protocol.Event)) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sid := session
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		var obj map[string]any
+		if json.Unmarshal([]byte(line), &obj) != nil {
+			emit(protocol.Event{Type: "log", Engine: engine, Session: sid, Text: line})
+			continue
+		}
+		for _, ev := range EventsFromJSONL(obj, engine, sid) {
+			if ev.Session != "" {
+				sid = ev.Session
+			}
+			emit(ev)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { loadLastPick, pickToQuery } from "../lastPick";
+import { toastError } from "../toast";
 
 const password = ref("");
 const err = ref("");
@@ -25,7 +26,8 @@ async function submit(): Promise<void> {
     const pick = loadLastPick();
     await router.replace(pick ? { path: "/", query: pickToQuery(pick) } : "/");
   } catch (e) {
-    err.value = String(e);
+    err.value = "网络连接失败，请检查网络后重试";
+    toastError(e);
   } finally {
     busy.value = false;
   }

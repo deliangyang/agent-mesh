@@ -620,7 +620,8 @@ html.dark #app {
 
 [data-testid="copilot-chat-input-disclaimer"] {
   margin: 0;
-  padding: 4px 8px 2px;
+  max-width: none;
+  padding: 2px 8px 4px;
   color: var(--mute);
   font-size: 11.5px;
   line-height: 1.4;
@@ -630,7 +631,8 @@ html.dark #app {
 .mesh-composer {
   width: 100%;
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  padding: 0 0 2px;
   pointer-events: auto;
 }
 
@@ -898,6 +900,35 @@ html.dark #app {
   max-width: none !important;
 }
 
+/* 短对话时把消息贴到输入框上方，避免中间留下大块空白 */
+.mesh-chat [data-testid="copilot-chat-view-scroll"] > div {
+  box-sizing: border-box;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.mesh-chat [data-testid="copilot-scroll-content"] {
+  padding-top: 8px;
+}
+
+.mesh-chat [data-testid="copilot-scroll-content"] > div,
+.mesh-chat [data-testid="copilot-chat-input-container"] > div,
+.mesh-chat [data-testid="copilot-input-overlay"] > [class*="max-w-3xl"] {
+  max-width: none;
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.mesh-chat [data-testid="copilot-chat-input-container"] > div {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 .mesh-welcome {
   width: 100%;
   padding: 0 8px 12px;
@@ -1140,13 +1171,19 @@ html.dark #app {
 }
 
 .mesh-chat [data-testid="copilot-user-message"] {
-  padding-top: 0.55rem;
-  margin-bottom: 1.1rem;
+  padding-top: 0.2rem !important;
+  margin-bottom: 0.45rem;
 }
 
 .mesh-chat [data-testid="copilot-assistant-message"] {
-  padding-top: 0.35rem;
-  margin-bottom: 1.25rem;
+  padding-top: 0.1rem;
+  margin-bottom: 0.45rem;
+}
+
+.mesh-chat [data-testid="copilot-assistant-message"]:not(
+    :has(.mesh-act, .copilot-chat-assistant-markdown, [data-streamdown], .mesh-think-line)
+  ) {
+  display: none;
 }
 
 .mesh-chat [data-testid="copilot-assistant-message"] > div:has(.mesh-copy),

@@ -25,6 +25,7 @@ const props = defineProps<{
   onPullFollowup?: () => boolean | Promise<boolean>;
 }>();
 
+const host = ref<HTMLElement | null>(null);
 const highlight = ref(0);
 const dismissed = ref(false);
 const locked = ref("");
@@ -162,12 +163,31 @@ function onInput(value: string): void {
   props.onUpdateModelValue(value);
 }
 
+function dismissKeyboard(): void {
+  const hide = () => {
+    const root = host.value;
+    if (!root) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && root.contains(active)) active.blur();
+    const box = root.querySelector("textarea, [contenteditable]");
+    if (box instanceof HTMLElement) box.blur();
+  };
+  hide();
+  // CopilotKit 发送后会立刻 focus 输入框，延后失焦才能收起手机键盘。
+  requestAnimationFrame(() => {
+    hide();
+    requestAnimationFrame(hide);
+  });
+  window.setTimeout(hide, 0);
+}
+
 let lastSubmitAt = 0;
 function submit(value: string): void {
   const now = Date.now();
   if (now - lastSubmitAt < 80) return;
   lastSubmitAt = now;
   props.onSubmitMessage(value);
+  dismissKeyboard();
 }
 
 function onSend(orig: () => void): void {
@@ -181,7 +201,7 @@ function onSend(orig: () => void): void {
 </script>
 
 <template>
-  <div class="mesh-slash-host" @keydown.capture="onKey">
+  <div ref="host" class="mesh-slash-host" @keydown.capture="onKey">
     <CopilotChatInput
       :model-value="modelValue"
       :is-running="false"

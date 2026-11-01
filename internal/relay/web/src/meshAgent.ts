@@ -10,7 +10,7 @@ import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastT
 import { meshTarget, parseThreadId } from "./target";
 import type { MeshEvent } from "./types";
 
-export const meshLive = reactive({ session: "", title: "", streaming: false, think: "" });
+export const meshLive = reactive({ session: "", title: "", streaming: false, think: "", thinking: false });
 export const chatLoad = reactive({ loading: false, thread: "" });
 
 const FIRST_PAINT_TURNS = 2;
@@ -271,9 +271,11 @@ export class MeshAgent extends AbstractAgent {
       const threadId = input.threadId || this.threadId;
       meshLive.streaming = true;
       meshLive.think = "";
+      meshLive.thinking = false;
       let sentText = "";
       const finish = () => {
         meshLive.streaming = false;
+        meshLive.thinking = false;
         if (historyEvents.length && pushHasUser(sentText)) {
           paintMessages(historyEvents, false);
         }
@@ -396,6 +398,7 @@ export class MeshAgent extends AbstractAgent {
             return false;
           }
           if (kind === "ask") {
+            meshLive.thinking = false;
             sawContent = true;
             noteAskEvent({
               type: "ask",
@@ -416,10 +419,14 @@ export class MeshAgent extends AbstractAgent {
             closeText();
             const piece = nextPiece(thinkAcc, delta);
             thinkAcc += piece;
-            if (piece) meshLive.think += piece;
+            if (piece) {
+              meshLive.think += piece;
+              meshLive.thinking = true;
+            }
             return false;
           }
           if (kind === "tool_result" || kind === "tool-result") {
+            meshLive.thinking = false;
             sawContent = true;
             closeText();
             const name = mesh.tool || toolName || lastClosedToolName || "tool";
@@ -448,6 +455,7 @@ export class MeshAgent extends AbstractAgent {
             return false;
           }
           if (kind === "tool_call" || kind === "tool_use" || kind === "tool_call_update") {
+            meshLive.thinking = false;
             sawContent = true;
             closeText();
             const name = mesh.tool || "tool";
@@ -474,6 +482,7 @@ export class MeshAgent extends AbstractAgent {
           }
           if (!delta) return stop();
           if (isInternalDump(delta)) return stop();
+          meshLive.thinking = false;
           sawContent = true;
           closeTool();
           ensureText();
@@ -542,6 +551,7 @@ export function resetDraft(): void {
   meshLive.title = "";
   meshLive.streaming = false;
   meshLive.think = "";
+  meshLive.thinking = false;
   clearAsk();
   try {
     if (meshAgent.isRunning) meshAgent.abortRun();

@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { CopilotChat, CopilotChatUserMessage, useDefaultRenderTool } from "@copilotkit/vue/v2";
+import {
+  CopilotChat,
+  CopilotChatAssistantMessage,
+  CopilotChatUserMessage,
+  useDefaultRenderTool,
+} from "@copilotkit/vue/v2";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { catalog, connectCatalog, meshLink, refreshCatalog, watchSession } from "../catalog";
@@ -78,24 +83,33 @@ const attachConfig = {
   maxSize: 20 * 1024 * 1024,
 };
 
-function thinkingStreaming(
-  message: { id?: string },
-  messages: { id?: string }[] | undefined,
-  isRunning: boolean,
-): boolean {
-  if (!meshLive.streaming || !isRunning) return false;
-  const last = messages && messages.length ? messages[messages.length - 1] : null;
-  return !!(last && last.id === message.id);
+function lastTurnStart(messages: { role?: string }[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") return i + 1;
+  }
+  return 0;
 }
 
-function hideInlineThink(message: { id?: string }, messages: { role?: string; id?: string }[] | undefined): boolean {
-  if (!meshLive.streaming || !meshLive.think) return false;
+function lastAssistantId(messages: { id?: string; role?: string }[] | undefined): string {
   const rows = messages || [];
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i].role === "reasoning") return rows[i].id === message.id;
+  const start = lastTurnStart(rows);
+  let last = "";
+  for (let i = start; i < rows.length; i++) {
+    if (rows[i].role === "assistant") last = rows[i].id || "";
   }
-  return true;
+  return last;
 }
+
+function showThinkAtBottom(
+  message: { id?: string },
+  messages: { id?: string; role?: string }[] | undefined,
+): boolean {
+  if (!meshLive.thinking) return false;
+  const id = lastAssistantId(messages);
+  return !!message.id && message.id === id;
+}
+
+const thinkInComposer = computed(() => meshLive.thinking && !lastAssistantId(meshAgent.messages));
 
 const filters = reactive({
   node: String(route.query.node || savedPick?.node || ""),
@@ -355,9 +369,7 @@ function pickEngine(name: string): void {
   filters.engine = next;
   syncModelToEngine();
   ensureWorkDir();
-  if (next && selected.value?.engine && selected.value.engine !== next) {
-    newSession();
-  }
+  if (next) openLatestSessionOrNew();
   picksOpen.engine = false;
 }
 
@@ -417,6 +429,17 @@ function newSession(): void {
   chatKey.value = "draft-" + Date.now();
   syncQuery(null);
   closeNavIfMobile();
+}
+
+function openLatestSessionOrNew(): void {
+  const latest = sessionRows.value[0];
+  if (latest) {
+    const cur = selected.value;
+    if (cur && cur.id === latest.id && cur.engine === latest.engine) return;
+    openSession(latest);
+    return;
+  }
+  newSession();
 }
 
 function hydrateFromQuery(): void {
@@ -838,12 +861,48 @@ onBeforeUnmount(() => {
               <p>{{ welcomeHint }}</p>
             </div>
           </template>
-          <template #reasoning-message="{ message, messages, isRunning }">
-            <MeshThinkWindow
-              v-if="!hideInlineThink(message, messages)"
-              :content="message.content"
-              :streaming="thinkingStreaming(message, messages, isRunning)"
-            />
+          <template #reasoning-message></template>
+          <template #assistant-message="{ message, messages, isRunning }">
+            <div class="mesh-asst-wrap">
+              <CopilotChatAssistantMessage
+                :message="message"
+                :messages="messages || []"
+                :is-running="!!isRunning"
+              >
+                <template #tool-calls-view="{ message: toolMessage, messages: toolMessages }">
+                  <MeshToolCallsView :message="toolMessage" :messages="toolMessages || []" />
+                </template>
+                <template #copy-button="{ onCopy, copied, label }">
+                  <button
+                    type="button"
+                    class="mesh-copy"
+                    :aria-label="label"
+                    :title="copied ? '已复制' : label"
+                    @click="onCopy"
+                  >
+                    <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                    <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <rect x="5.5" y="5.5" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.4" />
+                      <path
+                        d="M3.5 10.5V3.8A1.3 1.3 0 0 1 4.8 2.5h6.7"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </button>
+                </template>
+              </CopilotChatAssistantMessage>
+              <MeshThinkWindow v-if="showThinkAtBottom(message, messages)" :streaming="true" />
+            </div>
           </template>
           <template #user-message="{ message }">
             <CopilotChatUserMessage :message="message">
@@ -883,44 +942,9 @@ onBeforeUnmount(() => {
               </template>
             </CopilotChatUserMessage>
           </template>
-          <template #tool-calls-view="{ message, messages }">
-            <MeshToolCallsView :message="message" :messages="messages || []" />
-          </template>
-          <template #copy-button="{ onCopy, copied, label }">
-            <button
-              type="button"
-              class="mesh-copy"
-              :aria-label="label"
-              :title="copied ? '已复制' : label"
-              @click="onCopy"
-            >
-              <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M3.5 8.5 6.5 11.5 12.5 4.5"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect x="5.5" y="5.5" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.4" />
-                <path
-                  d="M3.5 10.5V3.8A1.3 1.3 0 0 1 4.8 2.5h6.7"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </button>
-          </template>
           <template #input="slot">
             <div class="mesh-composer">
-              <MeshThinkWindow
-                v-if="meshLive.streaming && meshLive.think"
-                :content="meshLive.think"
-                :streaming="true"
-              />
+              <MeshThinkWindow v-if="thinkInComposer" :streaming="true" />
               <div class="mesh-composer-meta">
                 <div class="mesh-chip">
                   <button type="button" class="mesh-chip-btn is-model" @click.stop="togglePick('model')">

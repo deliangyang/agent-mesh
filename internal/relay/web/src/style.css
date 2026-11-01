@@ -823,8 +823,11 @@ html.dark #app {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  box-sizing: border-box;
   gap: 8px;
+  width: fit-content;
   max-width: min(80%, 520px);
+  min-width: 0;
 }
 
 .mesh-user-files {
@@ -852,11 +855,15 @@ html.dark #app {
 }
 
 .mesh-user-text {
+  box-sizing: border-box;
+  max-width: 100%;
   padding: 8px 14px;
   color: var(--ink);
   background: var(--wall);
   border-radius: 16px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   line-height: 1.45;
   font-size: 14px;
 }
@@ -1126,12 +1133,23 @@ html.dark #app {
   line-height: 1.45;
 }
 
+.mesh-chat [data-testid="copilot-chat-view-scroll"],
+.mesh-chat [data-testid="copilot-scroll-content"],
+.mesh-chat [data-testid="copilot-scroll-content"] > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .mesh-chat [data-testid="copilot-user-message"],
 .mesh-chat [data-testid="copilot-assistant-message"] {
   position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .mesh-chat [data-testid="copilot-user-message"] {
+  width: 100%;
   padding-top: 0.55rem;
   margin-bottom: 1.1rem;
 }
@@ -1139,6 +1157,18 @@ html.dark #app {
 .mesh-chat [data-testid="copilot-assistant-message"] {
   padding-top: 0.35rem;
   margin-bottom: 1.25rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mesh-asst-wrap {
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 1.25rem;
+}
+
+.mesh-chat .mesh-asst-wrap [data-testid="copilot-assistant-message"] {
+  margin-bottom: 0;
 }
 
 .mesh-chat [data-testid="copilot-assistant-message"] > div:has(.mesh-copy),
@@ -1191,16 +1221,35 @@ html.dark #app {
   height: 13px;
 }
 
+.mesh-chat .copilot-chat-assistant-markdown {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .mesh-chat .copilot-chat-assistant-markdown p,
 .mesh-chat .copilot-chat-assistant-markdown li {
   margin-block: 0.2em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   line-height: 1.45;
+}
+
+.mesh-chat .copilot-chat-assistant-markdown a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mesh-chat .copilot-chat-assistant-markdown img {
+  max-width: 100%;
+  height: auto;
 }
 
 /* 代码块：单层井，密排等宽，避免 Shiki .line 块级化后再叠加 pre 换行 */
 .copilot-chat-assistant-markdown [data-streamdown="code-block"] {
   position: relative;
   width: 100%;
+  max-width: 100%;
   margin-block: 0.45em;
   overflow: hidden;
   color: var(--ink);
@@ -1273,6 +1322,7 @@ html.dark #app {
 .mesh-chat .copilot-chat-assistant-markdown pre {
   margin: 0 !important;
   padding: 8px 12px !important;
+  max-width: 100%;
   overflow-x: auto;
   color: var(--ink);
   background: transparent !important;
@@ -1353,14 +1403,9 @@ html.dark #app {
   height: 18px;
 }
 
-.mesh-composer > .mesh-act[data-variant="think"] {
+.mesh-composer > .mesh-think-line {
   margin: 0 8px 8px;
   pointer-events: auto;
-}
-
-.mesh-act-body.think {
-  max-height: 90px;
-  scroll-behavior: auto;
 }
 
 .mesh-act-row {
@@ -1401,20 +1446,36 @@ html.dark #app {
   color: var(--ink);
 }
 
-.mesh-act-think {
-  padding: 0;
+.mesh-think-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
   color: var(--mute);
   font-size: 12.5px;
   line-height: 18px;
 }
 
-.mesh-act-think .copilot-chat-assistant-markdown,
-.mesh-act-think .copilot-chat-assistant-markdown p,
-.mesh-act-think .copilot-chat-assistant-markdown li {
-  margin: 0;
-  color: var(--mute);
-  font-size: 12.5px;
-  line-height: 18px;
+.mesh-think-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.mesh-think-line[data-streaming="true"] .mesh-think-icon {
+  animation: mesh-think-spin 0.85s linear infinite;
+}
+
+@keyframes mesh-think-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.copilot-chat-assistant-markdown [data-streamdown="table"] {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .copilot-chat-assistant-markdown table,
@@ -1444,11 +1505,6 @@ html.dark #app {
 
 .copilot-chat-assistant-markdown strong {
   font-weight: 600;
-}
-
-.mesh-act-think-wait {
-  color: var(--mute);
-  font-style: italic;
 }
 
 .mesh-follow {
@@ -1925,6 +1981,15 @@ html.dark #app {
 
   .mesh-chat-title {
     max-width: calc(100% - 148px);
+  }
+
+  .mesh-user-card {
+    max-width: 100%;
+  }
+
+  .mesh-user-text {
+    padding-left: 12px;
+    padding-right: 12px;
   }
 }
 

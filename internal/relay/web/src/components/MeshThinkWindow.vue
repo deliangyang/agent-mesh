@@ -1,35 +1,25 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { StreamMarkdown } from "streamdown-vue";
-import MeshActivityWindow from "./MeshActivityWindow.vue";
-
-const props = defineProps<{
-  content: unknown;
+defineProps<{
   streaming?: boolean;
 }>();
-
-const text = computed(() => (typeof props.content === "string" ? props.content : ""));
-const show = computed(() => props.streaming || !!text.value.trim());
 </script>
 
 <template>
-  <MeshActivityWindow
-    v-if="show"
-    variant="think"
-    :revision="text.length + (streaming ? '-live' : '')"
+  <div
+    class="mesh-think-line"
+    :data-streaming="streaming ? 'true' : undefined"
+    role="status"
+    aria-live="polite"
   >
-    <div class="mesh-act-think" :data-streaming="streaming ? 'true' : undefined">
-      <StreamMarkdown
-        v-if="text"
-        class="copilot-chat-assistant-markdown"
-        :content="text"
-        :parse-incomplete-markdown="!!streaming"
-        :code-block-show-line-numbers="false"
-        :code-block-hide-copy="true"
-        :code-block-hide-download="true"
-        :shiki-theme="{ light: 'github-light', dark: 'github-dark' }"
+    <svg class="mesh-think-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.4" opacity="0.28" />
+      <path
+        d="M8 2.8a5.2 5.2 0 0 1 5.2 5.2"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
       />
-      <span v-else class="mesh-act-think-wait">…</span>
-    </div>
-  </MeshActivityWindow>
+    </svg>
+    <span>{{ streaming ? "思考中" : "已思考" }}</span>
+  </div>
 </template>

@@ -7,15 +7,29 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
+	"agent-mesh/internal/openai"
 	"agent-mesh/internal/protocol"
 
 	"github.com/gorilla/websocket"
 )
+
+type pipeStatus struct {
+	error
+	started bool
+}
+
+func (e *pipeStatus) Unwrap() error { return e.error }
+
+func pipeHasStarted(err error) bool {
+	var p *pipeStatus
+	return errors.As(err, &p) && p.started
+}
 
 type tunnelHub struct {
 	mu    sync.Mutex
@@ -74,7 +88,7 @@ func (t *nodeTunnel) failAll(msg string) {
 }
 
 func (t *nodeTunnel) subscribe(id string) chan protocol.TunnelFrame {
-	ch := make(chan protocol.TunnelFrame, 64)
+	ch := make(chan protocol.TunnelFrame, 512)
 	t.mu.Lock()
 	t.wait[id] = ch
 	t.mu.Unlock()
@@ -96,7 +110,7 @@ func (t *nodeTunnel) dispatch(f protocol.TunnelFrame) {
 	}
 	select {
 	case ch <- f:
-	default:
+	case <-time.After(15 * time.Second):
 	}
 }
 
@@ -177,13 +191,22 @@ func (h *tunnelHub) Pipe(ctx context.Context, nodeID, method, path string, body 
 	}
 	headerSent := false
 	fl, _ := w.(http.Flusher)
+	fail := func(err error) error {
+		if headerSent {
+			return &pipeStatus{error: err, started: true}
+		}
+		return err
+	}
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fail(ctx.Err())
 		case f, ok := <-ch:
 			if !ok {
-				return nil
+				if headerSent {
+					return nil
+				}
+				return fmt.Errorf("node tunnel closed")
 			}
 			if f.Error != "" && !headerSent && len(f.Chunk) == 0 && len(f.Body) == 0 {
 				return fmt.Errorf("%s", f.Error)
@@ -290,8 +313,23 @@ func (s *Server) handleNodeTunnel(w http.ResponseWriter, r *http.Request) {
 			s.applyNodeSnapshot(req.Info.ID, f.Body)
 			continue
 		}
+		if f.Path == "/v1/openai/ingest" {
+			s.applyTunnelIngest(f.Body)
+			continue
+		}
 		t.dispatch(f)
 	}
+}
+
+func (s *Server) applyTunnelIngest(raw json.RawMessage) {
+	if s.ingest == nil || len(raw) == 0 {
+		return
+	}
+	var chunk openai.Chunk
+	if json.Unmarshal(raw, &chunk) != nil {
+		return
+	}
+	s.ingest.publish(chunk)
 }
 
 func (s *Server) applyNodeSnapshot(id string, raw json.RawMessage) {

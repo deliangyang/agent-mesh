@@ -50,18 +50,7 @@ func (m *Memory) Upsert(r Record) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if old, ok := m.nodes[r.Info.ID]; ok {
-		if len(r.Snapshot.Models) == 0 {
-			r.Snapshot.Models = old.Snapshot.Models
-		}
-		if len(r.Snapshot.Engines) == 0 {
-			r.Snapshot.Engines = old.Snapshot.Engines
-		}
-		if len(r.Snapshot.Sessions) == 0 {
-			r.Snapshot.Sessions = old.Snapshot.Sessions
-		}
-		if len(r.Snapshot.Dirs) == 0 {
-			r.Snapshot.Dirs = old.Snapshot.Dirs
-		}
+		r.Snapshot = mergeSnapshot(old.Snapshot, r.Snapshot)
 	}
 	m.nodes[r.Info.ID] = r
 }
@@ -115,10 +104,29 @@ func (m *Memory) SetSnapshot(id string, snap protocol.NodeSnapshot) {
 	if !ok {
 		return
 	}
-	r.Snapshot = snap
+	r.Snapshot = mergeSnapshot(r.Snapshot, snap)
 	r.Seen = time.Now()
 	r.Info.LastSeen = r.Seen.Unix()
 	m.nodes[id] = r
+}
+
+func mergeSnapshot(old, neu protocol.NodeSnapshot) protocol.NodeSnapshot {
+	if neu.Models == nil {
+		neu.Models = old.Models
+	}
+	if neu.Engines == nil {
+		neu.Engines = old.Engines
+	}
+	if neu.Sessions == nil {
+		neu.Sessions = old.Sessions
+	}
+	if neu.Dirs == nil {
+		neu.Dirs = old.Dirs
+	}
+	if neu.Followups == nil {
+		neu.Followups = old.Followups
+	}
+	return neu
 }
 
 // Server 只转发加密信封，不解密；OpenAI 通道明文汇聚会话监听。

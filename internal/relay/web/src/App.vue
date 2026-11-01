@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CopilotKitProvider } from "@copilotkit/vue/v2";
 import { RouterView } from "vue-router";
+import MeshToast from "./components/MeshToast.vue";
 import { meshAgent } from "./meshAgent";
 
 const agents = { default: meshAgent };
@@ -15,6 +16,7 @@ const agents = { default: meshAgent };
   >
     <div class="mesh-root" data-copilotkit>
       <RouterView />
+      <MeshToast />
     </div>
   </CopilotKitProvider>
 </template>

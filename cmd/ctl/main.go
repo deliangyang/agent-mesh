@@ -26,10 +26,12 @@ func main() {
 	direct := fs.String("direct", env("MESH_DIRECT", ""), "直连节点 URL，设置后不走中继")
 	nodeID := fs.String("node", env("MESH_NODE", ""), "目标节点 ID")
 	key := fs.String("key", filepath.Join(os.Getenv("HOME"), ".agent-mesh", "client.key"), "客户端身份密钥")
-	engine := fs.String("engine", "", "引擎：workbuddy/claude/cursor/codex")
+	engine := fs.String("engine", "", "引擎：workbuddy/claude/cursor/codex/opencode/pi")
 	all := fs.Bool("all", false, "包含历史会话")
 	tail := fs.Int("tail", 80, "history 条数")
 	cwd := fs.String("cwd", "", "send 工作目录")
+	action := fs.String("action", "list", "followups 动作：list/push/update/delete")
+	itemID := fs.String("id", "", "followups 条目 ID")
 	_ = fs.Parse(os.Args[2:])
 	args := fs.Args()
 
@@ -119,6 +121,56 @@ func main() {
 			Stream: true,
 			Params: protocol.MustJSON(protocol.SendParams{Engine: needEngine(*engine), CWD: *cwd, Text: strings.Join(args, " ")}),
 		})
+	case "commands":
+		resp, err := cli.Call(ctx, protocol.Request{
+			ID:     "1",
+			Method: protocol.MethodCommands,
+			Params: protocol.MustJSON(protocol.CommandsParams{Engine: needEngine(*engine), CWD: *cwd}),
+		})
+		must(err)
+		fmt.Println(string(resp.Body))
+	case "followups":
+		p := protocol.FollowupsParams{
+			Action: *action,
+			Engine: needEngine(*engine),
+			CWD:    *cwd,
+			ID:     *itemID,
+		}
+		if len(args) > 0 {
+			p.Session = args[0]
+		}
+		if *action == "push" || *action == "add" || *action == "update" {
+			if len(args) < 2 {
+				fatal("followups " + *action + " 需要 session 和文本")
+			}
+			p.Text = strings.Join(args[1:], " ")
+		}
+		if p.Session == "" {
+			fatal("followups 需要 session")
+		}
+		resp, err := cli.Call(ctx, protocol.Request{
+			ID:     "1",
+			Method: protocol.MethodFollowups,
+			Params: protocol.MustJSON(p),
+		})
+		must(err)
+		fmt.Println(string(resp.Body))
+	case "choice":
+		if len(args) < 2 {
+			fatal("choice 需要 session 和文本")
+		}
+		resp, err := cli.Call(ctx, protocol.Request{
+			ID:     "1",
+			Method: protocol.MethodChoice,
+			Params: protocol.MustJSON(protocol.ChoiceParams{
+				Engine:  needEngine(*engine),
+				Session: args[0],
+				CWD:     *cwd,
+				Text:    strings.Join(args[1:], " "),
+			}),
+		})
+		must(err)
+		fmt.Println(string(resp.Body))
 	default:
 		usage()
 		os.Exit(2)
@@ -140,7 +192,7 @@ func stream(ctx context.Context, cli *client.Client, req protocol.Request) {
 
 func needEngine(e string) string {
 	if e == "" {
-		fatal("请用 --engine 指定 workbuddy/claude/cursor/codex")
+		fatal("请用 --engine 指定 workbuddy/claude/cursor/codex/opencode/pi")
 	}
 	return e
 }
@@ -172,6 +224,9 @@ func usage() {
   ctl watch SESSION --engine E
   ctl reply SESSION TEXT --engine E
   ctl send TEXT --engine E [--cwd DIR]
+  ctl commands --engine E [--cwd DIR]
+  ctl followups SESSION --engine E [--action list|push|update|delete] [--id ID] [TEXT]
+  ctl choice SESSION TEXT --engine E [--cwd DIR]
   ctl ... --direct http://127.0.0.1:7700   # 不经过中继，直连节点
 `)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"agent-mesh/internal/protocol"
 )
@@ -101,71 +102,118 @@ func (s *Set) snapshot() []Driver {
 
 // Engines 探测全部引擎状态。
 func (s *Set) Engines(ctx context.Context) []protocol.EngineInfo {
-	var out []protocol.EngineInfo
-	for _, d := range s.snapshot() {
-		info := d.Probe(ctx)
-		info.Name = d.Name()
-		info.Enabled = s.Enabled(d.Name())
-		if info.Title == "" {
-			info.Title = TitleOf(d.Name())
-		}
-		out = append(out, info)
+	ds := s.snapshot()
+	out := make([]protocol.EngineInfo, len(ds))
+	var wg sync.WaitGroup
+	for i, d := range ds {
+		wg.Add(1)
+		go func(i int, d Driver) {
+			defer wg.Done()
+			info := d.Probe(ctx)
+			info.Name = d.Name()
+			info.Enabled = s.Enabled(d.Name())
+			if info.Title == "" {
+				info.Title = TitleOf(d.Name())
+			}
+			out[i] = info
+		}(i, d)
 	}
+	wg.Wait()
 	return out
 }
 
 // Models 汇总模型。engine 为空则全部已启用引擎。
 func (s *Set) Models(ctx context.Context, engine string) ([]protocol.Model, error) {
-	var out []protocol.Model
-	for _, d := range s.snapshot() {
+	ds := s.snapshot()
+	type slot struct {
+		rows []protocol.Model
+		err  error
+		name string
+		skip bool
+	}
+	slots := make([]slot, len(ds))
+	var wg sync.WaitGroup
+	for i, d := range ds {
 		name := d.Name()
 		if engine != "" && name != engine {
+			slots[i].skip = true
 			continue
 		}
 		if engine == "" && !s.Enabled(name) {
+			slots[i].skip = true
 			continue
 		}
-		rows, err := d.Models(ctx)
-		if err != nil {
+		wg.Add(1)
+		go func(i int, d Driver, name string) {
+			defer wg.Done()
+			rows, err := d.Models(ctx)
+			slots[i] = slot{rows: rows, err: err, name: name}
+		}(i, d, name)
+	}
+	wg.Wait()
+	var out []protocol.Model
+	for _, item := range slots {
+		if item.skip {
+			continue
+		}
+		if item.err != nil {
 			if engine != "" {
-				return nil, fmt.Errorf("%s models: %w", name, err)
+				return nil, fmt.Errorf("%s models: %w", item.name, item.err)
 			}
 			continue
 		}
-		out = append(out, rows...)
+		out = append(out, item.rows...)
 	}
 	return out, nil
 }
 
 // ListAll 汇总全部已启用引擎会话。
 func (s *Set) ListAll(ctx context.Context, engine string, all bool) ([]protocol.Session, error) {
-	var out []protocol.Session
-	for _, d := range s.snapshot() {
-		name := d.Name()
-		if engine != "" && name != engine {
+	ds := s.snapshot()
+	if engine != "" {
+		for _, d := range ds {
+			if d.Name() != engine {
+				continue
+			}
+			if !s.Enabled(engine) {
+				return nil, fmt.Errorf("engine %s disabled", engine)
+			}
+			rows, err := d.List(ctx, all)
+			if err != nil {
+				return nil, fmt.Errorf("%s list: %w", engine, err)
+			}
+			if rows == nil {
+				rows = []protocol.Session{}
+			}
+			return rows, nil
+		}
+		return []protocol.Session{}, nil
+	}
+	results := make([][]protocol.Session, len(ds))
+	var wg sync.WaitGroup
+	for i, d := range ds {
+		if !s.Enabled(d.Name()) {
 			continue
 		}
-		if engine == "" && !s.Enabled(name) {
-			continue
-		}
-		if engine != "" && !s.Enabled(name) {
-			return nil, fmt.Errorf("engine %s disabled", name)
-		}
-		rows, err := d.List(ctx, all)
-		if err != nil {
-			return nil, fmt.Errorf("%s list: %w", name, err)
-		}
+		wg.Add(1)
+		go func(i int, d Driver) {
+			defer wg.Done()
+			rows, err := d.List(ctx, all)
+			if err == nil {
+				results[i] = rows
+			}
+		}(i, d)
+	}
+	wg.Wait()
+	out := []protocol.Session{}
+	for _, rows := range results {
 		out = append(out, rows...)
 	}
 	return out, nil
 }
 
-// Directories 从会话中汇总开发目录。
-func (s *Set) Directories(ctx context.Context) []protocol.WorkDir {
-	rows, err := s.ListAll(ctx, "", true)
-	if err != nil {
-		return nil
-	}
+// DirsOf 从会话汇总开发目录。
+func DirsOf(rows []protocol.Session) []protocol.WorkDir {
 	type key struct{ eng, path string }
 	seen := map[key]int{}
 	order := make([]key, 0)
@@ -186,12 +234,52 @@ func (s *Set) Directories(ctx context.Context) []protocol.WorkDir {
 	return out
 }
 
+// Directories 从会话中汇总开发目录。
+func (s *Set) Directories(ctx context.Context) []protocol.WorkDir {
+	rows, err := s.ListAll(ctx, "", true)
+	if err != nil {
+		return []protocol.WorkDir{}
+	}
+	return DirsOf(rows)
+}
+
+type slashMemo struct {
+	mu    sync.Mutex
+	key   string
+	at    time.Time
+	items protocol.SlashList
+}
+
+var slashCache slashMemo
+
+const slashTTL = 8 * time.Second
+
 // SlashItems 当前引擎在 cwd 下可调用的斜杠命令与技能。
-func (s *Set) SlashItems(_ context.Context, engine, cwd string) protocol.SlashList {
+func (s *Set) SlashItems(ctx context.Context, engine, cwd string) protocol.SlashList {
 	if engine != "" {
 		if _, err := s.Get(engine); err != nil {
 			return protocol.SlashList{Items: []protocol.SlashItem{}}
 		}
 	}
-	return protocol.SlashList{Items: ScanSlash(engine, cwd, Home())}
+	if ctx != nil && ctx.Err() != nil {
+		return protocol.SlashList{Items: []protocol.SlashItem{}}
+	}
+	key := engine + "\x00" + cwd
+	slashCache.mu.Lock()
+	if slashCache.key == key && time.Since(slashCache.at) < slashTTL {
+		out := slashCache.items
+		slashCache.mu.Unlock()
+		return out
+	}
+	slashCache.mu.Unlock()
+	out := protocol.SlashList{Items: ScanSlash(engine, cwd, Home())}
+	if out.Items == nil {
+		out.Items = []protocol.SlashItem{}
+	}
+	slashCache.mu.Lock()
+	slashCache.key = key
+	slashCache.at = time.Now()
+	slashCache.items = out
+	slashCache.mu.Unlock()
+	return out
 }

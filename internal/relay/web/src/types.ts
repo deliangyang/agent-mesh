@@ -112,3 +112,11 @@ export type FollowItem = {
   text: string;
   created: number;
 };
+
+export type FollowQueue = {
+  engine?: string;
+  session?: string;
+  cwd?: string;
+  node_id?: string;
+  items?: FollowItem[];
+};

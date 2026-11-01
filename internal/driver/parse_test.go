@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"agent-mesh/internal/protocol"
 )
@@ -164,6 +165,38 @@ func TestJSONLTitle(t *testing.T) {
 	}
 }
 
+func TestJSONLTitleCodexEventMsg(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/codex.jsonl"
+	raw := `{"type":"session_meta","payload":{"id":"abc"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"修复登录超时"}}
+`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := JSONLTitle(path); got != "修复登录超时" {
+		t.Fatalf("title %q", got)
+	}
+}
+
+func TestJSONLTitleReadsHeadNotJustTail(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/big.jsonl"
+	var b strings.Builder
+	b.WriteString(`{"type":"user","message":{"content":"第一句用户问题"}}` + "\n")
+	b.WriteString(`{"type":"ai-title","aiTitle":"头标题"}` + "\n")
+	pad := `{"type":"assistant","message":{"content":"` + strings.Repeat("x", 200) + `"}}` + "\n"
+	for b.Len() < 80*1024 {
+		b.WriteString(pad)
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := JSONLTitle(path); got != "头标题" {
+		t.Fatalf("title %q", got)
+	}
+}
+
 func TestExtractUserTextDropsTimestamp(t *testing.T) {
 	raw := `<timestamp>Saturday, Oct 31, 2026, 11:07 PM (UTC+8)</timestamp>
 <user_query>
@@ -315,6 +348,162 @@ func TestParsePermissionControl(t *testing.T) {
 	}
 }
 
+func TestParseOpenCodeEvents(t *testing.T) {
+	evs := ParseJSONL(map[string]any{
+		"type":      "text",
+		"sessionID": "ses_abc",
+		"part":      map[string]any{"type": "text", "text": "hello"},
+	})
+	if len(evs) != 1 || evs[0].Type != "assistant" || evs[0].Text != "hello" {
+		t.Fatalf("text %#v", evs)
+	}
+	evs = ParseJSONL(map[string]any{
+		"type": "tool_use",
+		"part": map[string]any{
+			"tool": "bash",
+			"state": map[string]any{
+				"input":  map[string]any{"command": "ls"},
+				"output": "ok\n",
+			},
+		},
+	})
+	if len(evs) != 2 || evs[0].Type != "tool_call" || evs[1].Type != "tool_result" {
+		t.Fatalf("tool %#v", evs)
+	}
+}
+
+func TestParseCursorStreamJSON(t *testing.T) {
+	think := ParseJSONL(map[string]any{
+		"type":       "thinking",
+		"subtype":    "completed",
+		"session_id": "s1",
+	})
+	if len(think) != 0 {
+		t.Fatalf("empty thinking %#v", think)
+	}
+	delta := ParseJSONL(map[string]any{
+		"type":    "thinking",
+		"subtype": "delta",
+		"text":    "先看目录",
+	})
+	if len(delta) != 1 || delta[0].Type != "thinking" || delta[0].Text != "先看目录" {
+		t.Fatalf("thinking delta %#v", delta)
+	}
+
+	started := ParseJSONL(map[string]any{
+		"type":    "tool_call",
+		"subtype": "started",
+		"call_id": "c-1",
+		"tool_call": map[string]any{
+			"shellToolCall": map[string]any{
+				"args": map[string]any{"command": "ls"},
+			},
+		},
+	})
+	if len(started) != 1 || started[0].Type != "tool_call" || started[0].Tool != "Shell" {
+		t.Fatalf("started %#v", started)
+	}
+	if !strings.Contains(started[0].Preview, "ls") {
+		t.Fatalf("preview %#v", started[0])
+	}
+
+	done := ParseJSONL(map[string]any{
+		"type":    "tool_call",
+		"subtype": "completed",
+		"call_id": "c-1",
+		"tool_call": map[string]any{
+			"shellToolCall": map[string]any{
+				"args": map[string]any{"command": "ls"},
+				"result": map[string]any{
+					"success": map[string]any{"stdout": "bin\nclaude_ctl.py\ncmd\n"},
+				},
+			},
+		},
+	})
+	if len(done) != 2 || done[0].Type != "tool_call" || done[1].Type != "tool_result" {
+		t.Fatalf("completed %#v", done)
+	}
+	if done[1].Text != "bin\nclaude_ctl.py\ncmd" {
+		t.Fatalf("ls text %q", done[1].Text)
+	}
+
+	listed := ParseJSONL(map[string]any{
+		"type":    "tool_call",
+		"subtype": "completed",
+		"tool_call": map[string]any{
+			"lsToolCall": map[string]any{
+				"args": map[string]any{"path": "."},
+				"result": map[string]any{
+					"success": map[string]any{
+						"files": []any{"bin", "claude_ctl.py", "cmd"},
+					},
+				},
+			},
+		},
+	})
+	if len(listed) != 2 || listed[1].Text != "bin\nclaude_ctl.py\ncmd" {
+		t.Fatalf("ls files %#v", listed)
+	}
+}
+
+func TestContentToTextJoinsNames(t *testing.T) {
+	got := ContentToText([]any{"bin", "claude_ctl.py", "cmd"})
+	if got != "bin\nclaude_ctl.py\ncmd" {
+		t.Fatalf("names %q", got)
+	}
+	got = ContentToText([]any{
+		map[string]any{"type": "text", "text": "hello"},
+		map[string]any{"type": "text", "text": "world"},
+	})
+	if got != "helloworld" {
+		t.Fatalf("blocks %q", got)
+	}
+}
+
+func TestParsePiEvents(t *testing.T) {
+	evs := ParseJSONL(map[string]any{
+		"type": "session", "version": 3, "id": "sid-1", "cwd": "/tmp",
+	})
+	if len(evs) != 1 || evs[0].Type != "session" || evs[0].Session != "sid-1" {
+		t.Fatalf("session %#v", evs)
+	}
+	evs = ParseJSONL(map[string]any{
+		"type": "message_update",
+		"assistantMessageEvent": map[string]any{
+			"type":  "text_delta",
+			"delta": "Hi",
+		},
+	})
+	if len(evs) != 1 || evs[0].Type != "delta" || evs[0].Text != "Hi" {
+		t.Fatalf("delta %#v", evs)
+	}
+	evs = ParseJSONL(map[string]any{"type": "agent_settled", "aborted": false})
+	if len(evs) != 1 || !evs[0].Done {
+		t.Fatalf("settled %#v", evs)
+	}
+}
+
+func TestMatchSession(t *testing.T) {
+	rows := []protocol.Session{
+		{ID: "54b217af-e7ad-40f6-b27c-9a0d06097078", Engine: "cursor"},
+		{ID: "54b217af-e7ad-40f6-b27c-9a0d06097079", Engine: "cursor"},
+	}
+	got, err := MatchSession(rows, "54b217af-e7ad-40f6-b27c-9a0d06097078")
+	if err != nil || got.ID != rows[0].ID {
+		t.Fatalf("exact %#v %v", got, err)
+	}
+	if _, err := MatchSession(rows, "54b217af"); err == nil {
+		t.Fatal("prefix collision should fail")
+	}
+	got, err = MatchSession(rows, "54b217af-e7ad-40f6-b27c-9a0d06097079")
+	if err != nil || got.ID != rows[1].ID {
+		t.Fatalf("other %#v %v", got, err)
+	}
+	if _, err := MatchSession(rows, "missing"); err == nil {
+		t.Fatal("missing should fail")
+	}
+}
+
 func TestFormatAskAnswer(t *testing.T) {
 	p := AskPrompt{
 		Kind: "question",
@@ -330,5 +519,84 @@ func TestFormatAskAnswer(t *testing.T) {
 	got := FormatAskAnswer(p, map[string][]string{"写法": {"重写"}})
 	if !strings.Contains(got, "写法 → 重写") || !strings.Contains(got, `"answers"`) {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestTruncateDoesNotSplitChinese(t *testing.T) {
+	title := "markdown 乱码了，没有使用markdown 显示？"
+	got := Truncate(title, 48)
+	if got != title {
+		t.Fatalf("short title %q", got)
+	}
+	if !utf8.ValidString(got) || strings.ContainsRune(got, '\uFFFD') {
+		t.Fatalf("invalid %q", got)
+	}
+
+	long := strings.Repeat("显示", 40)
+	got = Truncate(long, 48)
+	if !utf8.ValidString(got) || strings.ContainsRune(got, '\uFFFD') {
+		t.Fatalf("long %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("suffix %q", got)
+	}
+	if utf8.RuneCountInString(got) != 48 {
+		t.Fatalf("runes %d %q", utf8.RuneCountInString(got), got)
+	}
+}
+
+func TestCutBytesKeepsChineseRune(t *testing.T) {
+	got := cutBytes("显示", 4)
+	if got != "显" {
+		t.Fatalf("cut %q", got)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("invalid %q", got)
+	}
+}
+
+func TestParseJSONLAssistantKeepsMarkdownTags(t *testing.T) {
+	text := "请用 `<foo_bar>` 包住，不要截断显示。"
+	evs := ParseJSONL(map[string]any{
+		"role": "assistant",
+		"message": map[string]any{
+			"content": []any{
+				map[string]any{"type": "text", "text": text},
+			},
+		},
+	})
+	if len(evs) != 1 || evs[0].Type != "assistant" || evs[0].Text != text {
+		t.Fatalf("markdown %#v", evs)
+	}
+}
+
+func TestJSONLTitleKeepsChineseQuery(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/s.jsonl"
+	raw := `{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nmarkdown 乱码了，没有使用markdown 显示？\n</user_query>"}]}}` + "\n"
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := JSONLTitle(path)
+	if got != "markdown 乱码了，没有使用markdown 显示？" {
+		t.Fatalf("title %q", got)
+	}
+	if !utf8.ValidString(got) || strings.ContainsRune(got, '\uFFFD') {
+		t.Fatalf("invalid %q", got)
+	}
+}
+
+func TestParseJSONLAssistantKeepsMarkdownTable(t *testing.T) {
+	text := "钉钉通知已改成 **Markdown 表格**。\n\n| 取件码 | 快递公司 |\n| :---: | --- |\n| **08115060** | 中国邮政 |"
+	evs := ParseJSONL(map[string]any{
+		"role": "assistant",
+		"message": map[string]any{
+			"content": []any{
+				map[string]any{"type": "text", "text": text},
+			},
+		},
+	})
+	if len(evs) != 1 || evs[0].Text != text {
+		t.Fatalf("table %#v", evs)
 	}
 }

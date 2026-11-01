@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue";
-import { meshAsk, submitAsk } from "../ask";
+import { computed, onBeforeUnmount, onMounted, reactive, watch } from "vue";
+import { dismissAsk, meshAsk, submitAsk } from "../ask";
 
 const picks = reactive<Record<string, string[]>>({});
 
@@ -46,11 +46,30 @@ async function confirm(): Promise<void> {
   if (!meshAsk.prompt || !ready.value || meshAsk.answering) return;
   await submitAsk(meshAsk.prompt, { ...picks });
 }
+
+function onKey(ev: KeyboardEvent): void {
+  if (ev.key !== "Escape" || !meshAsk.prompt) return;
+  ev.preventDefault();
+  dismissAsk();
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", onKey);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
+});
 </script>
 
 <template>
   <div v-if="meshAsk.prompt" class="mesh-ask" role="group" :aria-label="meshAsk.prompt.title || '需要选择'">
-    <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? "等你确认" : "等你选一项" }}</div>
+    <div class="mesh-ask-head">
+      <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? "等你确认" : "等你选一项" }}</div>
+      <button type="button" class="mesh-ask-close" aria-label="关闭选项" title="关闭" @click="dismissAsk">
+        关闭
+      </button>
+    </div>
     <div v-if="meshAsk.prompt.title" class="mesh-ask-title">{{ meshAsk.prompt.title }}</div>
     <div v-for="q in meshAsk.prompt.questions" :key="keyOf(q)" class="mesh-ask-q">
       <p>{{ q.prompt }}</p>

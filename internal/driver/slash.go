@@ -129,6 +129,30 @@ func slashRoots(engine, cwd, home string) (commands, skills []slashDir) {
 			{Path: project(".agents", "skills"), Source: "project"},
 			{Path: user(".agents", "skills"), Source: "user"},
 		}
+	case "opencode":
+		commands = []slashDir{
+			{Path: project(".opencode", "commands"), Source: "project"},
+			{Path: user(".config", "opencode", "commands"), Source: "user"},
+			{Path: user(".opencode", "commands"), Source: "user"},
+		}
+		skills = []slashDir{
+			{Path: project(".opencode", "skills"), Source: "project"},
+			{Path: user(".config", "opencode", "skills"), Source: "user"},
+			{Path: user(".opencode", "skills"), Source: "user"},
+			{Path: project(".agents", "skills"), Source: "project"},
+			{Path: user(".agents", "skills"), Source: "user"},
+		}
+	case "pi":
+		commands = []slashDir{
+			{Path: project(".pi", "commands"), Source: "project"},
+			{Path: user(".pi", "agent", "prompts"), Source: "user"},
+		}
+		skills = []slashDir{
+			{Path: project(".pi", "skills"), Source: "project"},
+			{Path: user(".pi", "agent", "skills"), Source: "user"},
+			{Path: project(".agents", "skills"), Source: "project"},
+			{Path: user(".agents", "skills"), Source: "user"},
+		}
 	default:
 		skills = []slashDir{
 			{Path: project(".agents", "skills"), Source: "project"},
@@ -248,7 +272,7 @@ func readSlashFile(path, fallback, kind, source string) protocol.SlashItem {
 		return item
 	}
 	if len(raw) > 16*1024 {
-		raw = raw[:16*1024]
+		raw = cutByteSlice(raw, 16*1024)
 	}
 	meta, body := parseFrontMatter(raw)
 	if name := meta["name"]; name != "" {
@@ -383,6 +407,20 @@ func builtinSlash(engine string) []protocol.SlashItem {
 		return []protocol.SlashItem{
 			{Name: "compact", Kind: "command", Description: "压缩对话上下文", Source: "builtin"},
 			{Name: "clear", Kind: "command", Description: "清空当前对话", Source: "builtin"},
+		}
+	case "opencode":
+		return []protocol.SlashItem{
+			{Name: "compact", Kind: "command", Description: "压缩对话上下文", Source: "builtin"},
+			{Name: "undo", Kind: "command", Description: "撤销上一轮改动", Source: "builtin"},
+			{Name: "new", Kind: "command", Description: "新会话", Source: "builtin"},
+			{Name: "models", Kind: "command", Description: "列出模型", Source: "builtin"},
+		}
+	case "pi":
+		return []protocol.SlashItem{
+			{Name: "compact", Kind: "command", Description: "压缩对话上下文", Source: "builtin"},
+			{Name: "new", Kind: "command", Description: "新会话", Source: "builtin"},
+			{Name: "model", Kind: "command", Description: "切换模型", ArgumentHint: "[model]", Source: "builtin"},
+			{Name: "resume", Kind: "command", Description: "恢复会话", Source: "builtin"},
 		}
 	default:
 		return nil

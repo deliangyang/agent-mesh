@@ -212,13 +212,37 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			}
 			return nil
 		})
+		matches, _ := filepath.Glob(filepath.Join(d.data, "projects", "*", "agent-transcripts", "*", "*.jsonl"))
+		for _, p := range matches {
+			id := filepath.Base(filepath.Dir(p))
+			if !uuidRe.MatchString(id) {
+				continue
+			}
+			if cur, ok := seen[id]; ok {
+				if cur.JSONL == "" {
+					cur.JSONL = p
+					seen[id] = cur
+				}
+				continue
+			}
+			seen[id] = protocol.Session{
+				Engine:    d.Name(),
+				ID:        id,
+				Status:    "历史",
+				JSONL:     p,
+				UpdatedAt: driver.MtimeUnix(p),
+			}
+		}
 	}
 	out := make([]protocol.Session, 0, len(seen))
 	for _, s := range seen {
 		if !all && !s.Live && !s.Busy {
 			continue
 		}
-		out = append(out, driver.WithJSONLTitle(s))
+		if s.Title == "" {
+			s = driver.WithJSONLTitle(s)
+		}
+		out = append(out, s)
 	}
 	return out, nil
 }
@@ -282,16 +306,15 @@ func (d *Driver) lookup(ctx context.Context, id string) (protocol.Session, error
 	if err != nil {
 		return protocol.Session{}, err
 	}
-	var hits []protocol.Session
-	for _, s := range rows {
-		if s.ID == id || strings.HasPrefix(s.ID, id) {
-			hits = append(hits, s)
-		}
+	sess, err := driver.MatchSession(rows, id)
+	if err == nil {
+		return sess, nil
 	}
-	if len(hits) != 1 {
-		return protocol.Session{}, fmt.Errorf("session %s not unique or missing", id)
+	jsonl := d.findJSONL(id, "")
+	if jsonl == "" {
+		return protocol.Session{}, err
 	}
-	return hits[0], nil
+	return protocol.Session{Engine: d.Name(), ID: id, JSONL: jsonl, Status: "历史"}, nil
 }
 
 func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
@@ -340,27 +363,62 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume string) (<-chan
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		sawPartial := false
+		sid := resume
 		for sc.Scan() {
 			line := sc.Text()
+			if skipCursorDiagnostic(line) {
+				continue
+			}
 			var obj map[string]any
 			if json.Unmarshal([]byte(line), &obj) != nil {
 				out <- protocol.Event{Type: "log", Engine: d.Name(), Text: line}
 				continue
 			}
-			parsed := driver.EventsFromJSONL(obj, d.Name(), resume)
-			if len(parsed) > 0 {
-				for _, ev := range parsed {
-					if ev.Type == "assistant" && obj["type"] == "assistant" {
-						ev.Type = "delta"
-					}
-					out <- ev
+			if sid == "" {
+				if s, _ := obj["session_id"].(string); s != "" {
+					sid = s
 				}
+			}
+			kind, _ := obj["type"].(string)
+			if kind == "result" {
+				out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Done: true}
 				continue
 			}
-			out <- protocol.Event{Type: "log", Engine: d.Name(), Text: line}
+			if kind == "assistant" {
+				_, hasTS := obj["timestamp_ms"]
+				_, hasCall := obj["model_call_id"]
+				if hasTS && !hasCall {
+					sawPartial = true
+				} else if sawPartial && (hasCall || !hasTS) {
+					continue
+				}
+			}
+			parsed := driver.EventsFromJSONL(obj, d.Name(), sid)
+			if len(parsed) == 0 {
+				continue
+			}
+			for _, ev := range parsed {
+				if ev.Session != "" {
+					sid = ev.Session
+				}
+				if ev.Type == "assistant" && kind == "assistant" {
+					ev.Type = "delta"
+				}
+				out <- ev
+			}
 		}
+		out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Done: true}
 	}()
 	return out, nil
+}
+
+func skipCursorDiagnostic(line string) bool {
+	s := strings.TrimSpace(line)
+	if s == "" {
+		return true
+	}
+	return strings.HasPrefix(s, "Tool {") || strings.HasPrefix(s, "Tool{")
 }
 
 // CWDHash 与 Cursor CLI 一致的目录 md5。

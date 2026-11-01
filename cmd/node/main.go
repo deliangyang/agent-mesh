@@ -18,11 +18,12 @@ import (
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:7700", "节点监听地址")
-	advertise := flag.String("advertise", "", "中继回连本节点的 URL，默认 http://listen")
+	advertise := flag.String("advertise", "", "中继回连本节点的 URL，默认探测局域网地址")
 	relays := flag.String("relay", "", "中继地址，逗号分隔，可空（仅直连）")
+	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "中继约定密码")
 	key := flag.String("key", defaultKey(), "身份密钥文件")
 	name := flag.String("name", hostname(), "节点名称")
-	engines := flag.String("engines", "workbuddy,claude,cursor,codex", "启用的引擎")
+	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi", "启用的引擎")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -43,7 +44,11 @@ func main() {
 			relayList = append(relayList, r)
 		}
 	}
-	go srv.RegisterLoop(ctx, relayList, *advertise, "")
+	adv := strings.TrimSpace(*advertise)
+	if adv == "" {
+		adv = node.GuessAdvertise(*listen)
+	}
+	go srv.RegisterLoop(ctx, relayList, adv, *password)
 	if err := srv.ListenAndServe(ctx); err != nil {
 		log.Error("serve", "err", err)
 		os.Exit(1)

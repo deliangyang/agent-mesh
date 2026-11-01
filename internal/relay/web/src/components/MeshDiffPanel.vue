@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { meshTarget } from "../target";
+import { toastError } from "../toast";
 import type { GitBundle, GitFile, GitRepo } from "../types";
 
 const props = defineProps<{ open: boolean }>();
@@ -52,6 +53,7 @@ async function loadRepos(): Promise<void> {
     await loadDiff(keep.path);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
+    toastError(err);
   } finally {
     loading.value = false;
   }
@@ -72,6 +74,7 @@ async function loadDiff(path: string): Promise<void> {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
     bundle.value = null;
+    toastError(err);
   } finally {
     loading.value = false;
   }

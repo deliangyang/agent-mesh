@@ -16,12 +16,12 @@ const line = computed(() => formatToolLine(props.name, props.parameters ?? props
 
 <template>
   <div
-    class="mesh-act-row"
+    class="mesh-act-tool"
     data-testid="copilot-tool-render"
     :data-tool-name="name"
     :data-tool-call-id="toolCallId || ''"
     :data-status="status"
   >
-    {{ line }}
+    <div class="mesh-act-row" :data-status="status">{{ line }}</div>
   </div>
 </template>

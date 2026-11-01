@@ -12,6 +12,7 @@
     "@ag-ui/client": "^1.0.3",
     "@copilotkit/vue": "^1.83.0",
     "rxjs": "^7.8.1",
+    "streamdown-vue": "^1.0.35",
     "vue": "^3.5.44",
     "vue-router": "^4.6.4"
   },

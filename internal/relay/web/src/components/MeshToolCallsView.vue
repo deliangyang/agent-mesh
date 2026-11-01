@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import type { AssistantMessage, Message, ToolMessage } from "@ag-ui/core";
+import type { AssistantMessage, Message, ToolCall, ToolMessage } from "@ag-ui/core";
 import { useCopilotKit } from "@copilotkit/vue/v2";
 import { noteAskFromTool } from "../ask";
+import { meshLive } from "../meshAgent";
 import MeshActivityWindow from "./MeshActivityWindow.vue";
 import MeshToolWindow from "./MeshToolWindow.vue";
 import { summarizeToolGroup } from "../toolSummary";
@@ -14,26 +15,67 @@ const props = defineProps<{
 
 const { executingToolCallIds } = useCopilotKit();
 
-const rows = computed(() => {
-  const running = executingToolCallIds.value;
-  return (props.message.toolCalls || []).map((tc) => {
-    const toolMsg = (props.messages || []).find(
-      (m) => m.role === "tool" && (m as ToolMessage).toolCallId === tc.id,
-    ) as ToolMessage | undefined;
-    let status = "inProgress";
-    if (toolMsg) status = "complete";
-    else if (running.has(tc.id)) status = "executing";
-    let args: unknown = tc.function.arguments;
-    if (typeof args === "string") {
-      try {
-        args = JSON.parse(args);
-      } catch {
-        /* 流式参数尚未成 JSON */
-      }
+function hasToolCalls(m: Message): m is AssistantMessage {
+  return m.role === "assistant" && Array.isArray((m as AssistantMessage).toolCalls) && !!(m as AssistantMessage).toolCalls?.length;
+}
+
+function turnSlice(messages: Message[], id: string): Message[] {
+  const idx = messages.findIndex((m) => m.id === id);
+  if (idx < 0) return messages;
+  let start = 0;
+  for (let i = idx; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      start = i + 1;
+      break;
     }
-    const result = toolMsg && typeof toolMsg.content === "string" ? toolMsg.content : undefined;
-    return { id: tc.id, name: tc.function.name, args, status, result };
-  });
+  }
+  let end = messages.length;
+  for (let i = idx + 1; i < messages.length; i++) {
+    if (messages[i].role === "user") {
+      end = i;
+      break;
+    }
+  }
+  return messages.slice(start, end);
+}
+
+const isPrimary = computed(() => {
+  const slice = turnSlice(props.messages || [], props.message.id);
+  const first = slice.find(hasToolCalls);
+  return first?.id === props.message.id;
+});
+
+const rows = computed(() => {
+  if (!isPrimary.value) return [];
+  const running = executingToolCallIds.value;
+  const slice = turnSlice(props.messages || [], props.message.id);
+  const msgs = props.messages || [];
+  const seen: Record<string, boolean> = {};
+  const out: { id: string; name: string; args: unknown; status: string; result?: string }[] = [];
+  for (const m of slice) {
+    if (!hasToolCalls(m)) continue;
+    for (const tc of (m.toolCalls || []) as ToolCall[]) {
+      if (!tc?.id || seen[tc.id]) continue;
+      seen[tc.id] = true;
+      const toolMsg = msgs.find(
+        (row) => row.role === "tool" && (row as ToolMessage).toolCallId === tc.id,
+      ) as ToolMessage | undefined;
+      let status = "inProgress";
+      if (toolMsg || !meshLive.streaming) status = "complete";
+      else if (running.has(tc.id)) status = "executing";
+      let args: unknown = tc.function.arguments;
+      if (typeof args === "string") {
+        try {
+          args = JSON.parse(args);
+        } catch {
+          /* 流式参数尚未成 JSON */
+        }
+      }
+      const result = toolMsg && typeof toolMsg.content === "string" ? toolMsg.content : undefined;
+      out.push({ id: tc.id, name: tc.function.name, args, status, result });
+    }
+  }
+  return out;
 });
 
 watch(

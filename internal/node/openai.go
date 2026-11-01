@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -41,6 +42,26 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/openai/followups", s.handleFollowups)
 	mux.HandleFunc("DELETE /v1/openai/followups", s.handleFollowups)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChat)
+}
+
+func (s *Server) pushIngestChunk(chunk openai.Chunk) bool {
+	raw, err := json.Marshal(chunk)
+	if err != nil {
+		return false
+	}
+	s.mu.Lock()
+	conn, wmu := s.tunConn.conn, s.tunConn.wmu
+	s.mu.Unlock()
+	if conn == nil || wmu == nil {
+		return false
+	}
+	wmu.Lock()
+	defer wmu.Unlock()
+	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := conn.WriteJSON(protocol.TunnelFrame{Path: "/v1/openai/ingest", Body: raw}); err != nil {
+		return false
+	}
+	return true
 }
 
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
@@ -132,13 +153,14 @@ func (s *Server) handleEngineToggle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	go s.refreshSnapshot(context.Background())
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "engine": name, "enabled": body.Enabled})
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	engine := r.URL.Query().Get("engine")
 	all := r.URL.Query().Get("all") == "1" || r.URL.Query().Get("all") == "true"
-	if snap := s.peekSnapshot(); len(snap.Sessions) > 0 || len(snap.Engines) > 0 {
+	if snap := s.peekSnapshot(); len(snap.Sessions) > 0 {
 		out := []protocol.Session{}
 		for _, sess := range snap.Sessions {
 			if engine != "" && sess.Engine != engine {
@@ -160,6 +182,9 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
+	}
+	if rows == nil {
+		rows = []protocol.Session{}
 	}
 	for i := range rows {
 		rows[i].NodeID = s.Ident.ID
@@ -183,17 +208,49 @@ func (s *Server) handleOpenHistory(w http.ResponseWriter, r *http.Request) {
 	if since <= 0 {
 		since = time.Now().Add(-48 * time.Hour).Unix()
 	}
-	d, err := s.Drivers.Get(engine)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	evs, err := d.History(r.Context(), sid, tail)
+	evs, err := s.sessionHistory(r.Context(), engine, sid, tail)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, http.StatusOK, driver.LastTurns(driver.FilterSince(evs, since), turns))
+}
+
+func (s *Server) sessionHistory(ctx context.Context, engine, sid string, tail int) ([]protocol.Event, error) {
+	names := make([]string, 0, 2)
+	if engine != "" {
+		names = append(names, engine)
+	}
+	if sid != "" {
+		if _, name, ok := s.driverForSession(ctx, sid, engine); ok {
+			if name != engine {
+				names = append(names, name)
+			}
+		}
+	}
+	var last error
+	for _, name := range names {
+		d, err := s.Drivers.Get(name)
+		if err != nil {
+			last = err
+			continue
+		}
+		evs, err := d.History(ctx, sid, tail)
+		if err == nil {
+			if evs == nil {
+				evs = []protocol.Event{}
+			}
+			return evs, nil
+		}
+		last = err
+		if !sessionGone(err) {
+			return nil, err
+		}
+	}
+	if last == nil || sessionGone(last) {
+		return []protocol.Event{}, nil
+	}
+	return nil, last
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -282,6 +339,33 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, bundle)
 }
 
+func (s *Server) dispatchChoice(ctx context.Context, req protocol.Request) protocol.Response {
+	var p protocol.ChoiceParams
+	_ = json.Unmarshal(req.Params, &p)
+	p.Text = strings.TrimSpace(p.Text)
+	if p.Text == "" {
+		return protocol.Response{ID: req.ID, Error: "缺少选项内容"}
+	}
+	if p.Engine == "" {
+		return protocol.Response{ID: req.ID, Error: "需要 engine"}
+	}
+	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	_, engine, evs, err := s.startPrompt(runCtx, p.Engine, p.Session, p.CWD, p.Text)
+	if err != nil {
+		stop()
+		return protocol.Response{ID: req.ID, Error: err.Error()}
+	}
+	go func() {
+		defer stop()
+		if s.Hub == nil || evs == nil {
+			return
+		}
+		for range s.Hub.Pump(engine, p.Session, engine, evs) {
+		}
+	}()
+	return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(map[string]any{"ok": true})}
+}
+
 func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Engine  string `json:"engine"`
@@ -302,23 +386,19 @@ func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "需要 engine", http.StatusBadRequest)
 		return
 	}
-	d, err := s.Drivers.Get(req.Engine)
+	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
+	_, engine, evs, err := s.startPrompt(runCtx, req.Engine, req.Session, req.CWD, req.Text)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	var evs <-chan protocol.Event
-	if req.Session != "" {
-		evs, err = d.Reply(r.Context(), req.Session, req.Text)
-	} else {
-		evs, err = d.Send(r.Context(), req.CWD, req.Text, "")
-	}
-	if err != nil {
+		stop()
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	go func() {
-		for range evs {
+		defer stop()
+		if s.Hub == nil || evs == nil {
+			return
+		}
+		for range s.Hub.Pump(engine, req.Session, engine, evs) {
 		}
 	}()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -338,21 +418,21 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "model 需要形如 cursor 或 cursor/composer-2.5", http.StatusBadRequest)
 		return
 	}
-	d, err := s.Drivers.Get(engine)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
 	text := openai.LastUserText(req.Messages)
 	files := openai.CollectFiles(req)
 	if text == "" && len(files) == 0 {
 		http.Error(w, "messages 缺少用户文本", http.StatusBadRequest)
 		return
 	}
-	text, err = openai.ApplyFiles(req.CWD, text, files)
+	text, err := openai.ApplyFiles(req.CWD, text, files)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if req.Session != "" {
+		if _, name, ok := s.driverForSession(r.Context(), req.Session, engine); ok {
+			engine = name
+		}
 	}
 	if req.Session != "" && s.sessionBusy(r.Context(), engine, req.Session, req.CWD) {
 		queued, qerr := followup.Push(engine, req.Session, req.CWD, text)
@@ -361,6 +441,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"queued": true, "followups": queued})
+		s.publishFollow(queued)
 		go s.drainSession(engine, req.Session, req.CWD)
 		return
 	}
@@ -378,12 +459,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
-	var evs <-chan protocol.Event
-	if req.Session != "" {
-		evs, err = d.Reply(r.Context(), req.Session, text)
-	} else {
-		evs, err = d.Send(r.Context(), req.CWD, text, "")
-	}
+	// 浏览器断开不能把引擎进程一起杀掉，进度改走广播 / WebSocket。
+	// Pump 结束后取消本轮 Watch，长期跟踪仍由 Hub.runWatch 负责。
+	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
+	defer stop()
+	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -398,19 +478,27 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		fl, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "stream unsupported", http.StatusInternalServerError)
+			for range chunks {
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
+		broken := false
 		for chunk := range chunks {
 			note(chunk)
+			if broken {
+				continue
+			}
 			if err := writeOpenAIChunk(w, fl, chunk); err != nil {
-				return
+				broken = true
 			}
 		}
-		_, _ = io.WriteString(w, "data: [DONE]\n\n")
-		fl.Flush()
+		if !broken {
+			_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			fl.Flush()
+		}
 		return
 	}
 	var b strings.Builder
@@ -446,4 +534,80 @@ func writeOpenAIChunk(w http.ResponseWriter, fl http.Flusher, chunk openai.Chunk
 	}
 	fl.Flush()
 	return nil
+}
+
+func sessionGone(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "not unique or missing") || strings.Contains(msg, "has no jsonl")
+}
+
+func (s *Server) driverForSession(ctx context.Context, session, prefer string) (driver.Driver, string, bool) {
+	if session == "" || s.Drivers == nil {
+		return nil, "", false
+	}
+	if d, name, ok := s.matchSessionDriver(s.peekSnapshot().Sessions, session, prefer); ok {
+		return d, name, true
+	}
+	rows, err := s.Drivers.ListAll(ctx, "", true)
+	if err != nil {
+		return nil, "", false
+	}
+	return s.matchSessionDriver(rows, session, prefer)
+}
+
+func (s *Server) matchSessionDriver(rows []protocol.Session, session, prefer string) (driver.Driver, string, bool) {
+	var hit protocol.Session
+	found := false
+	for _, row := range rows {
+		if row.ID != session || row.Engine == "" {
+			continue
+		}
+		if prefer != "" && row.Engine == prefer {
+			d, err := s.Drivers.Get(row.Engine)
+			if err == nil {
+				return d, row.Engine, true
+			}
+		}
+		if !found {
+			hit = row
+			found = true
+		}
+	}
+	if !found {
+		return nil, "", false
+	}
+	d, err := s.Drivers.Get(hit.Engine)
+	if err != nil {
+		return nil, "", false
+	}
+	return d, hit.Engine, true
+}
+
+func (s *Server) startPrompt(ctx context.Context, engine, session, cwd, text string) (driver.Driver, string, <-chan protocol.Event, error) {
+	d, err := s.Drivers.Get(engine)
+	if err != nil {
+		return nil, engine, nil, err
+	}
+	if session == "" {
+		evs, err := d.Send(ctx, cwd, text, "")
+		return d, engine, evs, err
+	}
+	evs, err := d.Reply(ctx, session, text)
+	if err == nil {
+		return d, engine, evs, nil
+	}
+	if alt, name, ok := s.driverForSession(ctx, session, engine); ok && name != engine {
+		evs, err = alt.Reply(ctx, session, text)
+		if err == nil {
+			return alt, name, evs, nil
+		}
+		d, engine = alt, name
+	}
+	if sessionGone(err) {
+		evs, err = d.Send(ctx, cwd, text, session)
+	}
+	return d, engine, evs, err
 }

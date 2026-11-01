@@ -16,17 +16,18 @@ import (
 )
 
 const (
-	sessionLimit = 20
-	turnLimit    = 20
+	sessionLimitPerEngine = 100
+	turnLimit             = 20
 )
 
 // Catalog 网页目录快照。
 type Catalog struct {
-	Nodes    []protocol.NodeInfo `json:"nodes"`
-	Engines  []EngineRow         `json:"engines"`
-	Models   []openai.ModelCard  `json:"models"`
-	Dirs     []DirRow            `json:"dirs"`
-	Sessions []protocol.Session  `json:"sessions"`
+	Nodes     []protocol.NodeInfo    `json:"nodes"`
+	Engines   []EngineRow            `json:"engines"`
+	Models    []openai.ModelCard     `json:"models"`
+	Dirs      []DirRow               `json:"dirs"`
+	Sessions  []protocol.Session     `json:"sessions"`
+	Followups []protocol.FollowQueue `json:"followups"`
 }
 
 // EngineRow 引擎 + 所属节点。
@@ -45,19 +46,20 @@ type DirRow struct {
 
 // BusMsg 发给网页的 WebSocket 消息，按类型分片。
 type BusMsg struct {
-	Type     string              `json:"type"`
-	Nodes    []protocol.NodeInfo `json:"nodes,omitempty"`
-	Engines  []EngineRow         `json:"engines,omitempty"`
-	Models   []openai.ModelCard  `json:"models,omitempty"`
-	Dirs     []DirRow            `json:"dirs,omitempty"`
-	Sessions []protocol.Session  `json:"sessions,omitempty"`
-	Events   []protocol.Event    `json:"events,omitempty"`
-	NodeID   string              `json:"node_id,omitempty"`
-	Engine   string              `json:"engine,omitempty"`
-	Session  string              `json:"session,omitempty"`
-	Reset    bool                `json:"reset,omitempty"`
-	Removed  []string            `json:"removed,omitempty"`
-	Chunk    *openai.Chunk       `json:"chunk,omitempty"`
+	Type      string                 `json:"type"`
+	Nodes     []protocol.NodeInfo    `json:"nodes,omitempty"`
+	Engines   []EngineRow            `json:"engines,omitempty"`
+	Models    []openai.ModelCard     `json:"models,omitempty"`
+	Dirs      []DirRow               `json:"dirs,omitempty"`
+	Sessions  []protocol.Session     `json:"sessions,omitempty"`
+	Followups []protocol.FollowQueue `json:"followups,omitempty"`
+	Events    []protocol.Event       `json:"events,omitempty"`
+	NodeID    string                 `json:"node_id,omitempty"`
+	Engine    string                 `json:"engine,omitempty"`
+	Session   string                 `json:"session,omitempty"`
+	Reset     bool                   `json:"reset,omitempty"`
+	Removed   []string               `json:"removed,omitempty"`
+	Chunk     *openai.Chunk          `json:"chunk,omitempty"`
 }
 
 type busSub struct {
@@ -107,6 +109,15 @@ func (h *catalogHub) send(id int, msg BusMsg) {
 		return
 	}
 	defer func() { _ = recover() }()
+	if msg.Type == "conversation" || msg.Type == "chunk" {
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+		select {
+		case ch <- msg:
+		case <-timer.C:
+		}
+		return
+	}
 	select {
 	case ch <- msg:
 	default:
@@ -185,11 +196,12 @@ func (h *catalogHub) watches() []watchHit {
 
 func (s *Server) catalog() Catalog {
 	out := Catalog{
-		Nodes:    []protocol.NodeInfo{},
-		Engines:  []EngineRow{},
-		Models:   []openai.ModelCard{},
-		Dirs:     []DirRow{},
-		Sessions: []protocol.Session{},
+		Nodes:     []protocol.NodeInfo{},
+		Engines:   []EngineRow{},
+		Models:    []openai.ModelCard{},
+		Dirs:      []DirRow{},
+		Sessions:  []protocol.Session{},
+		Followups: []protocol.FollowQueue{},
 	}
 	for _, rec := range s.Dir.List() {
 		info := rec.Info
@@ -215,12 +227,21 @@ func (s *Server) catalog() Catalog {
 			}
 			out.Sessions = append(out.Sessions, sess)
 		}
+		for _, q := range rec.Snapshot.Followups {
+			if q.NodeID == "" {
+				q.NodeID = rec.Info.ID
+			}
+			if q.Items == nil {
+				q.Items = []protocol.FollowItem{}
+			}
+			out.Followups = append(out.Followups, q)
+		}
 	}
-	out.Sessions = rankSessions(out.Sessions, sessionLimit)
+	out.Sessions = rankSessions(out.Sessions, sessionLimitPerEngine)
 	return out
 }
 
-func rankSessions(rows []protocol.Session, limit int) []protocol.Session {
+func rankSessions(rows []protocol.Session, perEngine int) []protocol.Session {
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].UpdatedAt != rows[j].UpdatedAt {
 			return rows[i].UpdatedAt > rows[j].UpdatedAt
@@ -232,10 +253,23 @@ func rankSessions(rows []protocol.Session, limit int) []protocol.Session {
 		}
 		return rows[i].Title < rows[j].Title
 	})
-	if limit > 0 && len(rows) > limit {
-		return rows[:limit]
+	if perEngine <= 0 {
+		return rows
 	}
-	return rows
+	n := map[string]int{}
+	out := make([]protocol.Session, 0, len(rows))
+	for _, s := range rows {
+		if s.Live || s.Busy {
+			out = append(out, s)
+			continue
+		}
+		if n[s.Engine] >= perEngine {
+			continue
+		}
+		n[s.Engine]++
+		out = append(out, s)
+	}
+	return out
 }
 
 func (s *Server) publishCatalog() {
@@ -249,6 +283,7 @@ func (s *Server) publishCatalog() {
 	publishKeyed(s, "models", prev.Models, cat.Models, catalogModelKey)
 	publishKeyed(s, "dirs", prev.Dirs, cat.Dirs, catalogDirKey)
 	publishKeyed(s, "sessions", prev.Sessions, cat.Sessions, catalogSessionKey)
+	publishKeyed(s, "followups", prev.Followups, cat.Followups, catalogFollowKey)
 	s.notifyWatches()
 }
 
@@ -262,6 +297,10 @@ func catalogDirKey(d DirRow) string { return d.NodeID + "\x1f" + d.Engine + "\x1
 
 func catalogSessionKey(s protocol.Session) string {
 	return s.NodeID + "|" + s.Engine + "|" + s.ID
+}
+
+func catalogFollowKey(q protocol.FollowQueue) string {
+	return q.NodeID + "|" + q.Engine + "|" + q.Session
 }
 
 func jsonEqual(a, b any) bool {
@@ -316,6 +355,9 @@ func publishKeyed[T any](s *Server, kind string, old, neu []T, key func(T) strin
 	case "dirs":
 		rows, _ := any(changed).([]DirRow)
 		msg.Dirs = rows
+	case "followups":
+		rows, _ := any(changed).([]protocol.FollowQueue)
+		msg.Followups = rows
 	}
 	s.catalogs.publish(msg)
 }
@@ -328,6 +370,7 @@ func (s *Server) snapshotParts() []BusMsg {
 		{Type: "engines", Engines: cat.Engines, Reset: true},
 		{Type: "models", Models: cat.Models, Reset: true},
 		{Type: "dirs", Dirs: cat.Dirs, Reset: true},
+		{Type: "followups", Followups: cat.Followups, Reset: true},
 	}
 }
 

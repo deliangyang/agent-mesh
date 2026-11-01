@@ -2,7 +2,7 @@
 import { CopilotChat, CopilotChatUserMessage, useDefaultRenderTool } from "@copilotkit/vue/v2";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { catalog, connectCatalog, refreshCatalog, watchSession } from "../catalog";
+import { catalog, connectCatalog, meshLink, refreshCatalog, watchSession } from "../catalog";
 import MeshAskCard from "../components/MeshAskCard.vue";
 import MeshDiffPanel from "../components/MeshDiffPanel.vue";
 import MeshFollowups from "../components/MeshFollowups.vue";
@@ -12,7 +12,7 @@ import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
-import { expectHistory, isLiveChat, meshAgent, meshLive, resetDraft } from "../meshAgent";
+import { bindHistoryThread, expectHistory, isLiveChat, meshAgent, meshLive, resetDraft } from "../meshAgent";
 import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
 import { slashItems, watchSlashCatalog } from "../slash";
@@ -27,10 +27,13 @@ const savedPick = loadLastPick();
 const selected = ref<Session | null>(null);
 const chatKey = ref("draft");
 const creating = ref(false);
+const turnEnded = ref(false);
+let endedTimer = 0;
 const theme = ref(loadTheme());
 const navOpen = ref(typeof window !== "undefined" && window.matchMedia("(min-width: 861px)").matches);
 const openPick = ref("");
 const diffOpen = ref(false);
+const picksOpen = reactive({ node: false, engine: false });
 
 function flipTheme(): void {
   theme.value = toggleTheme();
@@ -61,6 +64,15 @@ const labels = {
   chatInputToolbarAddButtonLabel: "添加图片或文件",
 };
 
+const copied = ref(false);
+let copiedTimer = 0;
+
+const linkHint = computed(() => {
+  if (meshLink.state === "live") return "";
+  if (meshLink.state === "connecting") return "正在连接节点";
+  return "连接已断开，正在重连";
+});
+
 const attachConfig = {
   enabled: true,
   maxSize: 20 * 1024 * 1024,
@@ -71,9 +83,18 @@ function thinkingStreaming(
   messages: { id?: string }[] | undefined,
   isRunning: boolean,
 ): boolean {
-  if (!isRunning) return false;
+  if (!meshLive.streaming || !isRunning) return false;
   const last = messages && messages.length ? messages[messages.length - 1] : null;
   return !!(last && last.id === message.id);
+}
+
+function hideInlineThink(message: { id?: string }, messages: { role?: string; id?: string }[] | undefined): boolean {
+  if (!meshLive.streaming || !meshLive.think) return false;
+  const rows = messages || [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].role === "reasoning") return rows[i].id === message.id;
+  }
+  return true;
 }
 
 const filters = reactive({
@@ -91,6 +112,16 @@ const engineCards = computed(() => {
     seen[e.name] = true;
     return true;
   });
+});
+
+const nodePickLabel = computed(() => {
+  const n = catalog.nodes.find((row) => row.id === filters.node);
+  return n ? nodeName(n.id, n.name) : "未选";
+});
+
+const enginePickLabel = computed(() => {
+  const e = engineCards.value.find((row) => row.name === filters.engine);
+  return e ? e.title || e.name : "未选";
 });
 
 const modelOptions = computed(() => {
@@ -112,12 +143,38 @@ const dirOptions = computed(() => {
   );
 });
 
+function sessionStamp(s: Session): number {
+  if (meshLive.streaming && meshLive.session && s.id === meshLive.session) {
+    return Date.now() / 1000;
+  }
+  return s.updated_at || 0;
+}
+
+function sessionListable(s: Session): boolean {
+  if (selected.value && selected.value.id === s.id && selected.value.engine === s.engine) return true;
+  if (meshLive.streaming && meshLive.session && s.id === meshLive.session) return true;
+  return !!(s.title || "").trim();
+}
+
 const sessionRows = computed(() => {
-  return catalog.sessions.filter((s) => {
+  const rows = catalog.sessions.filter((s) => {
     if (filters.node && s.node_id !== filters.node) return false;
     if (filters.engine && s.engine !== filters.engine) return false;
+    if (!sessionListable(s)) return false;
     return true;
   });
+  const sel = selected.value;
+  let list = rows;
+  if (sel?.id && !rows.some((s) => s.id === sel.id && s.engine === sel.engine)) {
+    if (
+      (!filters.node || sel.node_id === filters.node) &&
+      (!filters.engine || sel.engine === filters.engine) &&
+      sessionListable(sel)
+    ) {
+      list = rows.concat(sel);
+    }
+  }
+  return list.slice().sort((a, b) => sessionStamp(b) - sessionStamp(a));
 });
 
 type SessionGroup = { label: string; items: Session[] };
@@ -134,7 +191,7 @@ const sessionGroups = computed((): SessionGroup[] => {
     { label: "更早", items: [] },
   ];
   for (const s of sessionRows.value) {
-    const t = (s.updated_at || 0) * 1000;
+    const t = sessionStamp(s) * 1000;
     if (t >= today) groups[0].items.push(s);
     else if (t >= yesterday) groups[1].items.push(s);
     else if (t >= week) groups[2].items.push(s);
@@ -150,11 +207,11 @@ const threadId = computed(() => {
 });
 
 const isDraftChat = computed(() => chatKey.value === "draft" || chatKey.value.startsWith("draft-"));
-const chatThreadId = computed(() => (isDraftChat.value ? undefined : threadId.value || undefined));
+const chatThreadId = computed(() => (isDraftChat.value ? chatKey.value : threadId.value || undefined));
 
 const chatTitle = computed(() => {
   if (creating.value) return meshLive.title || "新会话";
-  return selected.value?.title || "对话";
+  return selected.value?.title || meshLive.title || "对话";
 });
 
 const welcomeHint = computed(() => {
@@ -167,9 +224,39 @@ const welcomeHint = computed(() => {
   return "先在左侧选好节点和引擎";
 });
 
+async function copyTitle(): Promise<void> {
+  const title = chatTitle.value || "";
+  const sid = selected.value?.id || meshLive.session || "";
+  const text = sid ? title + "\n" + sid : title;
+  if (!text.trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.setAttribute("readonly", "");
+    box.style.position = "fixed";
+    box.style.left = "-9999px";
+    document.body.appendChild(box);
+    box.select();
+    document.execCommand("copy");
+    document.body.removeChild(box);
+  }
+  copied.value = true;
+  window.clearTimeout(copiedTimer);
+  copiedTimer = window.setTimeout(() => {
+    copied.value = false;
+  }, 1600);
+}
+
+function reloadPage(): void {
+  location.reload();
+}
+
 function sessionStreaming(s: Session | null): boolean {
   if (!meshLive.streaming || !s) return false;
-  if (creating.value) return !s.id;
+  if (meshLive.session && s.id === meshLive.session) return true;
+  if (creating.value && !s.id) return true;
   return !!(
     selected.value &&
     selected.value.id === s.id &&
@@ -210,9 +297,26 @@ function syncQuery(s: Session | null): void {
 }
 
 function findSession(node: string, engine: string, sid: string): Session | undefined {
-  return catalog.sessions.find(
-    (s) => s.id === sid && (!engine || s.engine === engine) && (!node || s.node_id === node),
+  if (!sid) return undefined;
+  const rows = catalog.sessions.filter(
+    (s) => s.id === sid && (!node || !s.node_id || s.node_id === node),
   );
+  return rows.find((s) => !engine || s.engine === engine) || rows[0];
+}
+
+function applySessionTitle(s: Session): Session {
+  const next = { ...s };
+  if (meshLive.title && (!meshLive.session || meshLive.session === next.id)) {
+    next.title = meshLive.title;
+  } else if (next.title && meshLive.session === next.id && !meshLive.title) {
+    meshLive.title = next.title;
+  }
+  const prev = selected.value;
+  if (prev && prev.id === next.id) {
+    next.updated_at = Math.max(next.updated_at || 0, prev.updated_at || 0) || undefined;
+    next.title = next.title || prev.title;
+  }
+  return next;
 }
 
 function openSession(s: Session): void {
@@ -221,6 +325,8 @@ function openSession(s: Session): void {
   if (s.node_id) filters.node = s.node_id;
   if (s.engine) filters.engine = s.engine;
   if (s.cwd) filters.dir = s.cwd;
+  meshTarget.session = s.id;
+  syncModelToEngine();
   chatKey.value = threadIdOf(s.node_id || filters.node, s.engine, s.id) || "draft";
   syncQuery(s);
   watchSession(s);
@@ -232,20 +338,27 @@ function pickNode(id: string): void {
   if (filters.node && !engineCards.value.some((e) => e.name === filters.engine)) {
     filters.engine = engineCards.value[0]?.name || "";
   }
-  const models = modelOptions.value;
-  if (models.length && !models.some((m) => m.id === filters.model)) {
-    filters.model = models[0].id;
-  }
+  syncModelToEngine();
   ensureWorkDir();
+  picksOpen.node = false;
+}
+
+function syncModelToEngine(): void {
+  const models = modelOptions.value;
+  if (!models.length) return;
+  if (models.some((m) => m.id === filters.model)) return;
+  filters.model = models[0].id;
 }
 
 function pickEngine(name: string): void {
-  filters.engine = filters.engine === name ? "" : name;
-  const models = modelOptions.value;
-  if (models.length && !models.some((m) => m.id === filters.model)) {
-    filters.model = models[0].id;
-  }
+  const next = filters.engine === name ? "" : name;
+  filters.engine = next;
+  syncModelToEngine();
   ensureWorkDir();
+  if (next && selected.value?.engine && selected.value.engine !== next) {
+    newSession();
+  }
+  picksOpen.engine = false;
 }
 
 function ensureWorkDir(): void {
@@ -273,10 +386,7 @@ function pickDir(d: DirRow): void {
   if (d.node_id) filters.node = d.node_id;
   if (d.engine) filters.engine = d.engine;
   filters.dir = d.path;
-  const models = modelOptions.value;
-  if (models.length && !models.some((m) => m.id === filters.model)) {
-    filters.model = models[0].id;
-  }
+  syncModelToEngine();
   openPick.value = "";
 }
 
@@ -297,7 +407,11 @@ function newSession(): void {
   ensureWorkDir();
   creating.value = true;
   selected.value = null;
+  meshTarget.node = filters.node;
+  meshTarget.engine = filters.engine;
   meshTarget.session = "";
+  meshTarget.model = filters.model;
+  meshTarget.cwd = filters.dir;
   watchSession(null);
   resetDraft();
   chatKey.value = "draft-" + Date.now();
@@ -317,9 +431,11 @@ function hydrateFromQuery(): void {
   if (engine) filters.engine = engine;
   if (model) filters.model = model;
   if (dir) filters.dir = dir;
+  syncModelToEngine();
   if (!sid) {
     creating.value = true;
     selected.value = null;
+    meshTarget.session = "";
     ensureWorkDir();
     watchSession(null);
     resetDraft();
@@ -335,7 +451,10 @@ function hydrateFromQuery(): void {
       node_id: node,
       title: engine || "会话",
     } as Session);
+  if (hit.engine) filters.engine = hit.engine;
+  syncModelToEngine();
   selected.value = hit;
+  meshTarget.session = hit.id;
   chatKey.value = threadIdOf(hit.node_id || node, hit.engine, hit.id) || "draft";
   watchSession(hit);
   syncQuery(hit);
@@ -354,7 +473,10 @@ watch(
       sid,
     );
     if (hit) {
-      selected.value = hit;
+      selected.value = applySessionTitle({
+        ...hit,
+        title: hit.title || selected.value?.title,
+      });
       creating.value = false;
       watchSession(hit);
     }
@@ -371,8 +493,9 @@ watch(
       }
       return;
     }
+    const known = findSession(filters.node, filters.engine, sid);
     const hit =
-      findSession(filters.node, filters.engine, sid) ||
+      known ||
       ({
         id: sid,
         engine: filters.engine,
@@ -380,12 +503,14 @@ watch(
         cwd: filters.dir,
         title: meshLive.title || "新会话",
         live: true,
+        updated_at: Math.floor(Date.now() / 1000),
       } as Session);
-    if (meshLive.title) hit.title = meshLive.title;
-    selected.value = hit;
-    creating.value = false;
+    selected.value = applySessionTitle(hit);
+    meshTarget.session = hit.id;
+    creating.value = !known;
     syncQuery(hit);
     watchSession(hit);
+    bindHistoryThread(threadIdOf(hit.node_id || filters.node, hit.engine, hit.id));
   },
 );
 
@@ -398,7 +523,7 @@ watch(
     meshTarget.session = s?.id || meshLive.session || "";
     meshTarget.model = filters.model;
     meshTarget.cwd = filters.dir;
-    // 草稿会话由 CopilotChat 自己分配 thread，中途改 thread-id 会 abort 首轮流式输出。
+    // 草稿会话钉在 draft-* thread 上；中途改 thread-id 会 abort 首轮流式输出。
     if (isDraftChat.value) return;
     meshAgent.threadId = threadId.value;
     expectHistory(threadId.value);
@@ -420,8 +545,32 @@ watch(
   },
 );
 
+watch(
+  modelOptions,
+  () => {
+    syncModelToEngine();
+  },
+  { immediate: true },
+);
+
 watchSlashCatalog();
 watchFollowups();
+
+watch(
+  () => meshLive.streaming,
+  (now, was) => {
+    if (was && !now) {
+      turnEnded.value = true;
+      window.clearTimeout(endedTimer);
+      endedTimer = window.setTimeout(() => {
+        turnEnded.value = false;
+      }, 1800);
+    } else if (now) {
+      turnEnded.value = false;
+      window.clearTimeout(endedTimer);
+    }
+  },
+);
 
 function fileCountOf(slot: object): number {
   const rows = (slot as { attachments?: unknown }).attachments;
@@ -453,14 +602,24 @@ async function onComposerPull(
   return true;
 }
 
+function onLinkUp(): void {
+  refreshCatalog();
+  const tid = threadId.value;
+  if (tid) expectHistory(tid);
+}
+
 onMounted(() => {
   hydrateFromQuery();
   connectCatalog();
   document.addEventListener("click", onDocClick);
+  window.addEventListener("mesh-link-up", onLinkUp);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", onDocClick);
+  window.removeEventListener("mesh-link-up", onLinkUp);
+  window.clearTimeout(copiedTimer);
+  window.clearTimeout(endedTimer);
 });
 </script>
 
@@ -518,8 +677,21 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <div class="mesh-picks">
-        <div class="mesh-pick-label">节点</div>
-        <div class="mesh-cards">
+        <button
+          type="button"
+          class="mesh-pick-toggle"
+          :class="{ open: picksOpen.node }"
+          :aria-expanded="picksOpen.node"
+          aria-controls="mesh-node-cards"
+          @click="picksOpen.node = !picksOpen.node"
+        >
+          <span class="mesh-pick-kicker">节点</span>
+          <span class="mesh-pick-current">{{ nodePickLabel }}</span>
+          <svg class="mesh-pick-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M4.2 2.4 8.4 6 4.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div v-if="picksOpen.node" id="mesh-node-cards" class="mesh-cards">
           <button
             v-for="n in catalog.nodes"
             :key="n.id"
@@ -532,8 +704,21 @@ onBeforeUnmount(() => {
           </button>
           <div v-if="!catalog.nodes.length" class="mesh-pick-empty">接入节点后即可开始</div>
         </div>
-        <div class="mesh-pick-label">引擎</div>
-        <div class="mesh-cards">
+        <button
+          type="button"
+          class="mesh-pick-toggle"
+          :class="{ open: picksOpen.engine }"
+          :aria-expanded="picksOpen.engine"
+          aria-controls="mesh-engine-cards"
+          @click="picksOpen.engine = !picksOpen.engine"
+        >
+          <span class="mesh-pick-kicker">引擎</span>
+          <span class="mesh-pick-current">{{ enginePickLabel }}</span>
+          <svg class="mesh-pick-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M4.2 2.4 8.4 6 4.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div v-if="picksOpen.engine" id="mesh-engine-cards" class="mesh-cards">
           <button
             v-for="e in engineCards"
             :key="e.name"
@@ -561,7 +746,7 @@ onBeforeUnmount(() => {
         <div v-for="g in sessionGroups" :key="g.label" class="mesh-time-group">
           <div class="mesh-time-label">{{ g.label }}</div>
           <button
-            v-if="creating && g.label === '今天'"
+            v-if="creating && !selected?.id && g.label === '今天'"
             type="button"
             class="mesh-thread sel"
             :class="{ live: meshLive.streaming }"
@@ -575,7 +760,7 @@ onBeforeUnmount(() => {
             type="button"
             class="mesh-thread"
             :class="{
-              sel: !creating && selected && selected.id === s.id && selected.engine === s.engine,
+              sel: selected && selected.id === s.id && selected.engine === s.engine,
               live: sessionStreaming(s),
             }"
             @click="openSession(s)"
@@ -601,15 +786,28 @@ onBeforeUnmount(() => {
             <path d="M6.5 3v10" stroke="currentColor" stroke-width="1.4" />
           </svg>
         </button>
-        <div class="mesh-chat-title" :class="{ live: meshLive.streaming }">
+        <button
+          type="button"
+          class="mesh-chat-title"
+          :class="{ live: meshLive.streaming, copied: copied, ended: turnEnded }"
+          :title="copied ? '已复制标题和会话编号' : '点击复制标题和会话编号'"
+          :aria-label="copied ? '已复制标题和会话编号' : '复制标题和会话编号'"
+          @click="copyTitle"
+        >
           <span
             v-if="meshLive.streaming"
             class="mesh-lamp"
             role="status"
             aria-label="正在输出"
           ></span>
-          <span class="mesh-chat-title-text">{{ chatTitle }}</span>
-        </div>
+          <span
+            v-else-if="turnEnded"
+            class="mesh-ended"
+            role="status"
+            aria-label="已结束"
+          >已结束</span>
+          <span class="mesh-chat-title-text">{{ copied ? "已复制" : chatTitle }}</span>
+        </button>
         <button
           type="button"
           class="ghost mesh-diff-toggle"
@@ -642,6 +840,7 @@ onBeforeUnmount(() => {
           </template>
           <template #reasoning-message="{ message, messages, isRunning }">
             <MeshThinkWindow
+              v-if="!hideInlineThink(message, messages)"
               :content="message.content"
               :streaming="thinkingStreaming(message, messages, isRunning)"
             />
@@ -717,6 +916,11 @@ onBeforeUnmount(() => {
           </template>
           <template #input="slot">
             <div class="mesh-composer">
+              <MeshThinkWindow
+                v-if="meshLive.streaming && meshLive.think"
+                :content="meshLive.think"
+                :streaming="true"
+              />
               <div class="mesh-composer-meta">
                 <div class="mesh-chip">
                   <button type="button" class="mesh-chip-btn is-model" @click.stop="togglePick('model')">
@@ -809,5 +1013,18 @@ onBeforeUnmount(() => {
         </CopilotChat>
       </div>
     </section>
+    <div
+      v-if="meshLink.state !== 'live'"
+      class="mesh-link-veil"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="mesh-link-card">
+        <span class="mesh-lamp mesh-link-lamp" aria-hidden="true"></span>
+        <p class="mesh-link-title">{{ linkHint }}</p>
+        <p class="mesh-link-copy">连上之后会自动刷新对话、目录和进行中的进度。</p>
+        <button type="button" class="mesh-link-reload" @click="reloadPage">刷新页面</button>
+      </div>
+    </div>
   </div>
 </template>

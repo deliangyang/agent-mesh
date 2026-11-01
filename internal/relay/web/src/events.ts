@@ -84,6 +84,64 @@ const TASK_PREFIX_RE =
   /^\s*Briefly inform the user about the task result[^\n]*(?:\n+|$)/;
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function isInternalDump(text: string): boolean {
+  const s = String(text || "").trim();
+  if (!s) return false;
+  if (s.startsWith("Tool {") || s.startsWith("Tool{")) return true;
+  if (!s.startsWith("{")) return false;
+  if (/"type"\s*:\s*"thinking"/.test(s) && /"subtype"\s*:\s*"completed"/.test(s)) return true;
+  return s.length < 500 && /"type"\s*:\s*"thinking"/.test(s) && /"session_id"/.test(s);
+}
+
+function strId(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function sessionIdFromObj(obj: Record<string, unknown> | null | undefined): string {
+  if (!obj) return "";
+  const mesh = (obj.agent_mesh || obj.mesh || {}) as Record<string, unknown>;
+  const kind = strId(obj.type);
+  const direct =
+    strId(mesh.session) ||
+    strId(obj.session_id) ||
+    strId(obj.sessionId) ||
+    strId(obj.sessionID) ||
+    ((kind === "session" || kind === "session_meta") && strId(obj.id)) ||
+    strId(obj.session);
+  if (direct) return direct;
+  const msg = obj.message as Record<string, unknown> | undefined;
+  if (msg && typeof msg === "object") {
+    const nested = strId(msg.session_id) || strId(msg.sessionId);
+    if (nested) return nested;
+  }
+  if (kind === "session" || kind === "session_meta") {
+    const payload = obj.payload as Record<string, unknown> | undefined;
+    if (payload && typeof payload === "object") {
+      const nested = strId(payload.id) || strId(payload.session_id) || strId(payload.sessionId);
+      if (nested) return nested;
+    }
+  }
+  return "";
+}
+
+export function sessionIdFromText(text: string): string {
+  const s = String(text || "").trim();
+  if (!s.startsWith("{") || !/session/i.test(s)) return "";
+  try {
+    return sessionIdFromObj(JSON.parse(s) as Record<string, unknown>);
+  } catch {
+    const m = s.match(/"session_id"\s*:\s*"([^"]+)"/i) || s.match(/"sessionId"\s*:\s*"([^"]+)"/);
+    return m ? m[1] : "";
+  }
+}
+
+export function sessionIdFromChunk(obj: Record<string, unknown> | null | undefined): string {
+  const sid = sessionIdFromObj(obj);
+  if (sid) return sid;
+  const choices = obj?.choices as { delta?: { content?: string } }[] | undefined;
+  return sessionIdFromText(choices?.[0]?.delta?.content || "");
+}
+
 function looksLikeSessionMeta(text: string): boolean {
   const s = String(text || "").trim();
   if (!s) return true;
@@ -135,11 +193,24 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
     const type = normalizeType(ev);
     const user = isUser({ ...ev, type });
     const text = user ? cleanUserText(ev.text || "") : ev.text || "";
-    if (type === "title" || type === "session" || type === "system" || type === "ask") continue;
+    if (type === "title" || type === "session" || type === "system") continue;
+    if (type === "ask") {
+      out.push({
+        type: "ask",
+        role: ev.role || "",
+        tool: ev.tool || "",
+        text: ev.text || ev.preview || "",
+        preview: ev.preview || "",
+        unix: ev.unix || 0,
+      });
+      continue;
+    }
     if (user && !text) continue;
     if (!text && !isToolType(type) && !isThinkingType(type) && !ev.tool) continue;
     if (type === "log" && ev.done && !text) continue;
+    if (text && !isToolType(type) && !isThinkingType(type) && isInternalDump(text)) continue;
     const last = out[out.length - 1];
+    if (user && last && isUser(last) && (last.text || "") === text) continue;
     if (last && type === "thinking" && last.type === "thinking") {
       last.text = (last.text || "") + text;
       continue;
@@ -152,7 +223,7 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
       (last.type === "assistant" || last.type === "delta") &&
       last.role !== "user"
     ) {
-      last.text = (last.text || "") + text;
+      last.text = joinAssistantText(last.text || "", text, (ev.type || "") !== "delta");
       continue;
     }
     out.push({
@@ -165,6 +236,15 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
     });
   }
   return out;
+}
+
+function joinAssistantText(prev: string, next: string, separate: boolean): string {
+  if (!prev) return next;
+  if (!next) return prev;
+  if (separate && !prev.endsWith("\n") && !next.startsWith("\n")) {
+    return prev + "\n\n" + next;
+  }
+  return prev + next;
 }
 
 export function lastTurnEvents(evs: MeshEvent[], n = TURN_LIMIT): MeshEvent[] {
@@ -191,6 +271,22 @@ export function lastTurnMessages(msgs: Message[], n: number): Message[] {
   return rows;
 }
 
+function argsContinue(prev: string, next: string): boolean {
+  if (!next) return true;
+  const a = (prev || "").trim();
+  const b = next.trim();
+  if (!a || a === "{}") return true;
+  return b.startsWith(a);
+}
+
+type TurnBuf = {
+  user?: Message;
+  tools: AssistantMessage | null;
+  results: Message[];
+  think: string;
+  text: AssistantMessage | null;
+};
+
 export function eventsToMessages(evs: MeshEvent[]): Message[] {
   const rows = lastTurnEvents(mergeEvents(evs));
   const out: Message[] = [];
@@ -198,41 +294,67 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
   const nextId = () => "m" + String(++n);
   const lastToolId: Record<string, string> = {};
   let lastAnyToolId = "";
+  let turn: TurnBuf = { tools: null, results: [], think: "", text: null };
+
+  const flush = (t: TurnBuf) => {
+    if (t.user) out.push(t.user);
+    if (t.tools && t.tools.toolCalls && t.tools.toolCalls.length) out.push(t.tools);
+    for (const row of t.results) out.push(row);
+    if (t.think.trim()) {
+      out.push({ id: nextId(), role: "reasoning", content: t.think } as ReasoningMessage);
+    }
+    if (t.text && String(t.text.content || "").trim()) out.push(t.text);
+  };
+
+  const ensureTools = (): AssistantMessage => {
+    if (!turn.tools) {
+      turn.tools = { id: nextId(), role: "assistant", content: "", toolCalls: [] };
+    }
+    return turn.tools;
+  };
+
   for (const ev of rows) {
+    if (ev.type === "ask") continue;
     if (isUser(ev)) {
-      out.push({ id: nextId(), role: "user", content: ev.text || "" });
+      flush(turn);
+      turn = {
+        user: { id: nextId(), role: "user", content: ev.text || "" },
+        tools: null,
+        results: [],
+        think: "",
+        text: null,
+      };
       continue;
     }
     if (ev.type === "thinking") {
-      const last = out[out.length - 1] as ReasoningMessage | undefined;
-      if (last && last.role === "reasoning") {
-        last.content = (typeof last.content === "string" ? last.content : "") + (ev.text || "");
-      } else {
-        out.push({ id: nextId(), role: "reasoning", content: ev.text || "" });
-      }
+      turn.think += ev.text || "";
       continue;
     }
     if (ev.type === "tool_call") {
-      let last = out[out.length - 1];
-      if (!last || last.role !== "assistant") {
-        last = { id: nextId(), role: "assistant", content: "", toolCalls: [] };
-        out.push(last);
-      }
-      const asst = last as AssistantMessage;
+      const asst = ensureTools();
       asst.toolCalls = asst.toolCalls || [];
+      const name = ev.tool || "tool";
+      const args = ev.text || ev.preview || "";
+      const lastTc = asst.toolCalls[asst.toolCalls.length - 1];
+      if (lastTc && lastTc.function.name === name && argsContinue(lastTc.function.arguments, args)) {
+        lastToolId[name] = lastTc.id;
+        lastAnyToolId = lastTc.id;
+        if (args) lastTc.function.arguments = args;
+        continue;
+      }
       const tcId = nextId();
-      lastToolId[ev.tool || "tool"] = tcId;
+      lastToolId[name] = tcId;
       lastAnyToolId = tcId;
       asst.toolCalls.push({
         id: tcId,
         type: "function",
-        function: { name: ev.tool || "tool", arguments: ev.text || ev.preview || "{}" },
+        function: { name, arguments: args || "{}" },
       });
       continue;
     }
     if (ev.type === "tool_result") {
       const tcId = (ev.tool && lastToolId[ev.tool]) || lastAnyToolId || nextId();
-      out.push({
+      turn.results.push({
         id: nextId(),
         role: "tool",
         toolCallId: tcId,
@@ -240,12 +362,48 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
       });
       continue;
     }
-    const last = out[out.length - 1];
-    if (last && last.role === "assistant" && !(last as AssistantMessage).toolCalls?.length) {
-      last.content = (typeof last.content === "string" ? last.content : "") + (ev.text || "");
+    if (turn.text) {
+      const prev = typeof turn.text.content === "string" ? turn.text.content : "";
+      turn.text.content = joinAssistantText(prev, ev.text || "", (ev.type || "") !== "delta");
     } else {
-      out.push({ id: nextId(), role: "assistant", content: ev.text || "" });
+      turn.text = { id: nextId(), role: "assistant", content: ev.text || "" };
     }
   }
+  flush(turn);
+  return out;
+}
+
+function lastTurnStart(msgs: Message[]): number {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === "user") return i + 1;
+  }
+  return 0;
+}
+
+export function ensureTurnThink(msgs: Message[], think: string): Message[] {
+  const text = String(think || "").trim();
+  if (!text || !msgs.length) return msgs;
+  const start = lastTurnStart(msgs);
+  for (let i = msgs.length - 1; i >= start; i--) {
+    if (msgs[i].role !== "reasoning") continue;
+    const cur = String((msgs[i] as ReasoningMessage).content || "");
+    if (!cur || text.startsWith(cur) || cur.startsWith(text.slice(0, Math.min(80, text.length)))) {
+      if (cur === text) return msgs;
+      const out = msgs.slice();
+      out[i] = { ...msgs[i], content: text } as ReasoningMessage;
+      return out;
+    }
+  }
+  const out = msgs.slice();
+  let insertAt = out.length;
+  for (let i = start; i < out.length; i++) {
+    const m = out[i];
+    if (m.role === "assistant" && !(m as AssistantMessage).toolCalls?.length) {
+      insertAt = i;
+      break;
+    }
+    insertAt = i + 1;
+  }
+  out.splice(insertAt, 0, { id: "think-live", role: "reasoning", content: text } as ReasoningMessage);
   return out;
 }

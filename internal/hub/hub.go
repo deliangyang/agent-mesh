@@ -14,6 +14,11 @@ import (
 	"agent-mesh/internal/protocol"
 )
 
+const (
+	quietAfterDone = 300 * time.Millisecond
+	chunkSendWait  = 2 * time.Second
+)
+
 // Hub 监听本机已启用引擎的在线会话，转成 OpenAI chunk 推给订阅者和中继。
 type Hub struct {
 	Drivers  *driver.Set
@@ -21,13 +26,20 @@ type Hub struct {
 	NodeName string
 	Log      *slog.Logger
 
-	mu       sync.Mutex
-	subs     map[int]chan openai.Chunk
-	next     int
-	watches  map[string]context.CancelFunc
-	relays   []string
-	password string
-	http     *http.Client
+	mu         sync.Mutex
+	subs       map[int]chan openai.Chunk
+	next       int
+	watchSeq   int
+	watches    map[string]watchSlot
+	relays     []string
+	password   string
+	http       *http.Client
+	pushIngest func(openai.Chunk) bool
+}
+
+type watchSlot struct {
+	cancel context.CancelFunc
+	gen    int
 }
 
 // New 创建集线器。
@@ -41,7 +53,7 @@ func New(drivers *driver.Set, nodeID, nodeName string, log *slog.Logger) *Hub {
 		NodeName: nodeName,
 		Log:      log,
 		subs:     make(map[int]chan openai.Chunk),
-		watches:  make(map[string]context.CancelFunc),
+		watches:  make(map[string]watchSlot),
 		http:     &http.Client{Timeout: 8 * time.Second},
 	}
 }
@@ -60,10 +72,17 @@ func (h *Hub) SetPassword(pw string) {
 	h.password = pw
 }
 
+// SetPushIngest 设置隧道推送。返回 true 时不再走 HTTP ingest。
+func (h *Hub) SetPushIngest(fn func(openai.Chunk) bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pushIngest = fn
+}
+
 // Subscribe 订阅 chunk。调用方必须 Unsubscribe。
 func (h *Hub) Subscribe(buf int) (int, <-chan openai.Chunk) {
-	if buf <= 0 {
-		buf = 64
+	if buf < 256 {
+		buf = 256
 	}
 	ch := make(chan openai.Chunk, buf)
 	h.mu.Lock()
@@ -83,25 +102,38 @@ func (h *Hub) Unsubscribe(id int) {
 	}
 	h.mu.Unlock()
 	if ok {
+		defer func() { _ = recover() }()
 		close(ch)
 	}
+}
+
+type chunkSub struct {
+	id int
+	ch chan openai.Chunk
 }
 
 // Broadcast 向本地订阅者和中继推送。
 func (h *Hub) Broadcast(chunk openai.Chunk) {
 	h.mu.Lock()
-	subs := make([]chan openai.Chunk, 0, len(h.subs))
-	for _, ch := range h.subs {
-		subs = append(subs, ch)
+	subs := make([]chunkSub, 0, len(h.subs))
+	for id, ch := range h.subs {
+		subs = append(subs, chunkSub{id: id, ch: ch})
 	}
 	relays := append([]string(nil), h.relays...)
 	password := h.password
+	push := h.pushIngest
 	h.mu.Unlock()
-	for _, ch := range subs {
-		select {
-		case ch <- chunk:
-		default:
+	var drop []int
+	for _, sub := range subs {
+		if !sendChunk(sub.ch, chunk, chunkSendWait) {
+			drop = append(drop, sub.id)
 		}
+	}
+	for _, id := range drop {
+		h.Unsubscribe(id)
+	}
+	if push != nil && push(chunk) {
+		return
 	}
 	if len(relays) == 0 {
 		return
@@ -113,6 +145,27 @@ func (h *Hub) Broadcast(chunk openai.Chunk) {
 	for _, relay := range relays {
 		u := relay + "/v1/openai/ingest"
 		go h.post(u, raw, password)
+	}
+}
+
+func sendChunk(ch chan openai.Chunk, chunk openai.Chunk, wait time.Duration) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	select {
+	case ch <- chunk:
+		return true
+	default:
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case ch <- chunk:
+		return true
+	case <-timer.C:
+		return false
 	}
 }
 
@@ -154,10 +207,17 @@ func (h *Hub) Start(ctx context.Context) {
 func (h *Hub) stopAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for k, cancel := range h.watches {
-		cancel()
+	for k, slot := range h.watches {
+		slot.cancel()
 		delete(h.watches, k)
 	}
+}
+
+func (h *Hub) watching(engine, id string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, ok := h.watches[keyOf(engine, id)]
+	return ok
 }
 
 func (h *Hub) scan(ctx context.Context) {
@@ -173,16 +233,15 @@ func (h *Hub) scan(ctx context.Context) {
 		}
 	}
 	h.mu.Lock()
-	for k, cancel := range h.watches {
+	for k, slot := range h.watches {
 		if _, ok := live[k]; !ok {
-			cancel()
+			slot.cancel()
 			delete(h.watches, k)
 		}
 	}
 	h.mu.Unlock()
-	for k, sess := range live {
+	for _, sess := range live {
 		h.ensureWatch(ctx, sess)
-		_ = k
 	}
 }
 
@@ -193,13 +252,23 @@ func (h *Hub) ensureWatch(parent context.Context, sess protocol.Session) {
 		h.mu.Unlock()
 		return
 	}
+	h.watchSeq++
+	gen := h.watchSeq
 	ctx, cancel := context.WithCancel(parent)
-	h.watches[k] = cancel
+	h.watches[k] = watchSlot{cancel: cancel, gen: gen}
 	h.mu.Unlock()
-	go h.runWatch(ctx, sess)
+	go h.runWatch(ctx, gen, sess)
 }
 
-func (h *Hub) runWatch(ctx context.Context, sess protocol.Session) {
+func (h *Hub) runWatch(ctx context.Context, gen int, sess protocol.Session) {
+	k := keyOf(sess.Engine, sess.ID)
+	defer func() {
+		h.mu.Lock()
+		if slot, ok := h.watches[k]; ok && slot.gen == gen {
+			delete(h.watches, k)
+		}
+		h.mu.Unlock()
+	}()
 	d, err := h.Drivers.Get(sess.Engine)
 	if err != nil {
 		return
@@ -207,6 +276,10 @@ func (h *Hub) runWatch(ctx context.Context, sess protocol.Session) {
 	ch, err := d.Watch(ctx, sess.ID)
 	if err != nil {
 		h.Log.Debug("watch", "engine", sess.Engine, "session", sess.ID, "err", err)
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+		}
 		return
 	}
 	id := openai.NewID()
@@ -232,7 +305,7 @@ func (h *Hub) WatchOne(ctx context.Context, engine, sessionID string) (<-chan op
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan openai.Chunk, 32)
+	out := make(chan openai.Chunk, 256)
 	go func() {
 		defer close(out)
 		id := openai.NewID()
@@ -245,22 +318,48 @@ func (h *Hub) WatchOne(ctx context.Context, engine, sessionID string) (<-chan op
 			}
 			chunk := openai.FromEvent(id, engine, h.NodeID, h.NodeName, ev)
 			h.Broadcast(chunk)
-			out <- chunk
+			select {
+			case out <- chunk:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return out, nil
 }
 
 // Pump 把引擎事件流转成 OpenAI chunk 并广播。
+// 看到 Done 后短静默无新事件就结束输出通道，不关掉底层 Watch。
 func (h *Hub) Pump(engine, session, model string, evs <-chan protocol.Event) <-chan openai.Chunk {
-	out := make(chan openai.Chunk, 32)
+	out := make(chan openai.Chunk, 256)
 	go func() {
 		defer close(out)
+		if evs == nil {
+			return
+		}
 		id := openai.NewID()
 		if model == "" {
 			model = engine
 		}
-		for ev := range evs {
+		var quiet <-chan time.Time
+		for {
+			var ev protocol.Event
+			var ok bool
+			if quiet == nil {
+				ev, ok = <-evs
+				if !ok {
+					return
+				}
+			} else {
+				select {
+				case ev, ok = <-evs:
+					if !ok {
+						return
+					}
+				case <-quiet:
+					return
+				}
+			}
 			if ev.Engine == "" {
 				ev.Engine = engine
 			}
@@ -271,7 +370,12 @@ func (h *Hub) Pump(engine, session, model string, evs <-chan protocol.Event) <-c
 			h.Broadcast(chunk)
 			select {
 			case out <- chunk:
-			default:
+			case <-time.After(30 * time.Second):
+				h.Log.Debug("pump 下游阻塞过久，结束本轮", "session", ev.Session, "type", ev.Type)
+				return
+			}
+			if ev.Done || quiet != nil {
+				quiet = time.After(quietAfterDone)
 			}
 		}
 	}()

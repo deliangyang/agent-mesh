@@ -152,6 +152,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			Extra:  sock,
 		}
 		s.Busy = s.Status == "busy" || driver.Recent(s.JSONL)
+		s.UpdatedAt = driver.MtimeUnix(s.JSONL)
 		seen[id] = s
 	}
 	if all {
@@ -222,16 +223,15 @@ func (d *Driver) lookup(ctx context.Context, sessionID string) (protocol.Session
 	if err != nil {
 		return protocol.Session{}, err
 	}
-	var hits []protocol.Session
-	for _, s := range rows {
-		if s.ID == sessionID || strings.HasPrefix(s.ID, sessionID) {
-			hits = append(hits, s)
-		}
+	sess, err := driver.MatchSession(rows, sessionID)
+	if err == nil {
+		return sess, nil
 	}
-	if len(hits) != 1 {
-		return protocol.Session{}, fmt.Errorf("session %s not unique or missing", sessionID)
+	jsonl := d.findJSONL(sessionID, "")
+	if jsonl == "" {
+		return protocol.Session{}, err
 	}
-	return hits[0], nil
+	return protocol.Session{Engine: d.Name(), ID: sessionID, JSONL: jsonl, Status: "历史"}, nil
 }
 
 func (d *Driver) peerToken(pid int, sock string) string {
@@ -325,6 +325,7 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume string) (<-chan
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		sid := resume
 		for sc.Scan() {
 			line := sc.Text()
 			if skipPrintDiagnostic(line) {
@@ -335,25 +336,33 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume string) (<-chan
 				out <- protocol.Event{Type: "log", Engine: d.Name(), Text: line}
 				continue
 			}
+			if sid == "" {
+				if s, _ := obj["session_id"].(string); s != "" {
+					sid = s
+				}
+			}
 			if obj["type"] == "stream_event" {
 				if ev, ok := obj["event"].(map[string]any); ok {
 					if delta, ok := ev["delta"].(map[string]any); ok {
 						if t, ok := delta["text"].(string); ok && t != "" {
-							out <- protocol.Event{Type: "delta", Role: "assistant", Engine: d.Name(), Text: t}
+							out <- protocol.Event{Type: "delta", Role: "assistant", Engine: d.Name(), Session: sid, Text: t}
 						}
 					}
 				}
 				continue
 			}
-			parsed := driver.EventsFromJSONL(obj, d.Name(), resume)
+			parsed := driver.EventsFromJSONL(obj, d.Name(), sid)
 			if len(parsed) == 0 {
 				continue
 			}
 			for _, ev := range parsed {
+				if ev.Session != "" {
+					sid = ev.Session
+				}
 				out <- ev
 			}
 		}
-		out <- protocol.Event{Type: "log", Engine: d.Name(), Done: true}
+		out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Done: true}
 	}()
 	return out, nil
 }

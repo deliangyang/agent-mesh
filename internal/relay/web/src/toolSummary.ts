@@ -16,6 +16,7 @@ const KIND_MAP: Record<string, string> = {
   apply_patch: "edit",
   bash: "command",
   shell: "command",
+  shelltoolcall: "command",
   command: "command",
   runcommand: "command",
   run_command: "command",
@@ -32,6 +33,7 @@ const KIND_MAP: Record<string, string> = {
   glob_file_search: "glob",
   find: "glob",
   ls: "list",
+  lstoolcall: "list",
   list: "list",
   listdir: "list",
   list_dir: "list",
@@ -60,7 +62,7 @@ const PATH_KEYS = [
 ];
 
 const GREP_PATH_KEYS = ["path", "glob", "target_directory", "targetDirectory", "directory", "dir", "cwd"];
-const PATTERN_KEYS = ["pattern", "query", "regex", "search"];
+const PATTERN_KEYS = ["glob_pattern", "globPattern", "pattern", "query", "regex", "search", "glob"];
 const COMMAND_KEYS = ["command", "cmd", "script"];
 const URL_KEYS = ["url", "uri"];
 
@@ -107,6 +109,9 @@ function asObject(args: unknown): Record<string, unknown> {
         return parsed as Record<string, unknown>;
       }
     } catch {
+      if (/^(\/|\.\/|\.\.\/|[A-Za-z]:[\\/])/.test(s) || s.includes("/") || s.includes("\\")) {
+        return { path: s };
+      }
       return { command: s };
     }
   }
@@ -127,10 +132,19 @@ function asNumber(v: unknown): number | null {
   return null;
 }
 
+function clipChars(s: string, n: number): string {
+  const chars = Array.from(s);
+  if (n <= 0) return "";
+  if (chars.length <= n) return s;
+  return chars.slice(0, n).join("");
+}
+
 function oneLine(s: string, n: number): string {
   const t = s.replace(/\s+/g, " ").trim();
-  if (t.length <= n) return t;
-  return t.slice(0, n - 1) + "…";
+  const chars = Array.from(t);
+  if (chars.length <= n) return t;
+  if (n < 2) return clipChars(t, n);
+  return clipChars(t, n - 1) + "…";
 }
 
 function shortPath(p: string, max = 56): string {
@@ -200,7 +214,10 @@ export function formatToolLine(name: string, args: unknown): string {
     return "Grepped " + (pattern ? quoted(pattern) : "pattern") + " in " + shortPath(where);
   }
   if (kind === "glob") {
-    return "Globbed " + quoted(pattern || path || "*");
+    const where = firstString(obj, GREP_PATH_KEYS);
+    const pat = pattern || path || "*";
+    if (where && where !== pat) return "Globbed " + quoted(pat) + " in " + shortPath(where);
+    return "Globbed " + quoted(pat);
   }
   if (kind === "list") {
     return "Listed " + shortPath(path || ".");
@@ -279,6 +296,7 @@ export function thinkPreview(content: unknown): string {
   const text = typeof content === "string" ? content : "";
   const compact = text.replace(/\s+/g, " ").trim();
   if (!compact) return "";
-  if (compact.length <= 180) return compact;
-  return "…" + compact.slice(-179);
+  const chars = Array.from(compact);
+  if (chars.length <= 180) return compact;
+  return "…" + chars.slice(-179).join("");
 }

@@ -293,30 +293,40 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan prot
 		return nil, fmt.Errorf("gateway password missing")
 	}
 	// 先盯 jsonl，避免 reply 往返期间丢掉实时行。
-	ch, watchErr := d.Watch(ctx, sessionID)
+	watchCtx, cancelWatch := context.WithCancel(ctx)
+	ch, watchErr := d.Watch(watchCtx, sessionID)
 	body := map[string]string{"text": text}
 	raw, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gw.URL+"/api/v1/sessions/"+sessionID+"/reply", bytes.NewReader(raw))
 	if err != nil {
+		cancelWatch()
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+gw.Password)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	cli := &http.Client{Timeout: 15 * time.Second}
+	resp, err := cli.Do(req)
 	if err != nil {
+		cancelWatch()
 		return nil, fmt.Errorf("live reply: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
+		cancelWatch()
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("live reply http %d: %s", resp.StatusCode, b)
 	}
 	if watchErr != nil {
+		cancelWatch()
 		out := make(chan protocol.Event, 1)
 		out <- protocol.Event{Type: "log", Text: "已通过 live reply 追加", Session: sessionID, Engine: d.Name(), Done: true}
 		close(out)
 		return out, nil
 	}
+	go func() {
+		<-ctx.Done()
+		cancelWatch()
+	}()
 	return ch, nil
 }
 
@@ -340,8 +350,8 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan pro
 		return nil, err
 	}
 	if _, err := acp.call(ctx, "initialize", map[string]any{
-		"protocolVersion": 1,
-		"clientInfo":      map[string]any{"name": "agent-mesh", "version": "1.0.0"},
+		"protocolVersion":    1,
+		"clientInfo":         map[string]any{"name": "agent-mesh", "version": "1.0.0"},
 		"clientCapabilities": map[string]any{},
 	}); err != nil {
 		return nil, fmt.Errorf("acp initialize: %w", err)
@@ -360,19 +370,16 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan pro
 		out <- protocol.Event{Type: "session", Engine: d.Name(), Session: sid}
 		wctx, cancel := context.WithCancel(ctx)
 		defer cancel()
+		promptErr := make(chan error, 1)
 		go func() {
-			_, err := acp.call(wctx, "session/prompt", map[string]any{
+			_, err := acp.call(ctx, "session/prompt", map[string]any{
 				"sessionId": sid,
 				"prompt":    []any{map[string]any{"type": "text", "text": text}},
 			})
-			if err != nil && wctx.Err() == nil {
-				out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: err.Error()}
-			}
-			time.Sleep(800 * time.Millisecond)
-			cancel()
+			promptErr <- err
 		}()
 		var watch <-chan protocol.Event
-		for i := 0; i < 50 && watch == nil; i++ {
+		for i := 0; i < 100 && watch == nil; i++ {
 			ch, werr := d.Watch(wctx, sid)
 			if werr == nil {
 				watch = ch
@@ -389,8 +396,48 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan pro
 			out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "已新建会话", Done: true}
 			return
 		}
-		for ev := range watch {
-			out <- ev
+		promptDone := false
+		idle := time.NewTimer(time.Hour)
+		defer idle.Stop()
+		for {
+			select {
+			case ev, ok := <-watch:
+				if !ok {
+					return
+				}
+				out <- ev
+				if ev.Done {
+					return
+				}
+				if promptDone {
+					if !idle.Stop() {
+						select {
+						case <-idle.C:
+						default:
+						}
+					}
+					idle.Reset(3 * time.Second)
+				}
+			case err := <-promptErr:
+				if err != nil && wctx.Err() == nil {
+					out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: err.Error()}
+				}
+				promptDone = true
+				if !idle.Stop() {
+					select {
+					case <-idle.C:
+					default:
+					}
+				}
+				idle.Reset(3 * time.Second)
+			case <-idle.C:
+				if promptDone {
+					out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "已新建会话", Done: true}
+					return
+				}
+			case <-wctx.Done():
+				return
+			}
 		}
 	}()
 	return out, nil

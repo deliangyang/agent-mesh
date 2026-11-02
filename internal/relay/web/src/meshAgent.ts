@@ -8,9 +8,10 @@ import { fetchJSON } from "./http";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
 import { chatModelOf } from "./chatModel";
+import { chunkFingerprint, nextPiece, rememberChunk } from "./liveDedup";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
 import { meshTarget, parseThreadId } from "./target";
-import type { MeshEvent } from "./types";
+import type { MeshEvent, Session } from "./types";
 
 export const meshLive = reactive({ session: "", title: "", streaming: false, think: "", thinking: false });
 export const chatLoad = reactive({ loading: false, thread: "" });
@@ -114,11 +115,31 @@ function noteSession(obj: LiveChunk): string {
   const sid = sessionIdFromChunk(obj);
   if (!sid) return meshLive.session;
   const mesh = meshOf(obj).session || "";
+  const fresh = !meshLive.session || meshLive.session !== sid;
   if (mesh || !meshLive.session) {
     meshLive.session = sid;
     if (!meshTarget.session) meshTarget.session = sid;
   }
+  if (fresh && sid) {
+    bindLiveWatch(sid, meshTarget.engine, meshTarget.node);
+  }
   return meshLive.session;
+}
+
+function bindLiveWatch(sessionId: string, engine: string, node: string): void {
+  if (!sessionId) return;
+  void import("./catalog").then((mod) => {
+    const hit = mod.catalog.sessions.find((s) => s.id === sessionId);
+    const row: Session = hit || {
+      id: sessionId,
+      engine: engine || meshTarget.engine,
+      node_id: node || meshTarget.node,
+      cwd: meshTarget.cwd,
+      busy: true,
+      live: true,
+    };
+    mod.watchSession(row);
+  });
 }
 
 function cacheLiveThread(threadId: string): void {
@@ -155,52 +176,27 @@ export function pushLiveChunk(obj: LiveChunk): void {
   for (const fn of liveFns) fn(obj);
 }
 
-function waitLive(signal: AbortSignal, onObj: (obj: LiveChunk) => boolean): Promise<void> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      off();
-      signal.removeEventListener("abort", finish);
-      resolve();
-    };
-    const off = onLiveChunk((obj) => {
-      if (onObj(obj)) finish();
-    });
-    if (signal.aborted) {
-      finish();
-      return;
-    }
-    signal.addEventListener("abort", finish, { once: true });
-  });
-}
-
 async function sessionIsActive(session: string): Promise<boolean> {
   if (!session) return false;
   const mod = await import("./catalog");
   return mod.catalog.sessions.some((s) => s.id === session && (s.live || s.busy));
 }
 
-async function waitTurn(signal: AbortSignal, onObj: (obj: LiveChunk) => boolean, session: string): Promise<void> {
-  let finished = false;
-  const live = waitLive(signal, (obj) => {
-    const stop = onObj(obj);
-    if (stop) finished = true;
-    return stop;
-  });
-  const idle = (async () => {
-    let seenActive = await sessionIsActive(session);
-    const started = Date.now();
-    while (!signal.aborted && !finished) {
-      const active = await sessionIsActive(session);
-      if (active) seenActive = true;
-      if (seenActive && !active) return;
-      if (!seenActive && Date.now() - started > 4000) return;
-      await new Promise((r) => window.setTimeout(r, 400));
-    }
-  })();
-  await Promise.race([live, idle]);
+async function waitSessionIdle(
+  signal: AbortSignal,
+  done: () => boolean,
+  session: string,
+  graceMs: number,
+): Promise<void> {
+  let seenActive = await sessionIsActive(session);
+  const started = Date.now();
+  while (!signal.aborted && !done()) {
+    const active = await sessionIsActive(session);
+    if (active) seenActive = true;
+    if (seenActive && !active) return;
+    if (!seenActive && Date.now() - started > graceMs) return;
+    await new Promise((r) => window.setTimeout(r, 400));
+  }
 }
 
 export function isLiveChat(): boolean {
@@ -226,13 +222,6 @@ function redirectIfUnauthorized(resp: Response): void {
     location.href = "/login";
     throw new Error("not signed in");
   }
-}
-
-function nextPiece(prev: string, incoming: string): string {
-  if (!incoming) return "";
-  if (prev && incoming.startsWith(prev)) return incoming.slice(prev.length);
-  if (prev && prev.endsWith(incoming) && incoming.length < 8) return "";
-  return incoming;
 }
 
 async function readSSE(
@@ -386,9 +375,12 @@ export class MeshAgent extends AbstractAgent {
         let lastClosedToolId = "";
         let lastClosedToolName = "";
         let thinkAcc = "";
+        let textAcc = "";
         let sawContent = false;
         let ended = false;
         let runFailed = false;
+        let sseDropped = false;
+        const seenChunks = new Set<string>();
         const closeText = () => {
           if (!textId) return;
           sub.next({ type: EventType.TEXT_MESSAGE_END, messageId: textId });
@@ -421,6 +413,12 @@ export class MeshAgent extends AbstractAgent {
           });
         };
         const feed = (obj: LiveChunk): boolean => {
+          const fp = chunkFingerprint(obj);
+          if (rememberChunk(seenChunks, fp)) {
+            const done = chunkTerminal(obj);
+            if (done) ended = true;
+            return done;
+          }
           const fail = chunkFail(obj);
           if (fail) {
             ended = true;
@@ -542,21 +540,60 @@ export class MeshAgent extends AbstractAgent {
           sawContent = true;
           closeTool();
           ensureText();
-          sub.next({
-            type: EventType.TEXT_MESSAGE_CONTENT,
-            messageId: textId,
-            delta,
-          });
-          noteAskEvent({ type: "assistant", text: delta });
+          const piece = nextPiece(textAcc, delta);
+          textAcc += piece;
+          if (piece) {
+            sub.next({
+              type: EventType.TEXT_MESSAGE_CONTENT,
+              messageId: textId,
+              delta: piece,
+            });
+            noteAskEvent({ type: "assistant", text: piece });
+          }
           return stop();
         };
+        // Listen on catalog WS in parallel so a dropped SSE can hand off without gaps.
+        if (session) bindLiveWatch(session, engine, node);
+        let stopLive = () => {};
+        const liveDone = new Promise<void>((resolve) => {
+          let settled = false;
+          const finishLive = () => {
+            if (settled) return;
+            settled = true;
+            off();
+            ac.signal.removeEventListener("abort", finishLive);
+            resolve();
+          };
+          stopLive = finishLive;
+          const off = onLiveChunk((obj) => {
+            if (feed(obj)) finishLive();
+          });
+          if (ac.signal.aborted) {
+            finishLive();
+            return;
+          }
+          ac.signal.addEventListener("abort", finishLive, { once: true });
+        });
         if (!queued) {
-          await readSSE(resp, feed, ac.signal);
+          try {
+            await readSSE(resp, feed, ac.signal);
+          } catch (err) {
+            if (ac.signal.aborted) throw err;
+            sseDropped = true;
+          }
         }
-        if (!ac.signal.aborted && !ended && queued) {
-          await waitTurn(ac.signal, feed, meshLive.session || session);
-        } else if (!ac.signal.aborted && !ended && !sawContent && (meshLive.session || session)) {
-          await waitTurn(ac.signal, feed, meshLive.session || session);
+        const sid = meshLive.session || session;
+        if (sid) bindLiveWatch(sid, engine, node);
+        if (!ac.signal.aborted && !ended && !runFailed) {
+          const grace = sseDropped || queued ? 60000 : 8000;
+          await Promise.race([
+            liveDone,
+            waitSessionIdle(ac.signal, () => ended || runFailed, sid, grace),
+          ]);
+        }
+        stopLive();
+        if (sseDropped && !sawContent && !ended && !runFailed && !sid) {
+          throw new Error("network dropped; check the connection and try again");
         }
         closeTool();
         closeText();

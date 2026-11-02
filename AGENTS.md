@@ -80,13 +80,14 @@ The web UI uses CopilotKit + `@ag-ui/client`. Target selection lives in `MeshTar
 
 ## Add an engine
 
-1. Implement `driver.Driver` in `internal/driver/<name>/`: `Name` `List` `History` `Watch` `Reply` `Send` `Probe` `Models`.
-2. Discover session state from the engine's own jsonl / socket / CLI. Do not keep a parallel session store.
-3. Prefer `driver.ParseJSONL`, `RunPrint`, `WatchJSONL`, and `AskFromTool` for parsing.
-4. Register it in `AllNames` and `Attach` in `internal/factory/factory.go`.
-5. Keep `cmd/node` default `-engines` and `cmd/ctl` engine help in sync.
-6. Add slash-command roots in `slashRoots` in `internal/driver/slash.go`.
-7. Write stdlib tests for parsing and List/Models. Do not add testify.
+1. Copy `internal/driver/skel/` to `internal/driver/<name>/` (skel is a stub template, not registered).
+2. Implement `driver.Driver`: `Name` `List` `History` `Watch` `Reply` `Send` `Probe` `Models`.
+3. Discover session state from the engine's own jsonl / socket / CLI. Do not keep a parallel session store.
+4. Prefer `driver.ParseJSONL`, `RunPrint`, `WatchJSONL`, and `AskFromTool` for parsing.
+5. Register it in `AllNames` and `Attach` in `internal/factory/factory.go`.
+6. Keep `cmd/node` default `-engines` and `cmd/ctl` engine help in sync.
+7. Add slash-command roots in `slashRoots` in `internal/driver/slash.go`.
+8. Write stdlib tests for parsing and List/Models. Do not add testify.
 
 See: `internal/driver/claude` (jsonl + socket inject), `internal/driver/cursor` (CLI `agent`), `internal/driver/qodercn` (Qoder CLI CN, `qodercn`).
 

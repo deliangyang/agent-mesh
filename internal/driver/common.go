@@ -691,15 +691,11 @@ func parseVendorJSONL(obj map[string]any, kind string) []protocol.Event {
 		}
 		return []protocol.Event{{Type: "log", Text: Truncate(text, 160)}}
 	case "event_msg":
-		part, _ := obj["payload"].(map[string]any)
-		if strField(part, "type") != "user_message" {
-			return []protocol.Event{}
-		}
-		text := ExtractUserText(strField(part, "message", "text"))
-		if text == "" {
-			return []protocol.Event{}
-		}
-		return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+		return parseCodexEventMsg(payloadOf(obj))
+	case "response_item":
+		return parseCodexResponseItem(payloadOf(obj))
+	case "session_meta", "session-meta":
+		return parseCodexSessionMeta(obj)
 	}
 	if kind == "text" {
 		part, _ := obj["part"].(map[string]any)
@@ -746,6 +742,149 @@ func openCodeToolEvents(obj map[string]any) []protocol.Event {
 		return []protocol.Event{ev}
 	}
 	return []protocol.Event{ev, toolEvent("tool_result", name, output)}
+}
+
+func payloadOf(obj map[string]any) map[string]any {
+	part, _ := obj["payload"].(map[string]any)
+	if part != nil {
+		return part
+	}
+	return obj
+}
+
+func parseCodexSessionMeta(obj map[string]any) []protocol.Event {
+	part := payloadOf(obj)
+	sid := strField(part, "id", "session_id", "sessionId")
+	if sid == "" {
+		sid = strField(obj, "id", "session_id", "sessionId")
+	}
+	title := strField(part, "title", "aiTitle", "customTitle")
+	if title == "" {
+		title = strField(obj, "title", "aiTitle", "customTitle")
+	}
+	var evs []protocol.Event
+	if sid != "" {
+		evs = append(evs, protocol.Event{Type: "session", Session: sid})
+	}
+	if title != "" {
+		evs = append(evs, protocol.Event{Type: "title", Text: Truncate(title, 80)})
+	}
+	if len(evs) == 0 {
+		return []protocol.Event{}
+	}
+	return evs
+}
+
+func parseCodexEventMsg(part map[string]any) []protocol.Event {
+	switch strField(part, "type") {
+	case "user_message":
+		text := ExtractUserText(strField(part, "message", "text"))
+		if text == "" {
+			text = ExtractUserText(ContentToText(part["content"]))
+		}
+		if text == "" || codexInjectedUser(text) {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+	case "agent_message":
+		text := strField(part, "message", "text")
+		if text == "" {
+			text = ContentToText(part["content"])
+		}
+		if text == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "assistant", Role: "assistant", Text: FullText(text)}}
+	case "agent_reasoning":
+		text := strField(part, "text", "message")
+		if text == "" {
+			text = ContentToText(part["summary"])
+		}
+		if text == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "thinking", Role: "assistant", Text: FullText(text)}}
+	default:
+		return []protocol.Event{}
+	}
+}
+
+func parseCodexResponseItem(part map[string]any) []protocol.Event {
+	switch strField(part, "type") {
+	case "message":
+		role := strField(part, "role")
+		if role == "developer" || role == "system" {
+			return []protocol.Event{}
+		}
+		if role == "user" {
+			text := ExtractUserText(ContentToText(part["content"]))
+			if text == "" || codexInjectedUser(text) {
+				return []protocol.Event{}
+			}
+			return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+		}
+		if role == "assistant" {
+			text := ContentToText(part["content"])
+			if text == "" {
+				return []protocol.Event{}
+			}
+			return []protocol.Event{{Type: "assistant", Role: "assistant", Text: FullText(text)}}
+		}
+		return []protocol.Event{}
+	case "function_call", "custom_tool_call":
+		name := strField(part, "name")
+		args := part["arguments"]
+		if args == nil {
+			args = part["input"]
+		}
+		return []protocol.Event{toolEvent("tool_call", name, args)}
+	case "function_call_output", "custom_tool_call_output":
+		text := strField(part, "output")
+		if text == "" {
+			text = ContentToText(part["output"])
+		}
+		return []protocol.Event{toolEvent("tool_result", strField(part, "name"), text)}
+	case "reasoning":
+		text := ContentToText(part["summary"])
+		if text == "" {
+			text = ContentToText(part["content"])
+		}
+		if text == "" {
+			text = strField(part, "text")
+		}
+		if text == "" {
+			return []protocol.Event{}
+		}
+		return []protocol.Event{{Type: "thinking", Role: "assistant", Text: FullText(text)}}
+	default:
+		return []protocol.Event{}
+	}
+}
+
+var codexInjectedPrefixes = []string{
+	"<environment_context>",
+	"# agents.md",
+	"<instructions>",
+	"<permissions",
+	"<skill>",
+	"<turn_aborted>",
+	"<collaboration_mode>",
+	"<multi_agent",
+	"<skills_instructions>",
+}
+
+func codexInjectedUser(text string) bool {
+	s := strings.TrimSpace(text)
+	if s == "" {
+		return true
+	}
+	low := strings.ToLower(s)
+	for _, p := range codexInjectedPrefixes {
+		if strings.HasPrefix(low, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func nestedErrorText(obj map[string]any) string {
@@ -961,6 +1100,14 @@ func sessionIDOf(obj map[string]any) string {
 	if msg, ok := obj["message"].(map[string]any); ok {
 		if s := strField(msg, "session_id", "sessionId"); s != "" {
 			return s
+		}
+	}
+	kind := strField(obj, "type")
+	if kind == "session_meta" || kind == "session-meta" {
+		if payload, ok := obj["payload"].(map[string]any); ok {
+			if s := strField(payload, "session_id", "sessionId", "id"); s != "" {
+				return s
+			}
 		}
 	}
 	return ""

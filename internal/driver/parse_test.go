@@ -179,6 +179,125 @@ func TestJSONLTitleCodexEventMsg(t *testing.T) {
 	}
 }
 
+func TestParseJSONLCodexRollout(t *testing.T) {
+	sid := ParseJSONL(map[string]any{
+		"type": "session_meta",
+		"payload": map[string]any{
+			"id":  "01a17b9e-55a2-7953-af98-b9a36cd6bf93",
+			"cwd": "/tmp/work",
+		},
+	})
+	if len(sid) != 1 || sid[0].Type != "session" || sid[0].Session != "01a17b9e-55a2-7953-af98-b9a36cd6bf93" {
+		t.Fatalf("session_meta %#v", sid)
+	}
+
+	asst := ParseJSONL(map[string]any{
+		"type": "event_msg",
+		"payload": map[string]any{
+			"type":    "agent_message",
+			"message": "解得两组解",
+		},
+	})
+	if len(asst) != 1 || asst[0].Type != "assistant" || asst[0].Text != "解得两组解" {
+		t.Fatalf("agent_message %#v", asst)
+	}
+
+	think := ParseJSONL(map[string]any{
+		"type": "event_msg",
+		"payload": map[string]any{
+			"type": "agent_reasoning",
+			"text": "先看方程",
+		},
+	})
+	if len(think) != 1 || think[0].Type != "thinking" || think[0].Text != "先看方程" {
+		t.Fatalf("agent_reasoning %#v", think)
+	}
+
+	injected := ParseJSONL(map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type": "message",
+			"role": "user",
+			"content": []any{
+				map[string]any{"type": "input_text", "text": "<environment_context>\n  <cwd>/tmp</cwd>\n</environment_context>"},
+			},
+		},
+	})
+	if len(injected) != 0 {
+		t.Fatalf("injected %#v", injected)
+	}
+
+	user := ParseJSONL(map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type": "message",
+			"role": "user",
+			"content": []any{
+				map[string]any{"type": "input_text", "text": "计算 x + y = z"},
+			},
+		},
+	})
+	if len(user) != 1 || user[0].Type != "user" || user[0].Text != "计算 x + y = z" {
+		t.Fatalf("response user %#v", user)
+	}
+
+	reply := ParseJSONL(map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type": "message",
+			"role": "assistant",
+			"content": []any{
+				map[string]any{"type": "output_text", "text": "feat: add zed extension"},
+			},
+		},
+	})
+	if len(reply) != 1 || reply[0].Type != "assistant" || reply[0].Text != "feat: add zed extension" {
+		t.Fatalf("response assistant %#v", reply)
+	}
+
+	call := ParseJSONL(map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type":      "function_call",
+			"name":      "shell_command",
+			"arguments": `{"command":"ls","workdir":"/tmp"}`,
+			"call_id":   "call_1",
+		},
+	})
+	if len(call) != 1 || call[0].Type != "tool_call" || call[0].Tool != "shell_command" {
+		t.Fatalf("function_call %#v", call)
+	}
+	if !strings.Contains(call[0].Preview, "ls") {
+		t.Fatalf("preview %#v", call[0])
+	}
+
+	out := ParseJSONL(map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type":    "function_call_output",
+			"call_id": "call_1",
+			"output":  "ok\n",
+		},
+	})
+	if len(out) != 1 || out[0].Type != "tool_result" || out[0].Text != "ok" {
+		t.Fatalf("function_call_output %#v", out)
+	}
+
+	dev := ParseJSONL(map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type": "message",
+			"role": "developer",
+			"content": []any{
+				map[string]any{"type": "input_text", "text": "You are Codex"},
+			},
+		},
+	})
+	if len(dev) != 0 {
+		t.Fatalf("developer %#v", dev)
+	}
+}
+
 func TestJSONLTitleReadsHeadNotJustTail(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/big.jsonl"

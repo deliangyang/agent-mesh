@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"agent-mesh/internal/protocol"
 	"agent-mesh/internal/watchfile"
 )
+
+var rolloutSessionRe = regexp.MustCompile(`(?i)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 
 // Driver 接管本机 Codex CLI。
 type Driver struct {
@@ -193,14 +196,27 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 				if !strings.HasSuffix(name, ".jsonl") && name != "session.json" && name != "meta.json" {
 					return nil
 				}
-				id := filepath.Base(filepath.Dir(path))
-				if strings.HasSuffix(name, ".jsonl") {
-					id = strings.TrimSuffix(name, ".jsonl")
+				id, cwd := rolloutMeta(path)
+				if id == "" {
+					id = sessionIDFromName(name)
+				}
+				if id == "" {
+					if strings.HasSuffix(name, ".jsonl") {
+						id = strings.TrimSuffix(name, ".jsonl")
+					} else {
+						id = filepath.Base(filepath.Dir(path))
+					}
+				}
+				if id == "" {
+					return nil
 				}
 				if _, ok := seen[id]; ok {
 					s := seen[id]
 					s.JSONL = path
 					s.UpdatedAt = info.ModTime().Unix()
+					if s.CWD == "" {
+						s.CWD = cwd
+					}
 					seen[id] = s
 					return nil
 				}
@@ -210,6 +226,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 				seen[id] = protocol.Session{
 					Engine:    d.Name(),
 					ID:        id,
+					CWD:       cwd,
 					Status:    "历史",
 					JSONL:     path,
 					UpdatedAt: info.ModTime().Unix(),
@@ -228,18 +245,70 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 	return out, nil
 }
 
-func (d *Driver) findJSONL(id string) string {
-	for _, dir := range d.sessionDirs() {
-		matches, _ := filepath.Glob(filepath.Join(dir, "**", id+"*.jsonl"))
-		if len(matches) > 0 {
-			return matches[0]
-		}
-		p := filepath.Join(dir, id+".jsonl")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
+func sessionIDFromName(name string) string {
+	stem := strings.TrimSuffix(name, ".jsonl")
+	return rolloutSessionRe.FindString(stem)
+}
+
+func matchRollout(stem, id string) bool {
+	if id == "" || stem == "" {
+		return false
 	}
-	return ""
+	if stem == id || sessionIDFromName(stem) == id {
+		return true
+	}
+	return strings.HasSuffix(stem, "-"+id)
+}
+
+func rolloutMeta(path string) (id, cwd string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	if !sc.Scan() {
+		return "", ""
+	}
+	var obj map[string]any
+	if json.Unmarshal(sc.Bytes(), &obj) != nil {
+		return "", ""
+	}
+	payload, _ := obj["payload"].(map[string]any)
+	if payload == nil {
+		payload = obj
+	}
+	id, _ = payload["id"].(string)
+	if id == "" {
+		id, _ = payload["session_id"].(string)
+	}
+	cwd, _ = payload["cwd"].(string)
+	return id, cwd
+}
+
+func (d *Driver) findJSONL(id string) string {
+	if id == "" {
+		return ""
+	}
+	var best string
+	var bestM time.Time
+	for _, dir := range d.sessionDirs() {
+		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".jsonl") {
+				return nil
+			}
+			stem := strings.TrimSuffix(info.Name(), ".jsonl")
+			if !matchRollout(stem, id) {
+				return nil
+			}
+			if best == "" || info.ModTime().After(bestM) {
+				best, bestM = path, info.ModTime()
+			}
+			return nil
+		})
+	}
+	return best
 }
 
 func (d *Driver) History(ctx context.Context, sessionID string, tail int) ([]protocol.Event, error) {

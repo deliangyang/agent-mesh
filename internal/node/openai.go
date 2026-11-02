@@ -205,15 +205,15 @@ func (s *Server) handleOpenHistory(w http.ResponseWriter, r *http.Request) {
 		turns = 20
 	}
 	since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
-	if since <= 0 {
-		since = time.Now().Add(-48 * time.Hour).Unix()
-	}
 	evs, err := s.sessionHistory(r.Context(), engine, sid, tail)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	writeJSON(w, http.StatusOK, driver.LastTurns(driver.FilterSince(evs, since), turns))
+	if since > 0 {
+		evs = driver.FilterSince(evs, since)
+	}
+	writeJSON(w, http.StatusOK, driver.LastTurns(evs, turns))
 }
 
 func (s *Server) sessionHistory(ctx context.Context, engine, sid string, tail int) ([]protocol.Event, error) {

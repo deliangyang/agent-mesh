@@ -5,6 +5,7 @@ import { reactive } from "vue";
 import { clearAsk, noteAskEvent, noteAskEvents, noteAskFromTool } from "./ask";
 import { keepMediaContent, lastUserPayload } from "./attach";
 import { fetchJSON } from "./http";
+import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
 import { chatModelOf } from "./chatModel";
@@ -104,7 +105,7 @@ function chunkFail(obj: LiveChunk): string {
   }
   const mesh = meshOf(obj);
   if ((mesh.type || "").toLowerCase() !== "error") return "";
-  return (chunkDelta(obj) || mesh.preview || "").replace(/\s+/g, " ").trim() || "Request failed";
+  return (chunkDelta(obj) || mesh.preview || "").replace(/\s+/g, " ").trim() || t("toast.requestFailed");
 }
 
 async function failBody(resp: Response): Promise<string> {
@@ -317,10 +318,10 @@ export class MeshAgent extends AbstractAgent {
           sub.complete();
         };
         const payload = lastUserPayload(input.messages || []);
-        const text = payload.text || (payload.files.length ? "Please look at the attachments." : "");
+        const text = payload.text || (payload.files.length ? t("agent.lookAttachments") : "");
         sentText = text;
         if (!text) {
-          failRun("missing user text");
+          failRun(t("agent.missingText"));
           return;
         }
         // a new chat has an empty meshTarget.session; do not reuse a leftover CopilotChat thread.
@@ -330,11 +331,11 @@ export class MeshAgent extends AbstractAgent {
         const node = meshTarget.node || bound.node;
         const model = chatModelOf(meshTarget.model, node, engine);
         if (!model) {
-          failRun("Pick an engine or model first");
+          failRun(t("agent.pickEngine"));
           return;
         }
         if (!session && !meshTarget.cwd) {
-          failRun("Pick a working directory first");
+          failRun(t("agent.pickDir"));
           return;
         }
         const body: Record<string, unknown> = {
@@ -593,7 +594,7 @@ export class MeshAgent extends AbstractAgent {
         }
         stopLive();
         if (sseDropped && !sawContent && !ended && !runFailed && !sid) {
-          throw new Error("network dropped; check the connection and try again");
+          throw new Error(t("toast.networkDropped"));
         }
         closeTool();
         closeText();

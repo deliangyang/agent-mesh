@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { t } from "../locale";
 import { formatTodoTitle, todoLabel, type TodoItem } from "../todos.ts";
 
 const props = defineProps<{
@@ -12,16 +13,16 @@ const title = computed(() => formatTodoTitle(visible.value));
 const show = computed(() => visible.value.length > 0 || !!props.pending);
 
 function statusLabel(status: TodoItem["status"]): string {
-  if (status === "completed") return "Done";
-  if (status === "in_progress") return "In progress";
-  if (status === "cancelled") return "Cancelled";
-  return "Not started";
+  if (status === "completed") return t("todo.done");
+  if (status === "in_progress") return t("todo.inProgress");
+  if (status === "cancelled") return t("todo.cancelled");
+  return t("todo.notStarted");
 }
 </script>
 
 <template>
   <div v-if="show" class="mesh-todo" role="list" :aria-label="title">
-    <div class="mesh-todo-head">{{ visible.length ? title : "Updating todos" }}</div>
+    <div class="mesh-todo-head">{{ visible.length ? title : t("todo.updating") }}</div>
     <div
       v-for="item in visible"
       :key="item.id"

@@ -1,3 +1,4 @@
+import { t } from "./locale.ts";
 import type { EngineRow } from "./types";
 
 export function nodeEngines(rows: EngineRow[], nodeId: string): EngineRow[] {
@@ -15,6 +16,6 @@ export function nodeEngines(rows: EngineRow[], nodeId: string): EngineRow[] {
 }
 
 export function engineEmptyHint(nodeId: string): string {
-  if (!nodeId) return "Pick a node first";
-  return "No engines on this node. Install an agent CLI on the machine, then refresh.";
+  if (!nodeId) return t("engine.pickNode");
+  return t("engine.empty");
 }

@@ -61,9 +61,10 @@ var (
 	setForegroundWindow   = user32.NewProc("SetForegroundWindow")
 	showWindow            = user32.NewProc("ShowWindow")
 	translateMessage      = user32.NewProc("TranslateMessage")
-	getModuleHandle       = kernel32.NewProc("GetModuleHandleW")
-	getConsoleWindow      = kernel32.NewProc("GetConsoleWindow")
-	getConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
+	getModuleHandle          = kernel32.NewProc("GetModuleHandleW")
+	getConsoleWindow         = kernel32.NewProc("GetConsoleWindow")
+	getConsoleProcessList    = kernel32.NewProc("GetConsoleProcessList")
+	getUserDefaultUILanguage = kernel32.NewProc("GetUserDefaultUILanguage")
 )
 
 var (
@@ -197,14 +198,24 @@ func trayWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 	return r
 }
 
+func trayChineseUI() bool {
+	r, _, _ := getUserDefaultUILanguage.Call()
+	// LANGID primary language is the low 10 bits; LANG_CHINESE == 0x04.
+	return uint16(r)&0x3ff == 0x04
+}
+
 func showTrayMenu(hwnd windows.Handle) {
 	hMenu, _, _ := createPopupMenu.Call()
 	if hMenu == 0 {
 		return
 	}
 	defer destroyMenu.Call(hMenu)
-	openText, _ := windows.UTF16PtrFromString("打开")
-	quitText, _ := windows.UTF16PtrFromString("退出")
+	openLabel, quitLabel := "Open", "Quit"
+	if trayChineseUI() {
+		openLabel, quitLabel = "打开", "退出"
+	}
+	openText, _ := windows.UTF16PtrFromString(openLabel)
+	quitText, _ := windows.UTF16PtrFromString(quitLabel)
 	appendMenu.Call(hMenu, mfString, idOpen, uintptr(unsafe.Pointer(openText)))
 	appendMenu.Call(hMenu, mfSeparator, 0, 0)
 	appendMenu.Call(hMenu, mfString, idQuit, uintptr(unsafe.Pointer(quitText)))

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, watch } from "vue";
 import { dismissAsk, meshAsk, submitAsk } from "../ask";
+import { t } from "../locale";
 
 const picks = reactive<Record<string, string[]>>({});
 
@@ -63,11 +64,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="meshAsk.prompt" class="mesh-ask" role="group" :aria-label="meshAsk.prompt.title || 'Choose an option'">
+  <div v-if="meshAsk.prompt" class="mesh-ask" role="group" :aria-label="meshAsk.prompt.title || t('ask.chooseOption')">
     <div class="mesh-ask-head">
-      <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? "Waiting for confirmation" : "Waiting for a choice" }}</div>
-      <button type="button" class="mesh-ask-close" aria-label="Dismiss" title="Close" @click="dismissAsk">
-        Close
+      <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? t("ask.waitConfirm") : t("ask.waitChoice") }}</div>
+      <button type="button" class="mesh-ask-close" :aria-label="t('ask.dismiss')" :title="t('ask.close')" @click="dismissAsk">
+        {{ t("ask.close") }}
       </button>
     </div>
     <div v-if="meshAsk.prompt.title" class="mesh-ask-title">{{ meshAsk.prompt.title }}</div>
@@ -92,7 +93,7 @@ onBeforeUnmount(() => {
     <div class="mesh-ask-bar">
       <p v-if="meshAsk.error" class="mesh-ask-err">{{ meshAsk.error }}</p>
       <button type="button" class="mesh-ask-go" :disabled="!ready || meshAsk.answering" @click="confirm">
-        {{ meshAsk.answering ? "Submitting" : "Choose this" }}
+        {{ meshAsk.answering ? t("ask.submitting") : t("ask.chooseThis") }}
       </button>
     </div>
   </div>

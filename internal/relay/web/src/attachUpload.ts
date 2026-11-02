@@ -1,5 +1,6 @@
 import { reactive } from "vue";
 import type { AttachmentUploadError, AttachmentUploadResult } from "@copilotkit/shared";
+import { t } from "./locale.ts";
 import { showToast } from "./toast.ts";
 
 export type AttachJob = {
@@ -49,12 +50,12 @@ export function syncAttachJobs(items: { filename?: string; size?: number; status
 }
 
 export function explainAttachError(err: AttachmentUploadError): string {
-  const name = (err.file && err.file.name) || "file";
-  if (err.reason === "file-too-large") return '"' + name + '" is over 20MB';
-  if (err.reason === "invalid-type") return '"' + name + '" type is not supported';
+  const name = (err.file && err.file.name) || t("attach.file");
+  if (err.reason === "file-too-large") return t("attach.tooLarge", { name });
+  if (err.reason === "invalid-type") return t("attach.badType", { name });
   const raw = String(err.message || "").replace(/\s+/g, " ").trim();
-  if (/failed to read|not readable|abort/i.test(raw)) return 'failed to read "' + name + '"';
-  return 'failed to upload "' + name + '"';
+  if (/failed to read|not readable|abort/i.test(raw)) return t("attach.readFailed", { name });
+  return t("attach.uploadFailed", { name });
 }
 
 export function onComposerUploadFailed(err: AttachmentUploadError): void {

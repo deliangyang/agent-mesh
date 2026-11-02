@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { t } from "./locale.ts";
 
 export type ToastKind = "error" | "info";
 
@@ -32,26 +33,26 @@ export function showToast(text: string, kind: ToastKind = "info", ms = 4200): vo
 
 export function dismissToast(id: number): void {
   clearTimer(id);
-  const i = toasts.findIndex((t) => t.id === id);
+  const i = toasts.findIndex((item) => item.id === id);
   if (i >= 0) toasts.splice(i, 1);
 }
 
 export function explainError(err: unknown): string {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return "network dropped; check the connection and try again";
+    return t("toast.networkDropped");
   }
   if (isAbort(err)) return "";
   const raw = err instanceof Error ? err.message : String(err || "");
   const msg = unwrapFailText(raw);
-  if (!msg) return "Request failed";
+  if (!msg) return t("toast.requestFailed");
   if (/failed to fetch|networkerror|load failed|err_network|err_internet|net::/i.test(msg)) {
-    return "network error; check the connection and try again";
+    return t("toast.networkError");
   }
-  if (msg === "not signed in") return msg;
+  if (msg === "not signed in") return t("toast.notSignedIn");
   if (msg.startsWith("<") || msg.length > 240) {
     const code = msg.match(/\b(http\s*)?(\d{3})\b/i);
-    if (code) return "Request failed (" + code[2] + ")";
-    return "Request failed";
+    if (code) return t("toast.requestFailedStatus", { status: code[2] });
+    return t("toast.requestFailed");
   }
   return msg;
 }
@@ -59,7 +60,7 @@ export function explainError(err: unknown): string {
 /** Prefer a human message from plain text or JSON error bodies. */
 export function unwrapFailText(raw: string, status = 0): string {
   const text = String(raw || "").replace(/\s+/g, " ").trim();
-  if (!text) return status ? "Request failed (" + status + ")" : "";
+  if (!text) return status ? t("toast.requestFailedStatus", { status }) : "";
   if (text.startsWith("{") || text.startsWith("[")) {
     try {
       const j = JSON.parse(text) as { error?: unknown; message?: unknown };
@@ -99,7 +100,7 @@ function bump(id: number, ms: number): void {
 }
 
 function clearTimer(id: number): void {
-  const t = timers.get(id);
-  if (t) window.clearTimeout(t);
+  const handle = timers.get(id);
+  if (handle) window.clearTimeout(handle);
   timers.delete(id);
 }

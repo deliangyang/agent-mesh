@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { engineEmptyHint, nodeEngines } from "./engineCards.ts";
+import { applyLocalePref } from "./locale.ts";
 import type { EngineRow } from "./types.ts";
+
+applyLocalePref("en");
 
 const rows: EngineRow[] = [
   { name: "claude", title: "Claude", node_id: "n1", available: true },

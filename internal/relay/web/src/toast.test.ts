@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { applyLocalePref } from "./locale.ts";
 import { explainError, unwrapFailText } from "./toast.ts";
+
+applyLocalePref("en");
 
 describe("unwrapFailText", () => {
   it("keeps plain error bodies", () => {

@@ -18,6 +18,13 @@ import { engineEmptyHint, nodeEngines } from "../engineCards";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
+import {
+  cycleLocale,
+  localeButtonLabel,
+  localeButtonTitle,
+  localePref,
+  t,
+} from "../locale";
 import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
 import { slashItems, watchSlashCatalog } from "../slash";
@@ -95,22 +102,22 @@ function guardComposer(): void {
   }, 700);
 }
 
-const labels = {
-  chatInputPlaceholder: "Message, or / for commands and skills",
-  welcomeMessageText: "How can I help?",
-  chatDisclaimerText: "AI can be wrong. Check anything that matters.",
-  modalHeaderTitle: "Chat",
-  reasoningMessageThinkingLabel: "Thinking…",
-  chatInputToolbarAddButtonLabel: "Add images or files",
-};
+const labels = computed(() => ({
+  chatInputPlaceholder: t("chat.placeholder"),
+  welcomeMessageText: t("chat.welcome"),
+  chatDisclaimerText: t("chat.disclaimer"),
+  modalHeaderTitle: t("chat.title"),
+  reasoningMessageThinkingLabel: t("chat.thinking"),
+  chatInputToolbarAddButtonLabel: t("chat.addFiles"),
+}));
 
 const copied = ref(false);
 let copiedTimer = 0;
 
 const linkHint = computed(() => {
   if (meshLink.state === "live") return "";
-  if (meshLink.state === "connecting") return "Connecting to the node";
-  return "Disconnected; reconnecting";
+  if (meshLink.state === "connecting") return t("link.connecting");
+  return t("link.disconnected");
 });
 
 const attachConfig = {
@@ -133,12 +140,12 @@ const engineHint = computed(() => (engineCards.value.length ? "" : engineEmptyHi
 
 const nodePickLabel = computed(() => {
   const n = catalog.nodes.find((row) => row.id === filters.node);
-  return n ? nodeName(n.id, n.name) : "None";
+  return n ? nodeName(n.id, n.name) : t("nav.none");
 });
 
 const enginePickLabel = computed(() => {
   const e = engineCards.value.find((row) => row.name === filters.engine);
-  return e ? e.title || e.name : "None";
+  return e ? e.title || e.name : t("nav.none");
 });
 
 const modelOptions = computed(() => {
@@ -192,7 +199,7 @@ const sessionRows = computed(() => {
   return list.slice().sort((a, b) => sessionStamp(b) - sessionStamp(a));
 });
 
-type SessionGroup = { label: string; items: Session[] };
+type SessionGroup = { key: string; label: string; items: Session[] };
 
 const sessionGroups = computed((): SessionGroup[] => {
   const now = new Date();
@@ -200,19 +207,19 @@ const sessionGroups = computed((): SessionGroup[] => {
   const yesterday = today - 86400000;
   const week = today - 6 * 86400000;
   const groups: SessionGroup[] = [
-    { label: "Today", items: [] },
-    { label: "Yesterday", items: [] },
-    { label: "Past 7 days", items: [] },
-    { label: "Older", items: [] },
+    { key: "today", label: t("group.today"), items: [] },
+    { key: "yesterday", label: t("group.yesterday"), items: [] },
+    { key: "week", label: t("group.week"), items: [] },
+    { key: "older", label: t("group.older"), items: [] },
   ];
   for (const s of sessionRows.value) {
-    const t = sessionStamp(s) * 1000;
-    if (t >= today) groups[0].items.push(s);
-    else if (t >= yesterday) groups[1].items.push(s);
-    else if (t >= week) groups[2].items.push(s);
+    const stamp = sessionStamp(s) * 1000;
+    if (stamp >= today) groups[0].items.push(s);
+    else if (stamp >= yesterday) groups[1].items.push(s);
+    else if (stamp >= week) groups[2].items.push(s);
     else groups[3].items.push(s);
   }
-  return groups.filter((g) => g.items.length || (creating.value && g.label === "Today"));
+  return groups.filter((g) => g.items.length || (creating.value && g.key === "today"));
 });
 
 const threadId = computed(() => {
@@ -225,8 +232,8 @@ const isDraftChat = computed(() => chatKey.value === "draft" || chatKey.value.st
 const chatThreadId = computed(() => (isDraftChat.value ? chatKey.value : threadId.value || undefined));
 
 const chatTitle = computed(() => {
-  if (creating.value) return meshLive.title || "New chat";
-  return selected.value?.title || meshLive.title || "Chat";
+  if (creating.value) return meshLive.title || t("chat.new");
+  return selected.value?.title || meshLive.title || t("chat.title");
 });
 
 const welcomeHint = computed(() => {
@@ -234,12 +241,12 @@ const welcomeHint = computed(() => {
   const engine = engineCards.value.find((e) => e.name === filters.engine);
   const nodeLabel = nodeName(filters.node, node?.name);
   const engineLabel = engine?.title || engine?.name || "";
-  if (engineLabel && filters.node) return `Will send to ${engineLabel} on ${nodeLabel}`;
+  if (engineLabel && filters.node) return t("chat.willSend", { engine: engineLabel, node: nodeLabel });
   if (filters.node && !engineCards.value.length) {
-    return `No engines on ${nodeLabel}. Install an agent CLI on the machine, then refresh.`;
+    return t("chat.noEnginesOn", { node: nodeLabel });
   }
-  if (filters.node) return `Node ${nodeLabel}`;
-  return "Pick a node and engine on the left";
+  if (filters.node) return t("chat.nodeLabel", { node: nodeLabel });
+  return t("chat.pickNodeEngine");
 });
 
 async function copyTitle(): Promise<void> {
@@ -306,11 +313,11 @@ function thinkHintAfter(message: { id?: string }): boolean {
 }
 
 function nodeName(id: string, name?: string): string {
-  return name || id || "Node";
+  return name || id || t("chat.nodeFallback");
 }
 
 function modelLabel(id: string): string {
-  if (!id) return "Pick a model";
+  if (!id) return t("chat.pickModel");
   for (const n of catalog.nodes) {
     if (n.id && id.startsWith(n.id + "/")) return id.slice(n.id.length + 1);
   }
@@ -551,7 +558,7 @@ watch(
         engine: filters.engine,
         node_id: filters.node,
         cwd: filters.dir,
-        title: meshLive.title || "New chat",
+        title: meshLive.title || t("chat.new"),
         live: true,
         updated_at: Math.floor(Date.now() / 1000),
       } as Session);
@@ -787,8 +794,8 @@ onBeforeUnmount(() => {
           v-if="meshSettings"
           type="button"
           class="ghost mesh-theme-btn"
-          title="Node settings"
-          aria-label="Node settings"
+          :title="t('nav.nodeSettings')"
+          :aria-label="t('nav.nodeSettings')"
           @click="settingsOpen = true"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -804,8 +811,8 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="ghost mesh-theme-btn"
-          :title="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
-          :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+          :title="theme === 'dark' ? t('nav.themeLight') : t('nav.themeDark')"
+          :aria-label="theme === 'dark' ? t('nav.themeLight') : t('nav.themeDark')"
           @click="flipTheme"
         >
           <svg v-if="theme === 'dark'" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -826,10 +833,19 @@ onBeforeUnmount(() => {
             />
           </svg>
         </button>
+        <button
+          type="button"
+          class="ghost mesh-theme-btn mesh-locale-btn"
+          :title="localeButtonTitle(localePref)"
+          :aria-label="localeButtonTitle(localePref)"
+          @click="cycleLocale"
+        >
+          <span>{{ localeButtonLabel(localePref) }}</span>
+        </button>
         <form method="post" action="/logout">
-          <button type="submit" class="ghost">Sign out</button>
+          <button type="submit" class="ghost">{{ t("nav.signOut") }}</button>
         </form>
-        <button type="button" class="ghost mesh-nav-close" aria-label="Close sidebar" @click="closeNav">
+        <button type="button" class="ghost mesh-nav-close" :aria-label="t('nav.closeSidebar')" @click="closeNav">
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
@@ -844,7 +860,7 @@ onBeforeUnmount(() => {
           aria-controls="mesh-node-cards"
           @click="picksOpen.node = !picksOpen.node"
         >
-          <span class="mesh-pick-kicker">Node</span>
+          <span class="mesh-pick-kicker">{{ t("nav.node") }}</span>
           <span class="mesh-pick-current">{{ nodePickLabel }}</span>
           <svg class="mesh-pick-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M4.2 2.4 8.4 6 4.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -861,7 +877,7 @@ onBeforeUnmount(() => {
           >
             {{ nodeName(n.id, n.name) }}
           </button>
-          <div v-if="!catalog.nodes.length" class="mesh-pick-empty">Connect a node to get started</div>
+          <div v-if="!catalog.nodes.length" class="mesh-pick-empty">{{ t("nav.connectNode") }}</div>
         </div>
         <button
           type="button"
@@ -871,7 +887,7 @@ onBeforeUnmount(() => {
           aria-controls="mesh-engine-cards"
           @click="picksOpen.engine = !picksOpen.engine"
         >
-          <span class="mesh-pick-kicker">Engine</span>
+          <span class="mesh-pick-kicker">{{ t("nav.engine") }}</span>
           <span class="mesh-pick-current">{{ enginePickLabel }}</span>
           <svg class="mesh-pick-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M4.2 2.4 8.4 6 4.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -895,23 +911,23 @@ onBeforeUnmount(() => {
         <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
-        New chat
+        {{ t("nav.newChat") }}
       </button>
       <div class="mesh-drawer-toolbar">
-        <span>Chat</span>
-        <button class="ghost" type="button" @click="refreshCatalog">Refresh</button>
+        <span>{{ t("nav.chat") }}</span>
+        <button class="ghost" type="button" @click="refreshCatalog">{{ t("nav.refresh") }}</button>
       </div>
       <div class="mesh-threads">
-        <div v-for="g in sessionGroups" :key="g.label" class="mesh-time-group">
+        <div v-for="g in sessionGroups" :key="g.key" class="mesh-time-group">
           <div class="mesh-time-label">{{ g.label }}</div>
           <button
-            v-if="creating && !selected?.id && g.label === 'Today'"
+            v-if="creating && !selected?.id && g.key === 'today'"
             type="button"
             class="mesh-thread sel"
             :class="{ live: chatStreaming }"
           >
             <span v-if="chatStreaming" class="mesh-lamp" aria-hidden="true"></span>
-            <span class="mesh-thread-name">{{ meshLive.title || "New chat" }}</span>
+            <span class="mesh-thread-name">{{ meshLive.title || t("chat.new") }}</span>
           </button>
           <button
             v-for="s in g.items"
@@ -925,10 +941,10 @@ onBeforeUnmount(() => {
             @click="openSession(s)"
           >
             <span v-if="sessionStreaming(s)" class="mesh-lamp" aria-hidden="true"></span>
-            <span class="mesh-thread-name">{{ s.title || "Untitled chat" }}</span>
+            <span class="mesh-thread-name">{{ s.title || t("nav.untitled") }}</span>
           </button>
         </div>
-        <div v-if="!sessionRows.length && !creating" class="mesh-empty">No chats yet. Start one above.</div>
+        <div v-if="!sessionRows.length && !creating" class="mesh-empty">{{ t("nav.noChats") }}</div>
       </div>
     </aside>
     <section class="mesh-chat">
@@ -936,8 +952,8 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="ghost mesh-nav-toggle"
-          :aria-label="navOpen ? 'Hide sidebar' : 'Show sidebar'"
-          :title="navOpen ? 'Hide sidebar' : 'Show sidebar'"
+          :aria-label="navOpen ? t('nav.hideSidebar') : t('nav.showSidebar')"
+          :title="navOpen ? t('nav.hideSidebar') : t('nav.showSidebar')"
           @click="toggleNav"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -949,37 +965,37 @@ onBeforeUnmount(() => {
           type="button"
           class="mesh-chat-title"
           :class="{ live: liveHint === 'live', copied: copied, ended: turnEnded }"
-          :title="copied ? 'Copied title and session id' : 'Copy title and session id'"
-          :aria-label="copied ? 'Copied title and session id' : 'Copy title and session id'"
+          :title="copied ? t('chat.copiedTitle') : t('chat.copyTitle')"
+          :aria-label="copied ? t('chat.copiedTitle') : t('chat.copyTitle')"
           @click="copyTitle"
         >
           <span
             v-if="liveHint === 'live'"
             class="mesh-lamp"
             role="status"
-            aria-label="Streaming"
+            :aria-label="t('chat.streaming')"
           ></span>
           <span
             v-else-if="turnEnded"
             class="mesh-ended"
             role="status"
-            aria-label="Done"
-          >Done</span>
-          <span class="mesh-chat-title-text">{{ copied ? "Copied" : chatTitle }}</span>
+            :aria-label="t('chat.done')"
+          >{{ t("chat.done") }}</span>
+          <span class="mesh-chat-title-text">{{ copied ? t("chat.copied") : chatTitle }}</span>
         </button>
         <button
           type="button"
           class="ghost mesh-diff-toggle"
           :class="{ on: diffOpen }"
-          title="View project diff"
-          aria-label="View project diff"
+          :title="t('chat.viewDiff')"
+          :aria-label="t('chat.viewDiff')"
           @click="diffOpen = !diffOpen"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 3.5h8M4 8h5.5M4 12.5h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
             <path d="M11.2 6.2 13 8l-1.8 1.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          Diff
+          {{ t("chat.diff") }}
         </button>
       </div>
       <MeshDiffPanel :open="diffOpen" @close="diffOpen = false" />
@@ -993,7 +1009,7 @@ onBeforeUnmount(() => {
         >
           <template #welcome-message>
             <div class="mesh-welcome">
-              <h1>How can I help?</h1>
+              <h1>{{ t("chat.welcome") }}</h1>
               <p>{{ welcomeHint }}</p>
             </div>
           </template>
@@ -1019,7 +1035,7 @@ onBeforeUnmount(() => {
                   type="button"
                   class="mesh-copy"
                   :aria-label="label"
-                  :title="copied ? 'Copied' : label"
+                  :title="copied ? t('chat.copied') : label"
                   @click="onCopy"
                 >
                   <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1052,7 +1068,7 @@ onBeforeUnmount(() => {
               type="button"
               class="mesh-copy"
               :aria-label="label"
-              :title="copied ? 'Copied' : label"
+              :title="copied ? t('chat.copied') : label"
               @click="onCopy"
             >
               <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1092,7 +1108,7 @@ onBeforeUnmount(() => {
                     </svg>
                     <span>{{ modelLabel(filters.model) }}</span>
                   </button>
-                  <div v-if="openPick === 'model'" class="mesh-pop" role="listbox" aria-label="Pick a model">
+                  <div v-if="openPick === 'model'" class="mesh-pop" role="listbox" :aria-label="t('chat.pickModel')">
                     <button
                       v-for="m in modelOptions"
                       :key="m.id"
@@ -1103,14 +1119,14 @@ onBeforeUnmount(() => {
                     >
                       {{ modelLabel(m.id) }}
                     </button>
-                    <div v-if="!modelOptions.length" class="mesh-pop-empty">No models</div>
+                    <div v-if="!modelOptions.length" class="mesh-pop-empty">{{ t("chat.noModels") }}</div>
                   </div>
                 </div>
                 <div class="mesh-chip">
                   <button
                     type="button"
                     class="mesh-chip-btn is-dir"
-                    :title="filters.dir || 'Pick a working directory'"
+                    :title="filters.dir || t('chat.pickDir')"
                     @click.stop="togglePick('dir')"
                   >
                     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1121,9 +1137,9 @@ onBeforeUnmount(() => {
                         stroke-linejoin="round"
                       />
                     </svg>
-                    <span>{{ filters.dir ? dirBase(filters.dir) : "Workspace" }}</span>
+                    <span>{{ filters.dir ? dirBase(filters.dir) : t("chat.workspace") }}</span>
                   </button>
-                  <div v-if="openPick === 'dir'" class="mesh-pop" role="listbox" aria-label="Pick a working directory">
+                  <div v-if="openPick === 'dir'" class="mesh-pop" role="listbox" :aria-label="t('chat.pickDir')">
                     <button
                       v-for="d in dirOptions"
                       :key="(d.node_id || '') + d.path + (d.engine || '')"
@@ -1135,7 +1151,7 @@ onBeforeUnmount(() => {
                     >
                       <span class="mesh-pop-dir">{{ d.path }}</span>
                     </button>
-                    <div v-if="!dirOptions.length" class="mesh-pop-empty">No workspaces</div>
+                    <div v-if="!dirOptions.length" class="mesh-pop-empty">{{ t("chat.noWorkspaces") }}</div>
                   </div>
                 </div>
               </div>
@@ -1184,8 +1200,8 @@ onBeforeUnmount(() => {
       <div class="mesh-link-card">
         <span class="mesh-lamp mesh-link-lamp" aria-hidden="true"></span>
         <p class="mesh-link-title">{{ linkHint }}</p>
-        <p class="mesh-link-copy">Once connected, chats, directories, and live progress refresh on their own.</p>
-        <button type="button" class="mesh-link-reload" @click="reloadPage">Reload</button>
+        <p class="mesh-link-copy">{{ t("link.copy") }}</p>
+        <button type="button" class="mesh-link-reload" @click="reloadPage">{{ t("link.reload") }}</button>
       </div>
     </div>
     <MeshSettings v-model:open="settingsOpen" />

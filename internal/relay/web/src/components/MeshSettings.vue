@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from "vue";
 import { fetchJSON } from "../http";
+import { t } from "../locale";
 import { showToast, toastError } from "../toast";
 
 export type MeshSettingsState = {
@@ -29,7 +30,7 @@ async function load(): Promise<void> {
   loading.value = true;
   try {
     const resp = await fetchJSON("/v1/openai/mesh", { credentials: "same-origin" }, 8000);
-    if (!resp.ok) throw new Error("settings unavailable");
+    if (!resp.ok) throw new Error(t("settings.unavailable"));
     const st = (await resp.json()) as MeshSettingsState;
     form.relay = (st.relays || []).join(", ");
     form.password = st.password || "";
@@ -69,10 +70,10 @@ async function testLink(): Promise<void> {
     linked.value = !!mesh.linked;
     linkError.value = mesh.link_error || data.error || "";
     if (!resp.ok || data.ok === false) {
-      showToast(linkError.value || "Relay unreachable", "error");
+      showToast(linkError.value || t("settings.unreachable"), "error");
       return;
     }
-    showToast("Relay reachable", "info");
+    showToast(t("settings.reachable"), "info");
   } catch (err) {
     toastError(err);
   } finally {
@@ -101,10 +102,10 @@ async function save(): Promise<void> {
     linked.value = !!mesh.linked;
     linkError.value = mesh.link_error || data.error || "";
     if (!resp.ok || data.ok === false) {
-      showToast(linkError.value || "Could not save relay settings", "error");
+      showToast(linkError.value || t("settings.saveFailed"), "error");
       return;
     }
-    showToast(linked.value ? "Relay saved and linked" : "Relay settings saved", "info");
+    showToast(linked.value ? t("settings.savedLinked") : t("settings.saved"), "info");
     open.value = false;
   } catch (err) {
     toastError(err);
@@ -124,19 +125,19 @@ onMounted(() => {
 
 <template>
   <div v-if="open" class="mesh-settings-mask" @click.self="open = false">
-    <section class="mesh-settings" role="dialog" aria-modal="true" aria-label="Node settings">
+    <section class="mesh-settings" role="dialog" aria-modal="true" :aria-label="t('settings.title')">
       <header class="mesh-settings-head">
         <div>
-          <h2>Node settings</h2>
-          <p class="mesh-settings-sub">Connect this machine to a relay</p>
+          <h2>{{ t("settings.title") }}</h2>
+          <p class="mesh-settings-sub">{{ t("settings.sub") }}</p>
         </div>
-        <button type="button" class="ghost" aria-label="Close settings" @click="open = false">Close</button>
+        <button type="button" class="ghost" :aria-label="t('settings.close')" @click="open = false">{{ t("settings.close") }}</button>
       </header>
 
-      <div v-if="loading" class="mesh-settings-status">Loading…</div>
+      <div v-if="loading" class="mesh-settings-status">{{ t("settings.loading") }}</div>
       <form v-else class="mesh-settings-form" @submit.prevent="save">
         <label>
-          <span>Relay URL</span>
+          <span>{{ t("settings.relayUrl") }}</span>
           <input
             v-model="form.relay"
             type="url"
@@ -146,11 +147,11 @@ onMounted(() => {
           />
         </label>
         <label>
-          <span>Relay password</span>
-          <input v-model="form.password" type="password" placeholder="Optional shared password" autocomplete="off" />
+          <span>{{ t("settings.relayPassword") }}</span>
+          <input v-model="form.password" type="password" :placeholder="t('settings.passwordPlaceholder')" autocomplete="off" />
         </label>
         <label>
-          <span>Advertise URL</span>
+          <span>{{ t("settings.advertise") }}</span>
           <input
             v-model="form.advertise"
             type="url"
@@ -161,17 +162,17 @@ onMounted(() => {
         </label>
 
         <div class="mesh-settings-status" :class="{ ok: linked, bad: !linked && !!linkError }">
-          <span v-if="linked">Linked to relay</span>
+          <span v-if="linked">{{ t("settings.linked") }}</span>
           <span v-else-if="linkError">{{ linkError }}</span>
-          <span v-else>Direct mode (no relay)</span>
+          <span v-else>{{ t("settings.direct") }}</span>
         </div>
 
         <div class="mesh-settings-actions">
           <button type="button" class="ghost" :disabled="testing || saving" @click="testLink">
-            {{ testing ? "Testing…" : "Test connection" }}
+            {{ testing ? t("settings.testing") : t("settings.test") }}
           </button>
           <button type="submit" class="mesh-settings-save" :disabled="saving || testing">
-            {{ saving ? "Saving…" : "Save" }}
+            {{ saving ? t("settings.saving") : t("settings.save") }}
           </button>
         </div>
       </form>

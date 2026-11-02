@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { dropFollowup, meshFollow, pullLastFollowup } from "../followup";
+import { t } from "../locale";
 
 const props = defineProps<{
   running: boolean;
@@ -25,16 +26,16 @@ async function editLast(): Promise<void> {
 </script>
 
 <template>
-  <div v-if="meshFollow.items.length" class="mesh-follow" role="region" aria-label="follow-ups">
+  <div v-if="meshFollow.items.length" class="mesh-follow" role="region" :aria-label="t('followups.label')">
     <div class="mesh-follow-head">
-      <span class="mesh-follow-kicker">follow-ups</span>
+      <span class="mesh-follow-kicker">{{ t("followups.label") }}</span>
       <button
         v-if="canStop && running"
         type="button"
         class="mesh-follow-stop"
         @click="emit('stop')"
       >
-        Stop
+        {{ t("followups.stop") }}
       </button>
     </div>
     <button
@@ -42,14 +43,14 @@ async function editLast(): Promise<void> {
       :key="item.id"
       type="button"
       class="mesh-follow-item"
-      :title="'Edit this follow-up'"
+      :title="t('followups.editTitle')"
       @click="edit(item.id)"
     >
       <span class="mesh-follow-dot" aria-hidden="true"></span>
       <span class="mesh-follow-text">{{ item.text }}</span>
     </button>
     <div class="mesh-follow-foot">
-      <button type="button" class="mesh-follow-hint" @click="editLast">↑ Edit</button>
+      <button type="button" class="mesh-follow-hint" @click="editLast">{{ t("followups.edit") }}</button>
       <p v-if="meshFollow.error" class="mesh-follow-err">{{ meshFollow.error }}</p>
     </div>
   </div>

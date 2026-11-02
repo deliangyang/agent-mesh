@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import { router } from "./router";
+import { applyLocale } from "./locale";
 import { applyTheme, loadTheme } from "./theme";
 import "@copilotkit/vue/styles.css";
 import "./style.css";
@@ -32,4 +33,5 @@ function lockPageZoom(): void {
 
 lockPageZoom();
 applyTheme(loadTheme());
+applyLocale();
 createApp(App).use(router).mount("#app");

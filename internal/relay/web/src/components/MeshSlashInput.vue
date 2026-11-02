@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CopilotChatInput } from "@copilotkit/vue/v2";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { t } from "../locale";
 import type { SlashItem } from "../types";
 
 type InputMode = "input" | "transcribe" | "processing";
@@ -87,8 +88,8 @@ watch(
 );
 
 function kindLabel(kind: string): string {
-  if (kind === "skill") return "skill";
-  return "command";
+  if (kind === "skill") return t("slash.skill");
+  return t("slash.command");
 }
 
 function fillText(item: SlashItem): string {
@@ -112,7 +113,7 @@ function onKey(ev: KeyboardEvent): void {
   ) {
     ev.preventDefault();
     ev.stopPropagation();
-    submit("Please look at the attachments.");
+    submit(t("agent.lookAttachments"));
     return;
   }
   if (
@@ -303,7 +304,7 @@ function onSend(orig: () => void): void {
     return;
   }
   if (!(props.modelValue || "").trim() && hasFiles.value) {
-    props.onUpdateModelValue("Please look at the attachments.");
+    props.onUpdateModelValue(t("agent.lookAttachments"));
     void nextTick(() => orig());
     return;
   }
@@ -362,8 +363,8 @@ function onSend(orig: () => void): void {
             :class="{ 'is-stop': showStop }"
             :data-testid="showStop ? 'copilot-chat-input-stop' : 'copilot-chat-input-send'"
             :disabled="showStop ? false : disabled && !hasFiles"
-            :aria-label="showStop ? 'Stop' : 'Send'"
-            :title="showStop ? 'Stop' : 'Send'"
+            :aria-label="showStop ? t('slash.stop') : t('slash.send')"
+            :title="showStop ? t('slash.stop') : t('slash.send')"
             @click="onSend(onClick)"
           >
             <svg v-if="showStop" viewBox="0 0 16 16" fill="none" aria-hidden="true">

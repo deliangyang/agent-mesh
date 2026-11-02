@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t } from "../locale";
+
 defineProps<{
   mode?: "think" | "live";
 }>();
@@ -10,11 +12,11 @@ defineProps<{
     :data-mode="mode || 'think'"
     role="status"
     aria-live="polite"
-    :aria-label="mode === 'live' ? 'In progress' : 'Thinking'"
+    :aria-label="mode === 'live' ? t('think.inProgress') : t('think.thinking')"
   >
     <template v-if="mode === 'live'">
       <span class="mesh-lamp" aria-hidden="true"></span>
-      <span>In progress</span>
+      <span>{{ t("think.inProgress") }}</span>
     </template>
     <template v-else>
       <svg class="mesh-think-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -26,7 +28,7 @@ defineProps<{
           stroke-linecap="round"
         />
       </svg>
-      <span>Thinking</span>
+      <span>{{ t("think.thinking") }}</span>
     </template>
   </div>
 </template>

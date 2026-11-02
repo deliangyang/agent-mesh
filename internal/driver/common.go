@@ -1363,11 +1363,16 @@ func LastTurns(evs []protocol.Event, n int) []protocol.Event {
 
 // Recent whether the file changed in the last 20 seconds.
 func Recent(path string) bool {
+	return RecentWithin(path, 20*time.Second)
+}
+
+// RecentWithin whether the file changed within d.
+func RecentWithin(path string, d time.Duration) bool {
 	st, err := os.Stat(path)
 	if err != nil {
 		return false
 	}
-	return time.Since(st.ModTime()) <= 20*time.Second
+	return time.Since(st.ModTime()) <= d
 }
 
 // FileExists whether the path exists.

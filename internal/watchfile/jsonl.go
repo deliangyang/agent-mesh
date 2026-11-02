@@ -4,54 +4,97 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"time"
 )
 
 // PollJSONL follows new jsonl lines until ctx is canceled.
+//
+// It reopens the file each poll so Windows writers that lock or replace the
+// file still surface new lines (a long-lived handle often stalls at EOF).
 func PollJSONL(ctx context.Context, path string, fromEnd bool, interval time.Duration) (<-chan map[string]any, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+	if interval <= 0 {
+		interval = 300 * time.Millisecond
 	}
+	offset := int64(0)
 	if fromEnd {
-		if _, err := f.Seek(0, 2); err != nil {
-			f.Close()
+		if st, err := os.Stat(path); err != nil {
 			return nil, err
+		} else {
+			offset = st.Size()
 		}
+	} else if _, err := os.Stat(path); err != nil {
+		return nil, err
 	}
 	out := make(chan map[string]any, 32)
 	go func() {
 		defer close(out)
-		defer f.Close()
-		r := bufio.NewReader(f)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
-			line, err := r.ReadBytes('\n')
-			if len(line) > 0 {
-				var obj map[string]any
-				if json.Unmarshal(trimNL(line), &obj) == nil {
-					select {
-					case out <- obj:
-					case <-ctx.Done():
-						return
-					}
-				}
+			next, err := readNewJSONL(path, offset, out, ctx)
+			if err == nil {
+				offset = next
 			}
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(interval):
-				}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(interval):
 			}
 		}
 	}()
 	return out, nil
+}
+
+func readNewJSONL(path string, offset int64, out chan<- map[string]any, ctx context.Context) (int64, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return offset, err
+	}
+	size := st.Size()
+	if size < offset {
+		// truncated or replaced
+		offset = 0
+	}
+	if size == offset {
+		return offset, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return offset, err
+	}
+	defer f.Close()
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return offset, err
+	}
+	r := bufio.NewReader(f)
+	pos := offset
+	for {
+		line, err := r.ReadBytes('\n')
+		if len(line) > 0 {
+			// Keep incomplete trailing lines for the next poll.
+			if err == io.EOF && (len(line) == 0 || line[len(line)-1] != '\n') {
+				break
+			}
+			pos += int64(len(line))
+			var obj map[string]any
+			if json.Unmarshal(trimNL(line), &obj) == nil {
+				select {
+				case out <- obj:
+				case <-ctx.Done():
+					return pos, ctx.Err()
+				}
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return pos, nil
 }
 
 func trimNL(b []byte) []byte {

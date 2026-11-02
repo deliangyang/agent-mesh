@@ -2561,6 +2561,27 @@ html.dark #app {
   font-weight: 500;
 }
 
+.mesh-health-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.mesh-health-node {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mesh-health-node:hover .mesh-health-name {
+  color: var(--signal);
+}
+
 .mesh-health-name {
   display: block;
   color: var(--ink);
@@ -2575,11 +2596,23 @@ html.dark #app {
 }
 
 .mesh-health-cell {
-  display: inline-block;
-  min-width: 1.2em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6em;
+  min-height: 1.6em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-size: 14px;
   line-height: 1;
   color: var(--mute);
+  cursor: pointer;
+}
+
+.mesh-health-cell:hover {
+  background: color-mix(in srgb, var(--signal) 12%, transparent);
 }
 
 .mesh-health-cell.ok {

@@ -16,6 +16,7 @@ import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
 import { formatEngineInstall } from "../engineInstall";
+import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
@@ -411,6 +412,17 @@ function pickEngine(name: string): void {
   ensureWorkDir();
   if (next) openLatestSessionOrNew();
   picksOpen.engine = false;
+}
+
+function onHealthPick(p: { nodeId: string; engine?: string }): void {
+  const next = resolveHealthPick(catalog.engines, p.nodeId, p.engine);
+  filters.node = next.node;
+  filters.engine = next.engine;
+  syncModelToEngine();
+  ensureWorkDir();
+  if (filters.engine) openLatestSessionOrNew();
+  else syncQuery(selected.value);
+  settingsOpen.value = false;
 }
 
 function ensureWorkDir(): void {
@@ -1245,6 +1257,6 @@ onBeforeUnmount(() => {
         <button type="button" class="mesh-link-reload" @click="reloadPage">{{ t("link.reload") }}</button>
       </div>
     </div>
-    <MeshSettings v-model:open="settingsOpen" />
+    <MeshSettings v-model:open="settingsOpen" @pick="onHealthPick" />
   </div>
 </template>

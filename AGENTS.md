@@ -26,6 +26,8 @@ deploy/systemd    systemd units for relay / node (written by install-*.sh)
 deploy/launchd    macOS launchd plists for relay / node
 deploy/desktop    Linux .desktop launcher for the node
 scripts           install-relay.sh / install-node.sh, setup, and release packaging
+docs/windows.md   Windows node zip, tray, and logon startup
+docs/windows.zh-CN.md  same, in Chinese
 ```
 
 ## Trust boundary

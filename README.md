@@ -14,7 +14,7 @@ A node runs next to the engines. A relay only routes. The web UI and the desktop
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![CI](https://github.com/deliangyang/agent-mesh/actions/workflows/ci.yml/badge.svg)
 
-**[Install](#quick-start)** · **[Docs](AGENTS.md)** · **English** · [简体中文](README.zh-CN.md)
+**[Install](#quick-start)** · **[Windows](docs/windows.md)** · **[Docs](AGENTS.md)** · **English** · [简体中文](README.zh-CN.md)
 
 <p align="center">
   <img src="docs/screenshots/desktop.png" alt="Desktop chat: node, engine, sessions, and composer" width="920">
@@ -66,6 +66,8 @@ curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts
 
 Linux installs a systemd unit (`enable --now`). macOS installs a launchd plist (`RunAtLoad` + `KeepAlive`). A graphical session also gets a Linux `.desktop` file or a macOS `Agent Mesh.app`. A character console (SSH with no `DISPLAY` / `WAYLAND_DISPLAY`) installs **headless** and asks for the relay URL (`MESH_RELAY`); press Enter to keep the default, or edit `~/.agent-mesh/node.env` later. Force either mode with `--headless` or `--desktop`. Pass `--no-service` to skip the boot unit.
 
+**Windows node:** there is no `install-node.sh`. Download the Release zip (or `make node-windows`) and follow **[Windows](docs/windows.md)**. Double-click `mesh-node.exe` for a tray app; pass `-relay` in a shortcut to join a relay.
+
 If GitHub Releases are unreachable (common on some networks in China), set a mirror prefix:
 
 ```sh
@@ -105,7 +107,7 @@ Environment: `MESH_RELAY` `MESH_DIRECT` `MESH_NODE` `MESH_PASSWORD` `MESH_ADVERT
 
 Claude Code · Cursor Agent · Codex · OpenCode · Pi · WorkBuddy · Qoder CN
 
-The node only lists engines installed on that machine. On Windows it looks in `PATH`, `%USERPROFILE%\.local\bin`, and `%APPDATA%\npm` (plus `.exe` / `.cmd`). Double-click `mesh-node-windows-amd64.exe` to run it with a tray icon: left-click opens the UI and does not quit; right-click **退出** stops the node. Anything that speaks OpenAI chat completions can also call the node or relay:
+The node only lists engines installed on that machine. On Windows it looks in `PATH`, `%USERPROFILE%\.local\bin`, and `%APPDATA%\npm` (plus `.exe` / `.cmd`). See **[Windows](docs/windows.md)** for zip install, tray, and logon startup. Anything that speaks OpenAI chat completions can also call the node or relay:
 
 ```sh
 export OPENAI_BASE_URL=http://127.0.0.1:7700/v1
@@ -176,6 +178,7 @@ CI builds and tests on every push. A `v*` tag publishes release archives from `.
 | `~/.agent-mesh/node.env` | node service: `MESH_PASSWORD`, `MESH_RELAY`, listen flags |
 | `~/.agent-mesh/relay.env` | relay service: `MESH_PASSWORD`, `MESH_LISTEN` |
 | `~/.agent-mesh/followups` | queued follow-up messages |
+| `%USERPROFILE%\.agent-mesh` | Windows home for the same files (`node.key`, `node.log`) |
 | `deploy/systemd` | systemd units written by `install-relay.sh` / `install-node.sh` |
 | `deploy/launchd` | macOS launchd plists for the same services |
 | `deploy/desktop` | Linux `.desktop` launcher for the node |

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"agent-mesh/internal/driver"
@@ -20,7 +21,9 @@ import (
 
 // Driver drives the local WorkBuddy CLI gateway.
 type Driver struct {
-	root string
+	root  string
+	mu    sync.Mutex
+	serve *meshServe
 }
 
 // New creates the driver.
@@ -262,9 +265,7 @@ func (d *Driver) modelsFromGateway(ctx context.Context) ([]protocol.Model, error
 			last = err
 			continue
 		}
-		if gw.Password != "" {
-			req.Header.Set("Authorization", "Bearer "+gw.Password)
-		}
+		setGatewayHeaders(req, gw)
 		resp, err := cli.Do(req)
 		if err != nil {
 			last = err
@@ -482,67 +483,42 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 }
 
 func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
-	gws := d.discover()
-	if len(gws) == 0 {
-		return nil, fmt.Errorf("no live workbuddy gateway")
+	return d.promptSession(ctx, d.sessionCWD(sessionID), sessionID, text, model)
+}
+
+func (d *Driver) sessionCWD(sessionID string) string {
+	path := d.findJSONL(sessionID)
+	if path == "" {
+		return ""
 	}
-	gw := gws[0]
-	// watch jsonl first so live lines are not lost during the reply round-trip.
-	watchCtx, cancelWatch := context.WithCancel(ctx)
-	ch, watchErr := d.Watch(watchCtx, sessionID)
-	body := map[string]string{"text": text}
-	if name := driver.CLIModel(model, d.Name()); name != "" {
-		body["model"] = name
-	}
-	raw, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gw.URL+"/api/v1/sessions/"+sessionID+"/reply", bytes.NewReader(raw))
-	if err != nil {
-		cancelWatch()
-		return nil, err
-	}
-	if gw.Password != "" {
-		req.Header.Set("Authorization", "Bearer "+gw.Password)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	cli := &http.Client{Timeout: 15 * time.Second}
-	resp, err := cli.Do(req)
-	if err != nil {
-		cancelWatch()
-		return nil, fmt.Errorf("live reply: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		cancelWatch()
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("live reply http %d: %s", resp.StatusCode, b)
-	}
-	if watchErr != nil {
-		cancelWatch()
-		out := make(chan protocol.Event, 1)
-		out <- protocol.Event{Type: "log", Text: "appended via live reply", Session: sessionID, Engine: d.Name(), Done: true}
-		close(out)
-		return out, nil
-	}
-	go func() {
-		<-ctx.Done()
-		cancelWatch()
-	}()
-	return ch, nil
+	var cwd string
+	_ = watchfile.TailJSONL(path, 40, func(obj map[string]any) {
+		if s, _ := obj["cwd"].(string); s != "" {
+			cwd = s
+		}
+	})
+	return cwd
 }
 
 func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	if resume != "" {
 		return d.Reply(ctx, resume, text, model)
 	}
-	gws := d.discover()
-	if len(gws) == 0 {
-		return nil, fmt.Errorf("no live workbuddy gateway")
+	if cwd == "" {
+		return nil, fmt.Errorf("pick a working directory")
 	}
-	gw := gws[0]
+	return d.promptSession(ctx, cwd, "", text, model)
+}
+
+func (d *Driver) promptSession(ctx context.Context, cwd, resume, text, model string) (<-chan protocol.Event, error) {
+	gw, err := d.ensureGateway(ctx, cwd, resume)
+	if err != nil {
+		return nil, err
+	}
 	if cwd == "" {
 		cwd = gw.CWD
 	}
-	if cwd == "" {
+	if cwd == "" && resume == "" {
 		return nil, fmt.Errorf("pick a working directory")
 	}
 	acp, err := newACP(ctx, gw)
@@ -557,6 +533,9 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 		return nil, fmt.Errorf("acp initialize: %w", err)
 	}
 	newParams := map[string]any{"cwd": cwd, "mcpServers": []any{}}
+	if cwd == "" {
+		newParams["cwd"] = gw.CWD
+	}
 	if name := driver.CLIModel(model, d.Name()); name != "" {
 		newParams["model"] = name
 	}
@@ -565,6 +544,9 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 		return nil, fmt.Errorf("session/new: %w", err)
 	}
 	sid, _ := res["sessionId"].(string)
+	if sid == "" {
+		sid = resume
+	}
 	if sid == "" {
 		return nil, fmt.Errorf("session/new did not return sessionId")
 	}

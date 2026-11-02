@@ -7,11 +7,13 @@ import MeshAskCard from "../components/MeshAskCard.vue";
 import MeshAttachQueue from "../components/MeshAttachQueue.vue";
 import MeshDiffPanel from "../components/MeshDiffPanel.vue";
 import MeshFollowups from "../components/MeshFollowups.vue";
+import MeshSettings from "../components/MeshSettings.vue";
 import MeshSlashInput from "../components/MeshSlashInput.vue";
 import MeshThinkWindow from "../components/MeshThinkWindow.vue";
 import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
+import { fetchJSON } from "../http";
 import { engineEmptyHint, nodeEngines } from "../engineCards";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
@@ -37,9 +39,25 @@ const theme = ref(loadTheme());
 const navOpen = ref(typeof window !== "undefined" && window.matchMedia("(min-width: 861px)").matches);
 const openPick = ref("");
 const diffOpen = ref(false);
+const settingsOpen = ref(false);
+const meshSettings = ref(false);
 const picksOpen = reactive({ node: false, engine: false });
 const composerGuarded = ref(false);
 let composerGuardTimer = 0;
+
+async function detectMeshSettings(): Promise<void> {
+  try {
+    const resp = await fetchJSON("/v1/openai/mesh", { credentials: "same-origin" }, 4000);
+    if (!resp.ok) {
+      meshSettings.value = false;
+      return;
+    }
+    const st = await resp.json();
+    meshSettings.value = !!st?.local;
+  } catch {
+    meshSettings.value = false;
+  }
+}
 
 function flipTheme(): void {
   theme.value = toggleTheme();
@@ -714,6 +732,7 @@ let cursorObs: MutationObserver | null = null;
 onMounted(() => {
   hydrateFromQuery();
   connectCatalog();
+  void detectMeshSettings();
   document.addEventListener("click", onDocClick);
   window.addEventListener("mesh-link-up", onLinkUp);
   hideKitCursor();
@@ -764,6 +783,24 @@ onBeforeUnmount(() => {
           </svg>
           <span class="mesh-brand-word">Mesh</span>
         </div>
+        <button
+          v-if="meshSettings"
+          type="button"
+          class="ghost mesh-theme-btn"
+          title="Node settings"
+          aria-label="Node settings"
+          @click="settingsOpen = true"
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4" />
+            <path
+              d="M8 1.7v1.3M8 13v1.3M1.7 8h1.3M13 8h1.3M3.2 3.2l.9.9M12 12l.9.9M3.2 12.8l.9-.9M12 4l.9-.9"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
         <button
           type="button"
           class="ghost mesh-theme-btn"
@@ -1151,5 +1188,6 @@ onBeforeUnmount(() => {
         <button type="button" class="mesh-link-reload" @click="reloadPage">Reload</button>
       </div>
     </div>
+    <MeshSettings v-model:open="settingsOpen" />
   </div>
 </template>

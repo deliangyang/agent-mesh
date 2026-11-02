@@ -23,10 +23,9 @@ import (
 
 // App is the desktop backend: local node plus engine/session/model controls.
 type App struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	regCancel context.CancelFunc
-	log       *slog.Logger
+	ctx    context.Context
+	cancel context.CancelFunc
+	log    *slog.Logger
 
 	mu        sync.Mutex
 	ident     *e2e.Identity
@@ -127,6 +126,19 @@ func (a *App) startup(ctx context.Context) {
 	if a.advertise == "" {
 		a.advertise = node.GuessAdvertise(listen)
 	}
+	savedMesh := node.LoadMeshFile()
+	if len(a.relays) == 0 {
+		a.relays = savedMesh.Relays
+	}
+	if a.password == "" {
+		a.password = savedMesh.Password
+	}
+	if a.advertise == "" {
+		a.advertise = savedMesh.Advertise
+	}
+	if a.advertise == "" {
+		a.advertise = node.GuessAdvertise(listen)
+	}
 	a.cfg.Relays = a.relays
 	a.cfg.Password = a.password
 	a.cfg.Advertise = a.advertise
@@ -138,9 +150,9 @@ func (a *App) startup(ctx context.Context) {
 			a.log.Error("node serve", "err", err)
 		}
 	}()
-	a.startRegister()
+	srv.StartMesh(a.ctx, a.relays, a.advertise, a.password)
 	if len(a.relays) > 0 {
-		go a.linkOnce()
+		go func() { _ = srv.ProbeMesh(a.ctx, a.relays, a.advertise, a.password) }()
 	}
 	go a.forwardChunks()
 }
@@ -177,24 +189,28 @@ func (a *App) forwardChunks() {
 // NodeStatus is local node info.
 func (a *App) NodeStatus() Status {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	listen := a.listen
+	ident := a.ident
+	srv := a.srv
+	a.mu.Unlock()
 	st := Status{
-		Listen:    a.listen,
-		Advertise: a.advertise,
-		Relays:    a.relays,
-		Password:  a.password,
-		OpenAI:    "http://" + a.listen + "/v1",
-		WS:        "ws://" + a.listen + "/v1/openai/ws",
-		Linked:    a.relayOK,
-		LinkError: a.relayErr,
+		Listen: listen,
+		OpenAI: "http://" + listen + "/v1",
+		WS:     "ws://" + listen + "/v1/openai/ws",
 	}
-	if a.ident != nil {
-		st.NodeID = a.ident.ID
+	if ident != nil {
+		st.NodeID = ident.ID
 	}
-	if a.srv != nil {
-		info := a.srv.Info()
+	if srv != nil {
+		info := srv.Info()
 		st.Name = info.Name
 		st.Engines = info.Engines
+		mesh := srv.MeshStatus()
+		st.Advertise = mesh.Advertise
+		st.Relays = mesh.Relays
+		st.Password = mesh.Password
+		st.Linked = mesh.Linked
+		st.LinkError = mesh.LinkError
 	}
 	return st
 }
@@ -306,95 +322,40 @@ func (a *App) Directories() []protocol.WorkDir {
 
 // SetMesh sets relay, password, and public URL.
 func (a *App) SetMesh(relay, password, advertise string) error {
-	var relays []string
-	for _, p := range strings.Split(relay, ",") {
-		p = strings.TrimRight(strings.TrimSpace(p), "/")
-		if p != "" {
-			relays = append(relays, p)
-		}
+	if a.srv == nil {
+		return fmt.Errorf("node is not running")
 	}
-	advertise = strings.TrimRight(strings.TrimSpace(advertise), "/")
+	err := a.srv.ConfigureMesh(a.ctx, []string{relay}, advertise, password)
+	mesh := a.srv.MeshStatus()
 	a.mu.Lock()
-	a.relays = relays
-	a.password = password
-	if advertise != "" {
-		a.advertise = advertise
-	} else {
-		a.advertise = node.GuessAdvertise(a.listen)
-	}
-	a.cfg.Relays = relays
-	a.cfg.Password = password
-	a.cfg.Advertise = a.advertise
+	a.relays = mesh.Relays
+	a.password = mesh.Password
+	a.advertise = mesh.Advertise
+	a.relayOK = mesh.Linked
+	a.relayErr = mesh.LinkError
+	a.cfg.Relays = mesh.Relays
+	a.cfg.Password = mesh.Password
+	a.cfg.Advertise = mesh.Advertise
 	cfg := a.cfg
 	a.mu.Unlock()
 	saveConfig(cfg)
-	a.startRegister()
-	return a.linkOnce()
+	return err
 }
 
 // SetRelay joins using one relay URL.
 func (a *App) SetRelay(raw string) error {
-	a.mu.Lock()
-	pw := a.password
-	adv := a.advertise
-	a.mu.Unlock()
-	return a.SetMesh(raw, pw, adv)
-}
-
-func (a *App) linkOnce() error {
-	a.mu.Lock()
-	srv := a.srv
-	relays := append([]string(nil), a.relays...)
-	advertise := a.advertise
-	password := a.password
-	ctx := a.ctx
-	a.mu.Unlock()
-	if srv == nil {
-		return nil
+	mesh := node.MeshStatus{}
+	if a.srv != nil {
+		mesh = a.srv.MeshStatus()
 	}
-	if len(relays) == 0 {
-		a.mu.Lock()
-		a.relayOK = false
-		a.relayErr = "relay URL is required"
-		a.mu.Unlock()
-		return fmt.Errorf("relay URL is required")
-	}
-	wait := context.Background()
-	if ctx != nil {
-		wait = ctx
-	}
-	err := srv.RegisterOnce(wait, relays, advertise, password)
-	a.mu.Lock()
-	if err != nil {
-		a.relayOK = false
-		a.relayErr = err.Error()
-	} else {
-		a.relayOK = true
-		a.relayErr = ""
-	}
-	a.mu.Unlock()
-	return err
-}
-
-func (a *App) startRegister() {
-	a.mu.Lock()
-	if a.regCancel != nil {
-		a.regCancel()
-	}
-	ctx, cancel := context.WithCancel(a.ctx)
-	a.regCancel = cancel
-	srv := a.srv
-	relays := append([]string(nil), a.relays...)
-	advertise := a.advertise
-	password := a.password
-	a.mu.Unlock()
-	if srv != nil {
-		go srv.RegisterLoop(ctx, relays, advertise, password)
-	}
+	return a.SetMesh(raw, mesh.Password, mesh.Advertise)
 }
 
 // Relays lists current relays.
 func (a *App) Relays() []string {
+	if a.srv != nil {
+		return a.srv.MeshStatus().Relays
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]string(nil), a.relays...)

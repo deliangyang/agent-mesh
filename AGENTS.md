@@ -72,6 +72,8 @@ Common streaming `Event.Type` values: `user` `assistant` `delta` `thinking` `too
 
 OpenAI-compatible surface (on both node and relay): `/v1/models`, `/v1/chat/completions`, and `/v1/openai/*` (sessions, history, stream, directories, commands, followups, choice, git).
 
+Node-only mesh settings (desktop / local UI): `GET|PUT /v1/openai/mesh`, `POST /v1/openai/mesh/test` (persist under `~/.agent-mesh/mesh.json`).
+
 The web UI uses CopilotKit + `@ag-ui/client`. Target selection lives in `MeshTarget` (node / engine / session / model / cwd).
 
 ## Add an engine

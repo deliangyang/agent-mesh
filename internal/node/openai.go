@@ -42,6 +42,9 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/openai/followups", s.handleFollowups)
 	mux.HandleFunc("PUT /v1/openai/followups", s.handleFollowups)
 	mux.HandleFunc("DELETE /v1/openai/followups", s.handleFollowups)
+	mux.HandleFunc("GET /v1/openai/mesh", s.handleMesh)
+	mux.HandleFunc("PUT /v1/openai/mesh", s.handleMesh)
+	mux.HandleFunc("POST /v1/openai/mesh/test", s.handleMeshTest)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChat)
 }
 

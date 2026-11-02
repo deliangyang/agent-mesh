@@ -25,8 +25,6 @@ deploy/supervisor sample supervisord unit for a local node
 scripts           install, setup, and release packaging
 ```
 
-Root `*_ctl.py` files are early single-engine prototypes. The real path is the Go driver. Do not treat the Python scripts as the source of truth unless you are comparing behavior.
-
 ## Trust boundary
 
 - The relay only routes Envelope `From` / `To` and cannot decrypt `Ciphertext`.
@@ -89,6 +87,7 @@ See: `internal/driver/claude` (jsonl + socket inject), `internal/driver/cursor` 
 - After user-visible web changes, cover the path in a browser or `node --test`. Do not stop at a screenshot.
 - Keep diffs small: no unrelated refactors, no mass formatting outside `dist` assets.
 - After finishing a change, commit before ending the conversation. Do not leave the session's edits uncommitted.
+- Git commit messages must be in English.
 
 ## Run locally
 

@@ -446,12 +446,27 @@ func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// localModelID strips this node's id/ prefix so Vue can send the same
+// nodeID/engine/name ids the relay catalog uses.
+func (s *Server) localModelID(model string) string {
+	model = strings.TrimSpace(model)
+	if s.Ident.ID == "" {
+		return model
+	}
+	prefix := s.Ident.ID + "/"
+	if strings.HasPrefix(model, prefix) {
+		return strings.TrimPrefix(model, prefix)
+	}
+	return model
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	var req openai.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
+	req.Model = s.localModelID(req.Model)
 	engine, modelName := openai.EngineModel(req.Model, req.Engine, s.Drivers.Names())
 	if engine == "" {
 		http.Error(w, "model must look like cursor or cursor/composer-2.5", http.StatusBadRequest)

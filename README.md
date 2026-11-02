@@ -50,21 +50,39 @@ cd agent-mesh
 
 `setup.sh` checks Go 1.25 and Node 20, builds `node` / `relay` / `ctl`, writes `~/.agent-mesh`, and generates identity keys.
 
-Or install a GitHub Release binary:
+Or install a GitHub Release binary. Relay and node are separate so a public server does not have to run engines, and a laptop does not have to expose the web UI.
+
+Relay (writes `~/.agent-mesh/relay.env`, enables a boot service):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install-relay.sh | sh
 ```
 
-Remove what the script installed with `curl -fsSL …/install.sh | sh -s -- --uninstall`. Keys in `~/.agent-mesh` stay unless you add `--purge`.
+Node (writes `~/.agent-mesh/node.env`, enables a boot service, adds a desktop launcher):
 
-**2 · Start the relay** (password required for the web UI):
+```sh
+curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install-node.sh | sh -s -- --relay https://mesh.example.com
+```
+
+Linux installs a systemd unit (`enable --now`). macOS installs a launchd plist (`RunAtLoad` + `KeepAlive`). A graphical session also gets a Linux `.desktop` file or a macOS `Agent Mesh.app`. A character console (SSH with no `DISPLAY` / `WAYLAND_DISPLAY`) installs **headless** and asks for the relay URL (`MESH_RELAY`); press Enter to keep the default, or edit `~/.agent-mesh/node.env` later. Force either mode with `--headless` or `--desktop`. Pass `--no-service` to skip the boot unit.
+
+If GitHub Releases are unreachable (common on some networks in China), set a mirror prefix:
+
+```sh
+AGENT_MESH_MIRROR=https://ghfast.top curl -fsSL …/install-relay.sh | sh
+```
+
+Uninstall with `curl -fsSL …/install-relay.sh | sh -s -- --uninstall` (or `install-node.sh`). Keys in `~/.agent-mesh` stay unless you add `--purge`.
+
+A `v*` tag is required before the one-liners can download binaries. Until then the scripts clone the repo and build if Go 1.25+ and Node 20+ are installed.
+
+**2 · Start the relay** (password required for the web UI). After `install-relay.sh` the service is already running; from a source build:
 
 ```sh
 MESH_PASSWORD=change-me ./bin/relay -listen 0.0.0.0:8443 -web
 ```
 
-**3 · Start a node** on a machine that has the engines:
+**3 · Start a node** on a machine that has the engines. After `install-node.sh` the service is already running; from a source build:
 
 ```sh
 ./bin/node -listen 127.0.0.1:7700 -relay http://127.0.0.1:8443
@@ -135,7 +153,7 @@ Both node and relay expose `/v1/models` and `/v1/chat/completions`, plus `/v1/op
 make setup         # toolchain + build + ~/.agent-mesh
 make test          # Go tests (except desktop) + web tests
 make node relay ctl
-make dist          # dist/agent-mesh_<ver>_<os>_<arch>.tar.gz
+make dist          # dist/agent-mesh-{relay,node}_<os>_<arch>.tar.gz
 make supervisor    # generate and restart a local supervisord unit
 ```
 
@@ -154,8 +172,12 @@ CI builds and tests on every push. A `v*` tag publishes release archives from `.
 | :--- | :--- |
 | `~/.agent-mesh/node.key` | node identity |
 | `~/.agent-mesh/client.key` | CLI identity |
-| `~/.agent-mesh/node.env` | `MESH_PASSWORD`, `MESH_RELAY`, listen flags |
+| `~/.agent-mesh/node.env` | node service: `MESH_PASSWORD`, `MESH_RELAY`, listen flags |
+| `~/.agent-mesh/relay.env` | relay service: `MESH_PASSWORD`, `MESH_LISTEN` |
 | `~/.agent-mesh/followups` | queued follow-up messages |
+| `deploy/systemd` | systemd units written by `install-relay.sh` / `install-node.sh` |
+| `deploy/launchd` | macOS launchd plists for the same services |
+| `deploy/desktop` | Linux `.desktop` launcher for the node |
 | `deploy/supervisor` | sample supervisord unit; `scripts/setup.sh --supervisor` fills paths |
 
 Do not commit keys, `.env`, or supervisor passwords.

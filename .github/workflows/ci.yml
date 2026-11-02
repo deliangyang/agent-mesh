@@ -34,3 +34,5 @@ jobs:
           ./bin/ctl >/dev/null || true
           ./bin/node -h >/dev/null || true
           ./bin/relay -h >/dev/null || true
+      - name: Install scripts
+        run: ./scripts/install_test.sh

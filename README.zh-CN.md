@@ -50,21 +50,39 @@ cd agent-mesh
 
 `setup.sh` 会检查 Go 1.25 和 Node 20，编译 `node` / `relay` / `ctl`，写入 `~/.agent-mesh`，并生成身份密钥。
 
-也可以安装 GitHub Release 里的二进制：
+也可以安装 GitHub Release 里的二进制。中继和节点分开装：公网机器不必跑引擎，笔记本不必对外提供网页。
+
+中继（写入 `~/.agent-mesh/relay.env`，并打开开机自启）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install-relay.sh | sh
 ```
 
-卸载用 `curl -fsSL …/install.sh | sh -s -- --uninstall`。`~/.agent-mesh` 里的密钥会保留，加 `--purge` 才会删掉。
+节点（写入 `~/.agent-mesh/node.env`，开机自启，并加上桌面启动入口）：
 
-**2 · 启动中继**（网页必须设密码）：
+```sh
+curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install-node.sh | sh -s -- --relay https://mesh.example.com
+```
+
+Linux 会安装 systemd 单元并 `enable --now`。macOS 会安装 launchd 配置（`RunAtLoad` + `KeepAlive`）。图形界面会再写 Linux 的 `.desktop` 或 macOS 的 `Agent Mesh.app`。字符界面（SSH 且没有 `DISPLAY` / `WAYLAND_DISPLAY`）自动按 **headless** 装，并提示填写或修改中继地址（`MESH_RELAY`）；直接回车保留当前值，以后也可改 `~/.agent-mesh/node.env`。可用 `--headless` / `--desktop` 强制模式。不需要开机服务时加 `--no-service`。
+
+如果 GitHub Release 下载不了（国内部分网络常见），加镜像前缀：
+
+```sh
+AGENT_MESH_MIRROR=https://ghfast.top curl -fsSL …/install-relay.sh | sh
+```
+
+卸载用 `curl -fsSL …/install-relay.sh | sh -s -- --uninstall`（节点换成 `install-node.sh`）。`~/.agent-mesh` 里的密钥会保留，加 `--purge` 才会删掉。
+
+一行安装要先有 `v*` 标签对应的 GitHub Release。在此之前，若机器上有 Go 1.25+ 和 Node 20+，脚本会退回克隆源码再编译。
+
+**2 · 启动中继**（网页必须设密码）。`install-relay.sh` 装完服务已经在跑；从源码构建时：
 
 ```sh
 MESH_PASSWORD=change-me ./bin/relay -listen 0.0.0.0:8443 -web
 ```
 
-**3 · 在装有引擎的机器上启动节点：**
+**3 · 在装有引擎的机器上启动节点。** `install-node.sh` 装完服务已经在跑；从源码构建时：
 
 ```sh
 ./bin/node -listen 127.0.0.1:7700 -relay http://127.0.0.1:8443
@@ -135,7 +153,7 @@ export OPENAI_API_KEY=mesh
 make setup         # 工具链 + 编译 + ~/.agent-mesh
 make test          # Go 测试（排除 desktop）+ 网页测试
 make node relay ctl
-make dist          # dist/agent-mesh_<ver>_<os>_<arch>.tar.gz
+make dist          # dist/agent-mesh-{relay,node}_<os>_<arch>.tar.gz
 make supervisor    # 生成并重启本机 supervisord 单元
 ```
 
@@ -154,8 +172,12 @@ docker run --rm -p 8443:8443 -e MESH_PASSWORD=change-me agent-mesh-relay -listen
 | :--- | :--- |
 | `~/.agent-mesh/node.key` | 节点身份 |
 | `~/.agent-mesh/client.key` | 命令行身份 |
-| `~/.agent-mesh/node.env` | `MESH_PASSWORD`、`MESH_RELAY`、监听参数 |
+| `~/.agent-mesh/node.env` | 节点服务：`MESH_PASSWORD`、`MESH_RELAY`、监听参数 |
+| `~/.agent-mesh/relay.env` | 中继服务：`MESH_PASSWORD`、`MESH_LISTEN` |
 | `~/.agent-mesh/followups` | 追加消息队列 |
+| `deploy/systemd` | `install-relay.sh` / `install-node.sh` 写入的 systemd 单元 |
+| `deploy/launchd` | 同样服务的 macOS launchd 配置 |
+| `deploy/desktop` | 节点的 Linux `.desktop` 启动器 |
 | `deploy/supervisor` | supervisord 样例；`scripts/setup.sh --supervisor` 会填路径 |
 
 不要把密钥、`.env` 或 supervisor 里的密码提交进仓库。

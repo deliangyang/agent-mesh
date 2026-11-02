@@ -407,6 +407,73 @@ html.dark #app {
   line-height: 1.2;
 }
 
+.mesh-os-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 10px 6px;
+}
+
+.mesh-os-chip {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 3px 8px;
+  color: var(--mute);
+  background: transparent;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  cursor: pointer;
+}
+
+.mesh-os-chip:hover {
+  color: var(--ink);
+}
+
+.mesh-os-chip.sel {
+  color: var(--ink);
+  background: var(--signal-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 45%, var(--rule));
+}
+
+.mesh-engine-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+
+.mesh-engine-hint {
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--mute) 55%, transparent);
+}
+
+.mesh-engine-hint-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.mesh-engine-hint-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mesh-engine-hint p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--mute);
+}
+
 .mesh-pick-empty {
   color: var(--mute);
   font-size: 12px;

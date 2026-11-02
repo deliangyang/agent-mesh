@@ -100,9 +100,6 @@ func (s *Server) webCatalog() (nodes []protocol.NodeInfo, engines []engineRow, m
 	nodes = []protocol.NodeInfo{info}
 	engines = []engineRow{}
 	for _, e := range snap.Engines {
-		if !e.Available {
-			continue
-		}
 		engines = append(engines, engineRow{EngineInfo: e, NodeID: info.ID, NodeName: info.Name})
 	}
 	models = openai.FromModels(snap.Models).Data

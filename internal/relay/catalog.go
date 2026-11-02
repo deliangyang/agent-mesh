@@ -208,9 +208,6 @@ func (s *Server) catalog() Catalog {
 		info.LastSeen = 0
 		out.Nodes = append(out.Nodes, info)
 		for _, e := range rec.Snapshot.Engines {
-			if !e.Available {
-				continue
-			}
 			out.Engines = append(out.Engines, EngineRow{EngineInfo: e, NodeID: rec.Info.ID, NodeName: rec.Info.Name})
 		}
 		for _, m := range openai.FromModels(rec.Snapshot.Models).Data {

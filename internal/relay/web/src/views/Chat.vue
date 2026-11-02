@@ -14,7 +14,8 @@ import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
-import { engineEmptyHint, nodeEngines } from "../engineCards";
+import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
+import { formatEngineInstall } from "../engineInstall";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
@@ -25,6 +26,7 @@ import {
   localePref,
   t,
 } from "../locale";
+import { filterNodesByOs, nodePlatforms } from "../nodeFilter";
 import { platformLabel } from "../platform";
 import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
@@ -135,9 +137,19 @@ const filters = reactive({
   dir: String(route.query.dir || savedPick?.dir || ""),
 });
 
+const osFilter = ref("");
+
 const engineCards = computed(() => nodeEngines(catalog.engines, filters.node));
 
+const missingEngines = computed(() => nodeMissingEngines(catalog.engines, filters.node));
+
+const selectedNodeOs = computed(() => catalog.nodes.find((row) => row.id === filters.node)?.os || "");
+
 const engineHint = computed(() => (engineCards.value.length ? "" : engineEmptyHint(filters.node)));
+
+const platformOptions = computed(() => nodePlatforms(catalog.nodes));
+
+const visibleNodes = computed(() => filterNodesByOs(catalog.nodes, osFilter.value));
 
 const nodePickLabel = computed(() => {
   const n = catalog.nodes.find((row) => row.id === filters.node);
@@ -868,8 +880,28 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <div v-if="picksOpen.node" id="mesh-node-cards" class="mesh-cards">
+          <div v-if="platformOptions.length > 1" class="mesh-os-filter" role="group" :aria-label="t('nav.filterOs')">
+            <button
+              type="button"
+              class="mesh-os-chip"
+              :class="{ sel: !osFilter }"
+              @click="osFilter = ''"
+            >
+              {{ t("nav.filterAll") }}
+            </button>
+            <button
+              v-for="os in platformOptions"
+              :key="os"
+              type="button"
+              class="mesh-os-chip"
+              :class="{ sel: osFilter === os }"
+              @click="osFilter = os"
+            >
+              {{ platformLabel({ os }) || os }}
+            </button>
+          </div>
           <button
-            v-for="n in catalog.nodes"
+            v-for="n in visibleNodes"
             :key="n.id"
             type="button"
             class="mesh-card mesh-card-node"
@@ -879,7 +911,7 @@ onBeforeUnmount(() => {
             <span class="mesh-card-title">{{ nodeName(n.id, n.name) }}</span>
             <span v-if="platformLabel(n)" class="mesh-card-meta">{{ platformLabel(n) }}</span>
           </button>
-          <div v-if="!catalog.nodes.length" class="mesh-pick-empty">{{ t("nav.connectNode") }}</div>
+          <div v-if="!visibleNodes.length" class="mesh-pick-empty">{{ t("nav.connectNode") }}</div>
         </div>
         <button
           type="button"
@@ -907,6 +939,15 @@ onBeforeUnmount(() => {
             {{ e.title || e.name }}
           </button>
           <div v-if="engineHint" class="mesh-pick-empty">{{ engineHint }}</div>
+          <div v-if="missingEngines.length" class="mesh-engine-hints">
+            <div v-for="e in missingEngines" :key="'miss-' + e.name" class="mesh-engine-hint">
+              <div class="mesh-engine-hint-title">
+                <span>{{ e.title || e.name }}</span>
+                <span class="mesh-engine-hint-badge">{{ t("engine.missing") }}</span>
+              </div>
+              <p>{{ formatEngineInstall(e, selectedNodeOs) }}</p>
+            </div>
+          </div>
         </div>
       </div>
       <button class="mesh-new" type="button" @click="newSession">

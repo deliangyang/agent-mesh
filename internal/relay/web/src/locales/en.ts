@@ -92,6 +92,15 @@ export const en: Record<string, string> = {
 
   "engine.pickNode": "Pick a node first",
   "engine.empty": "No engines on this node. Install an agent CLI on the machine, then refresh.",
+  "engine.missing": "Not installed",
+  "engine.installLine": "Install {title} (`{bin}`). Override path with `{env}`.",
+  "engine.installLineNoEnv": "Install {title} (`{bin}`).",
+  "engine.installWhere.windows": "Searched PATH, %USERPROFILE%\\.local\\bin, and %APPDATA%\\npm.",
+  "engine.installWhere.darwin": "Searched PATH, ~/.local/bin, and ~/.npm-global/bin.",
+  "engine.installWhere.linux": "Searched PATH and ~/.local/bin.",
+  "engine.installWhere.default": "Searched PATH and the usual local bin dirs.",
+  "nav.filterAll": "All platforms",
+  "nav.filterOs": "Platform",
 
   "agent.pickEngine": "Pick an engine or model first",
   "agent.pickDir": "Pick a working directory first",

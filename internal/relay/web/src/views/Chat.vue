@@ -13,6 +13,7 @@ import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
+import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
 import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
@@ -100,33 +101,6 @@ const attachConfig = {
   onUploadFailed: onComposerUploadFailed,
 };
 
-function lastTurnStart(messages: { role?: string }[]): number {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") return i + 1;
-  }
-  return 0;
-}
-
-function lastAssistantId(messages: { id?: string; role?: string }[] | undefined): string {
-  const rows = messages || [];
-  const start = lastTurnStart(rows);
-  let last = "";
-  for (let i = start; i < rows.length; i++) {
-    if (rows[i].role === "assistant") last = rows[i].id || "";
-  }
-  return last;
-}
-
-function showThinkAfter(message: { id?: string; role?: string }): boolean {
-  if (!meshLive.thinking) return false;
-  const rows = meshAgent.messages || [];
-  const lastAsst = lastAssistantId(rows);
-  if (lastAsst) return message.role === "assistant" && message.id === lastAsst;
-  return rows.length > 0 && message.id === rows[rows.length - 1]?.id;
-}
-
-const thinkInComposer = computed(() => meshLive.thinking && !lastAssistantId(meshAgent.messages));
-
 const filters = reactive({
   node: String(route.query.node || savedPick?.node || ""),
   engine: String(route.query.engine || savedPick?.engine || ""),
@@ -174,15 +148,13 @@ const dirOptions = computed(() => {
 });
 
 function sessionStamp(s: Session): number {
-  if (meshLive.streaming && meshLive.session && s.id === meshLive.session) {
-    return Date.now() / 1000;
-  }
+  if (sessionStreaming(s)) return Date.now() / 1000;
   return s.updated_at || 0;
 }
 
 function sessionListable(s: Session): boolean {
   if (selected.value && selected.value.id === s.id && selected.value.engine === s.engine) return true;
-  if (meshLive.streaming && meshLive.session && s.id === meshLive.session) return true;
+  if (s.busy || sessionStreaming(s)) return true;
   return !!(s.title || "").trim();
 }
 
@@ -284,8 +256,10 @@ function reloadPage(): void {
 }
 
 function sessionStreaming(s: Session | null): boolean {
-  if (!meshLive.streaming || !s) return false;
-  if (meshLive.session && s.id === meshLive.session) return true;
+  if (!s) return false;
+  if (s.busy) return true;
+  if (!meshLive.streaming) return false;
+  if (meshLive.session) return s.id === meshLive.session;
   if (creating.value && !s.id) return true;
   return !!(
     selected.value &&
@@ -293,6 +267,22 @@ function sessionStreaming(s: Session | null): boolean {
     selected.value.engine === s.engine &&
     (selected.value.node_id || "") === (s.node_id || "")
   );
+}
+
+const chatStreaming = computed(() => {
+  if (creating.value && !selected.value?.id) return meshLive.streaming;
+  return sessionStreaming(selected.value);
+});
+
+const liveHint = computed(() =>
+  liveHintMode({ streaming: chatStreaming.value, thinking: meshLive.thinking }),
+);
+
+function liveHintAfter(message: { id?: string }): boolean {
+  if (liveHint.value === "off") return false;
+  const rows = meshAgent.messages || [];
+  if (!rows.length) return false;
+  return message.id === rows[rows.length - 1]?.id;
 }
 
 function nodeName(id: string, name?: string): string {
@@ -645,9 +635,7 @@ function removeComposerAttach(id: string, rows: { id?: string }[]): void {
 
 function composerBusy(slot: { isRunning?: boolean }): boolean {
   if (slot.isRunning) return true;
-  if (!meshLive.streaming) return false;
-  if (creating.value && !selected.value?.id) return true;
-  return sessionStreaming(selected.value);
+  return chatStreaming.value;
 }
 
 function stopTurn(slot: { onStop?: () => void }): void {
@@ -837,9 +825,9 @@ onBeforeUnmount(() => {
             v-if="creating && !selected?.id && g.label === '今天'"
             type="button"
             class="mesh-thread sel"
-            :class="{ live: meshLive.streaming }"
+            :class="{ live: chatStreaming }"
           >
-            <span v-if="meshLive.streaming" class="mesh-lamp" aria-hidden="true"></span>
+            <span v-if="chatStreaming" class="mesh-lamp" aria-hidden="true"></span>
             <span class="mesh-thread-name">{{ meshLive.title || "新会话" }}</span>
           </button>
           <button
@@ -877,13 +865,19 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="mesh-chat-title"
-          :class="{ copied: copied, ended: turnEnded }"
+          :class="{ live: liveHint === 'live', copied: copied, ended: turnEnded }"
           :title="copied ? '已复制标题和会话编号' : '点击复制标题和会话编号'"
           :aria-label="copied ? '已复制标题和会话编号' : '复制标题和会话编号'"
           @click="copyTitle"
         >
           <span
-            v-if="turnEnded"
+            v-if="liveHint === 'live'"
+            class="mesh-lamp"
+            role="status"
+            aria-label="正在输出"
+          ></span>
+          <span
+            v-else-if="turnEnded"
             class="mesh-ended"
             role="status"
             aria-label="已结束"
@@ -924,7 +918,13 @@ onBeforeUnmount(() => {
             <div class="mesh-reason-skip" hidden></div>
           </template>
           <template #message-after="{ message }">
-            <MeshThinkWindow v-if="showThinkAfter(message)" :streaming="true" />
+            <MeshThinkWindow
+              v-if="liveHintAfter(message)"
+              :mode="liveHint === 'think' ? 'think' : 'live'"
+            />
+          </template>
+          <template #cursor>
+            <span class="mesh-cursor-slot" hidden></span>
           </template>
           <template #user-message="{ message }">
             <CopilotChatUserMessage :message="message">
@@ -998,7 +998,6 @@ onBeforeUnmount(() => {
           <template #input="slot">
             <div class="mesh-composer" :class="{ 'is-guarded': composerGuarded }">
               <div v-if="composerGuarded" class="mesh-composer-guard" aria-hidden="true"></div>
-              <MeshThinkWindow v-if="thinkInComposer" :streaming="true" />
               <div class="mesh-composer-meta">
                 <div class="mesh-chip">
                   <button type="button" class="mesh-chip-btn is-model" @click.stop="togglePick('model')">

@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { applyHistory, meshLive, pushLiveChunk } from "./meshAgent";
+import { applyCatalogBusy, applyHistory, meshLive, pushLiveChunk } from "./meshAgent";
 import { applyFollowups } from "./followup";
 import { showToast } from "./toast";
 import type { CatalogState, DirRow, EngineRow, MeshEvent, ModelCard, NodeInfo, Session } from "./types";
@@ -98,6 +98,19 @@ function mergeRows<T>(cur: T[], incoming: T[] | undefined, reset: boolean, remov
   return Array.from(map.values());
 }
 
+function watchedSession(): Session | undefined {
+  const parts = watched.split("|");
+  const sid = parts.length >= 3 ? parts.slice(2).join("|") : "";
+  const want = sid || meshLive.session;
+  if (!want) return undefined;
+  return catalog.sessions.find((s) => s.id === want);
+}
+
+function syncWatchedBusy(): void {
+  const hit = watchedSession();
+  applyCatalogBusy(Boolean(hit?.busy), hit?.id || meshLive.session || "");
+}
+
 function watching(node: string, engine: string, session: string): boolean {
   if (session && meshLive.session && session === meshLive.session) return true;
   if (!watched) return false;
@@ -158,6 +171,7 @@ function applyPart(msg: Record<string, unknown>): void {
     catalog.sessions = sortSessions(
       mergeSessionRows(catalog.sessions, msg.sessions as Session[] | undefined, reset, removed),
     );
+    syncWatchedBusy();
   }
   if (msg.type === "followups" && (reset || Array.isArray(msg.followups) || removed.length)) {
     applyFollowups(msg);
@@ -175,6 +189,7 @@ function applyPart(msg: Record<string, unknown>): void {
 
 export function watchSession(s: Session | null): void {
   const key = sessionKey(s);
+  applyCatalogBusy(Boolean(s?.busy), s?.id || "");
   if (key === watched && ws && ws.readyState === WebSocket.OPEN) return;
   watched = key;
   if (!s || !ws || ws.readyState !== WebSocket.OPEN) return;

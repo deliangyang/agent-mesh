@@ -11,7 +11,7 @@ const props = defineProps<{
   result?: unknown;
 }>();
 
-const line = computed(() => formatToolLine(props.name, props.parameters ?? props.args));
+const line = computed(() => formatToolLine(props.name, props.parameters ?? props.args, props.status));
 </script>
 
 <template>

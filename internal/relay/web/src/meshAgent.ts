@@ -7,11 +7,43 @@ import { keepMediaContent, lastUserPayload } from "./attach";
 import { fetchJSON } from "./http";
 import { showToast, toastError } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sessionIdFromChunk } from "./events";
+import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
 import { meshTarget, parseThreadId } from "./target";
 import type { MeshEvent } from "./types";
 
 export const meshLive = reactive({ session: "", title: "", streaming: false, think: "", thinking: false });
 export const chatLoad = reactive({ loading: false, thread: "" });
+
+let heldBusy = false;
+let heldBusySession = "";
+
+function runningNow(): boolean {
+  try {
+    return meshAgent.isRunning;
+  } catch {
+    return false;
+  }
+}
+
+function putFlags(next: { streaming: boolean; thinking: boolean }): void {
+  meshLive.streaming = next.streaming;
+  meshLive.thinking = next.thinking;
+}
+
+export function applyCatalogBusy(busy: boolean, session = ""): void {
+  const same = Boolean(session) && (!heldBusySession || session === heldBusySession);
+  if (session) heldBusySession = session;
+  const next = flagsAfterBusy(
+    { streaming: meshLive.streaming, thinking: meshLive.thinking },
+    busy,
+    heldBusy && same,
+    runningNow(),
+    same,
+  );
+  heldBusy = busy;
+  if (busy && session && !meshLive.session) meshLive.session = session;
+  putFlags(next);
+}
 
 const FIRST_PAINT_TURNS = 2;
 const historyCache = new Map<string, MeshEvent[]>();
@@ -94,6 +126,15 @@ export function pushLiveChunk(obj: LiveChunk): void {
     const title = (chunkDelta(obj) || mesh.preview || "").replace(/\s+/g, " ").trim();
     if (title) meshLive.title = Array.from(title).slice(0, 80).join("");
   }
+  const kind = mesh.type || (mesh.tool ? "tool_call" : "assistant");
+  putFlags(
+    flagsAfterChunk(
+      { streaming: meshLive.streaming, thinking: meshLive.thinking },
+      kind,
+      chunkTerminal(obj),
+      runningNow(),
+    ),
+  );
   for (const fn of liveFns) fn(obj);
 }
 
@@ -243,11 +284,11 @@ export class MeshAgent extends AbstractAgent {
         historyEvents = cached;
         historyThread = threadId;
       }
-      // 正在流式输出或本轮已有消息时回放当前列表，避免空快照把对话清掉。
+      // 正在本地 run 或本轮已有消息时回放当前列表，避免空快照把对话清掉。
       const current = this.messages.slice();
       const snapshot = current.length
         ? current
-        : meshLive.streaming
+        : this.isRunning
           ? current
           : cached.length
             ? lastTurnMessages(eventsToMessages(cached), FIRST_PAINT_TURNS)
@@ -259,7 +300,7 @@ export class MeshAgent extends AbstractAgent {
       });
       sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
       sub.complete();
-      if (!meshLive.streaming) void refreshHistory(threadId);
+      if (!this.isRunning) void refreshHistory(threadId);
       return () => {};
     });
   }
@@ -274,8 +315,8 @@ export class MeshAgent extends AbstractAgent {
       meshLive.thinking = false;
       let sentText = "";
       const finish = () => {
-        meshLive.streaming = false;
         meshLive.thinking = false;
+        meshLive.streaming = heldBusy;
         if (historyEvents.length && pushHasUser(sentText)) {
           paintMessages(historyEvents, false);
         }
@@ -546,6 +587,8 @@ export function resetDraft(): void {
   meshLive.streaming = false;
   meshLive.think = "";
   meshLive.thinking = false;
+  heldBusy = false;
+  heldBusySession = "";
   clearAsk();
   try {
     if (meshAgent.isRunning) meshAgent.abortRun();
@@ -573,16 +616,16 @@ export function expectHistory(threadId: string): void {
 }
 
 function paintMessages(evs: MeshEvent[], progressive: boolean): void {
-  if (!meshLive.streaming) noteAskEvents(evs, true);
+  if (!runningNow()) noteAskEvents(evs, true);
   const prev = meshAgent.messages.slice();
   const all = ensureTurnThink(keepMediaContent(eventsToMessages(evs), prev), meshLive.think);
   const first = progressive ? lastTurnMessages(all, FIRST_PAINT_TURNS) : all;
-  if (!meshLive.streaming) meshAgent.setMessages(first);
+  if (!runningNow()) meshAgent.setMessages(first);
   chatLoad.loading = false;
   if (!progressive || first.length >= all.length) return;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      if (meshLive.streaming) return;
+      if (runningNow()) return;
       if (historyEvents !== evs) return;
       meshAgent.setMessages(all);
     });
@@ -590,7 +633,7 @@ function paintMessages(evs: MeshEvent[], progressive: boolean): void {
 }
 
 function keepLiveTranscript(evs: MeshEvent[]): boolean {
-  return (!evs || evs.length === 0) && (meshLive.streaming || meshAgent.messages.length > 0);
+  return (!evs || evs.length === 0) && (runningNow() || meshAgent.messages.length > 0);
 }
 
 export function applyHistory(evs: MeshEvent[], reset: boolean): void {
@@ -605,6 +648,14 @@ export function applyHistory(evs: MeshEvent[], reset: boolean): void {
   historyThread = thread;
   if (thread) historyCache.set(thread, historyEvents);
   paintMessages(historyEvents, reset);
+  putFlags(
+    flagsAfterEvents(
+      { streaming: meshLive.streaming, thinking: meshLive.thinking },
+      incoming.map((ev) => ev.type || ""),
+      !reset,
+      runningNow(),
+    ),
+  );
 }
 
 export async function refreshHistory(threadId: string, signal?: AbortSignal): Promise<void> {

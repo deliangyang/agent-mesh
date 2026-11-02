@@ -6,7 +6,7 @@ import { noteAskFromTool } from "../ask";
 import { meshLive } from "../meshAgent";
 import MeshActivityWindow from "./MeshActivityWindow.vue";
 import MeshToolWindow from "./MeshToolWindow.vue";
-import { summarizeToolGroup } from "../toolSummary";
+import { TOOL_TAIL, formatToolResult, summarizeToolGroup } from "../toolSummary";
 
 const props = defineProps<{
   message: AssistantMessage;
@@ -88,15 +88,26 @@ watch(
   { immediate: true },
 );
 
-const title = computed(() => (rows.value.length > 1 ? summarizeToolGroup(rows.value) : ""));
-
-const revision = computed(() => title.value + "|" + rows.value.map((r) => r.id + r.status + r.name).join("|"));
+const title = computed(() => summarizeToolGroup(rows.value));
+const hidden = computed(() => Math.max(0, rows.value.length - TOOL_TAIL));
+const resultLine = computed(() => {
+  if (rows.value.length !== 1) return "";
+  return formatToolResult(rows.value[0].name, rows.value[0].result);
+});
+const visibleRows = computed(() => {
+  if (rows.value.length === 1 && resultLine.value) return [];
+  if (rows.value.length === 1) return [];
+  return rows.value.slice(-TOOL_TAIL);
+});
+const revision = computed(
+  () => title.value + "|" + hidden.value + "|" + resultLine.value + "|" + rows.value.map((r) => r.id + r.status + r.name).join("|"),
+);
 </script>
 
 <template>
-  <MeshActivityWindow v-if="rows.length" variant="tools" :title="title" :revision="revision">
+  <MeshActivityWindow v-if="rows.length" variant="tools" :title="title" :hidden="hidden" :revision="revision">
     <MeshToolWindow
-      v-for="row in rows"
+      v-for="row in visibleRows"
       :key="row.id"
       :name="row.name"
       :tool-call-id="row.id"
@@ -104,5 +115,6 @@ const revision = computed(() => title.value + "|" + rows.value.map((r) => r.id +
       :status="row.status"
       :result="row.result"
     />
+    <div v-if="resultLine" class="mesh-act-row mesh-act-result">{{ resultLine }}</div>
   </MeshActivityWindow>
 </template>

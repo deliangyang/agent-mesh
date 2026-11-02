@@ -47,6 +47,10 @@ const KIND_MAP: Record<string, string> = {
   fetch: "fetch",
   websearch: "search",
   web_search: "search",
+  getdynamictools: "explore",
+  calldynamictool: "explore",
+  listdynamictools: "explore",
+  todowrite: "todo",
 };
 
 const PATH_KEYS = [
@@ -77,7 +81,41 @@ export type ToolKind =
   | "delete"
   | "fetch"
   | "search"
+  | "explore"
+  | "todo"
   | "tool";
+
+const VERB: Record<ToolKind, string> = {
+  read: "Read",
+  write: "wrote",
+  edit: "edited",
+  grep: "grepped",
+  glob: "globbed",
+  list: "listed",
+  command: "ran",
+  delete: "deleted",
+  fetch: "fetched",
+  search: "searched",
+  explore: "Explored",
+  todo: "updated todos",
+  tool: "used tools",
+};
+
+const RUNNING: Record<string, string> = {
+  Read: "Reading",
+  Wrote: "Writing",
+  Edited: "Editing",
+  Grepped: "Grepping",
+  Globbed: "Globbing",
+  Listed: "Listing",
+  Ran: "Running",
+  Deleted: "Deleting",
+  Fetched: "Fetching",
+  Searched: "Searching",
+  Explored: "Exploring",
+};
+
+export const TOOL_TAIL = 3;
 
 export type ToolRowSummary = {
   kind: ToolKind;
@@ -182,62 +220,95 @@ function quoted(s: string, max = 48): string {
   return '"' + oneLine(s.replace(/^["']|["']$/g, ""), max) + '"';
 }
 
-function grepFileCount(result: unknown): number {
+function grepMatchCount(result: unknown): number {
   if (typeof result !== "string" || !result.trim()) return 0;
-  const files = new Set<string>();
+  const named = result.match(/Found\s+(\d+)\s+matches?/i);
+  if (named) return Number(named[1]);
+  let n = 0;
   for (const line of result.split(/\r?\n/)) {
-    const m = line.match(/^([^:\n]+):\d+/);
-    if (m && m[1] && !m[1].startsWith(" ")) files.add(m[1]);
+    if (/^[^:\n]+:\d+/.test(line)) n += 1;
   }
-  return files.size;
+  return n;
 }
 
-export function formatToolLine(name: string, args: unknown): string {
+function exploreLine(obj: Record<string, unknown>): string {
+  const ns = firstString(obj, ["namespace"]);
+  const tool = firstString(obj, ["toolName", "tool_name", "name"]);
+  const bits = [ns, tool].filter(Boolean);
+  if (bits.length) return "Explored available MCP tools " + bits.join(" · ");
+  const pat = firstString(obj, ["pattern", "query"]);
+  if (pat) return "Explored available MCP tools " + oneLine(pat, 48);
+  return "Explored available MCP tools";
+}
+
+function withRunning(line: string, running: boolean): string {
+  if (!running) return line;
+  const sp = line.indexOf(" ");
+  const head = sp < 0 ? line : line.slice(0, sp);
+  const rest = sp < 0 ? "" : line.slice(sp);
+  return (RUNNING[head] || head) + rest;
+}
+
+export function formatToolLine(name: string, args: unknown, status?: string): string {
   const kind = kindOf(name);
   const obj = asObject(args);
   const path = firstString(obj, PATH_KEYS);
   const pattern = firstString(obj, PATTERN_KEYS);
   const command = firstString(obj, COMMAND_KEYS);
   const url = firstString(obj, URL_KEYS);
+  const running = status === "inProgress" || status === "executing";
 
   if (kind === "read") {
-    return "Read " + (path ? shortPath(path) + lineRange(obj) : "file");
+    return withRunning("Read " + (path ? shortPath(path) + lineRange(obj) : "file"), running);
   }
   if (kind === "write") {
-    return "Wrote " + (path ? shortPath(path) : "file");
+    return withRunning("Wrote " + (path ? shortPath(path) : "file"), running);
   }
   if (kind === "edit") {
-    return "Edited " + (path ? shortPath(path) : "file");
+    return withRunning("Edited " + (path ? shortPath(path) : "file"), running);
   }
   if (kind === "grep") {
     const where = firstString(obj, GREP_PATH_KEYS) || path || ".";
-    return "Grepped " + (pattern ? quoted(pattern) : "pattern") + " in " + shortPath(where);
+    return withRunning("Grepped " + (pattern ? quoted(pattern) : "pattern") + " in " + shortPath(where), running);
   }
   if (kind === "glob") {
     const where = firstString(obj, GREP_PATH_KEYS);
     const pat = pattern || path || "*";
-    if (where && where !== pat) return "Globbed " + quoted(pat) + " in " + shortPath(where);
-    return "Globbed " + quoted(pat);
+    const line = where && where !== pat ? "Globbed " + quoted(pat) + " in " + shortPath(where) : "Globbed " + quoted(pat);
+    return withRunning(line, running);
   }
   if (kind === "list") {
-    return "Listed " + shortPath(path || ".");
+    return withRunning("Listed " + shortPath(path || "."), running);
   }
   if (kind === "command") {
-    return "Ran " + oneLine(command || path || "command", 72);
+    return withRunning("Ran " + oneLine(command || path || "command", 72), running);
   }
   if (kind === "delete") {
-    return "Deleted " + (path ? shortPath(path) : "file");
+    return withRunning("Deleted " + (path ? shortPath(path) : "file"), running);
   }
   if (kind === "fetch") {
-    return "Fetched " + shortPath(url || path || "url");
+    return withRunning("Fetched " + shortPath(url || path || "url"), running);
   }
   if (kind === "search") {
-    return "Searched " + quoted(pattern || path || "query");
+    return withRunning("Searched " + quoted(pattern || path || "query"), running);
+  }
+  if (kind === "explore") {
+    return withRunning(exploreLine(obj), running);
+  }
+  if (kind === "todo") {
+    return withRunning("Updated todos", running);
   }
   const fallback = path || command || pattern || url;
   const label = String(name || "Tool").replace(/[_-]+/g, " ");
   const titled = label.charAt(0).toUpperCase() + label.slice(1);
   return fallback ? titled + " " + oneLine(fallback, 64) : titled;
+}
+
+export function formatToolResult(name: string, result: unknown): string {
+  if (kindOf(name) !== "grep") return "";
+  const n = grepMatchCount(result);
+  if (!n) return "";
+  return "Found " + n + (n === 1 ? " match" : " matches");
 }
 
 export function summarizeTool(
@@ -255,41 +326,36 @@ export function summarizeTool(
 export function summarizeToolGroup(
   items: { name: string; args?: unknown; result?: unknown }[],
 ): string {
+  if (!items.length) return "";
+  if (items.length === 1) return formatToolLine(items[0].name, items[0].args);
+
   const counts: Record<string, number> = {};
-  let grepFiles = 0;
+  const order: ToolKind[] = [];
   for (const item of items) {
     const kind = kindOf(item.name);
+    if (!counts[kind]) order.push(kind);
     counts[kind] = (counts[kind] || 0) + 1;
-    if (kind === "grep") grepFiles += grepFileCount(item.result);
   }
-  const reads = counts.read || 0;
-  const greps = counts.grep || 0;
-  const writes = counts.write || 0;
-  const edits = counts.edit || 0;
-  const commands = counts.command || 0;
-  const globs = counts.glob || 0;
-  const lists = counts.list || 0;
-  const fetches = counts.fetch || 0;
-  const searches = counts.search || 0;
-  const mixed = [reads, greps, writes, edits, commands, globs, lists, fetches, searches].filter((n) => n > 0).length > 1;
 
-  const parts: string[] = [];
-  if (reads) parts.push(mixed || greps ? "Read" : reads === 1 ? "Read" : "Read " + reads + " files");
-  if (writes) parts.push(writes === 1 ? "wrote 1 file" : "wrote " + writes + " files");
-  if (edits) parts.push(edits === 1 ? "edited 1 file" : "edited " + edits + " files");
-  if (greps) {
-    const files = grepFiles || reads || greps;
-    parts.push("grepped " + files + (files === 1 ? " file" : " files"));
-    parts.push(greps + " grep");
-  }
-  if (globs) parts.push(globs === 1 ? "1 glob" : globs + " globs");
-  if (lists) parts.push(lists === 1 ? "listed 1 path" : "listed " + lists + " paths");
-  if (commands) parts.push(commands === 1 ? "ran 1 command" : "ran " + commands + " commands");
-  if (fetches) parts.push(fetches === 1 ? "1 fetch" : fetches + " fetches");
-  if (searches) parts.push(searches === 1 ? "1 search" : searches + " searches");
-  if (!parts.length) return items.length === 1 ? "1 tool" : items.length + " tools";
-  const text = parts.join(", ");
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  const verbs = order
+    .filter((k) => k !== "tool")
+    .map((k, i) => {
+      const v = VERB[k] || k;
+      return i === 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v.toLowerCase();
+    });
+  const files = (counts.read || 0) + (counts.write || 0) + (counts.edit || 0) + (counts.delete || 0);
+  const extra: string[] = [];
+  if (files) extra.push(files === 1 ? "1 file" : files + " files");
+  if (counts.glob) extra.push(counts.glob === 1 ? "1 glob" : counts.glob + " globs");
+  if (counts.grep) extra.push(counts.grep === 1 ? "1 grep" : counts.grep + " greps");
+  if (counts.list) extra.push(counts.list === 1 ? "1 path" : counts.list + " paths");
+  if (counts.command) extra.push(counts.command === 1 ? "1 command" : counts.command + " commands");
+  if (counts.fetch) extra.push(counts.fetch === 1 ? "1 fetch" : counts.fetch + " fetches");
+  if (counts.search) extra.push(counts.search === 1 ? "1 search" : counts.search + " searches");
+  if (counts.explore) extra.push(counts.explore === 1 ? "1 explore" : counts.explore + " explores");
+  if (counts.todo) extra.push(counts.todo === 1 ? "1 todo" : counts.todo + " todos");
+  if (!verbs.length) return items.length + " tools";
+  return extra.length ? verbs.join(", ") + " " + extra.join(", ") : verbs.join(", ");
 }
 
 export function thinkPreview(content: unknown): string {

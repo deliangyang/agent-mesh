@@ -384,6 +384,8 @@ export class MeshAgent extends AbstractAgent {
         let toolId = "";
         let toolName = "";
         let toolAcc = "";
+        let toolParentId = "";
+        let toolGroupHasResult = false;
         let lastClosedToolId = "";
         let lastClosedToolName = "";
         let thinkAcc = "";
@@ -403,8 +405,17 @@ export class MeshAgent extends AbstractAgent {
           toolName = "";
           toolAcc = "";
         };
+        const resetToolGroup = () => {
+          toolParentId = "";
+          toolGroupHasResult = false;
+        };
+        const ensureToolParent = (): string => {
+          if (!toolParentId) toolParentId = crypto.randomUUID();
+          return toolParentId;
+        };
         const ensureText = () => {
           if (textId) return;
+          resetToolGroup();
           textId = crypto.randomUUID();
           sub.next({
             type: EventType.TEXT_MESSAGE_START,
@@ -476,6 +487,7 @@ export class MeshAgent extends AbstractAgent {
                 type: EventType.TOOL_CALL_START,
                 toolCallId: id,
                 toolCallName: name,
+                parentMessageId: ensureToolParent(),
               });
               sub.next({ type: EventType.TOOL_CALL_END, toolCallId: id });
               lastClosedToolId = id;
@@ -489,6 +501,7 @@ export class MeshAgent extends AbstractAgent {
               content,
               role: "tool",
             });
+            toolGroupHasResult = true;
             noteAskEvent({ type: "tool_result", tool: name, text: content });
             return false;
           }
@@ -500,6 +513,7 @@ export class MeshAgent extends AbstractAgent {
             const args = delta || mesh.preview || "";
             if (toolId && toolName !== name) closeTool();
             if (!toolId) {
+              if (toolGroupHasResult) resetToolGroup();
               toolId = crypto.randomUUID();
               toolName = name;
               toolAcc = "";
@@ -507,6 +521,7 @@ export class MeshAgent extends AbstractAgent {
                 type: EventType.TOOL_CALL_START,
                 toolCallId: toolId,
                 toolCallName: name,
+                parentMessageId: ensureToolParent(),
               });
             }
             const piece = nextPiece(toolAcc, args);

@@ -1,3 +1,5 @@
+import { isTodoTool } from "./todos.ts";
+
 const KIND_MAP: Record<string, string> = {
   read: "read",
   readfile: "read",
@@ -134,6 +136,11 @@ export function kindOf(name: string): ToolKind {
   return (KIND_MAP[key] || KIND_MAP[key.replace(/_/g, "")] || "tool") as ToolKind;
 }
 
+export function kindOfCall(name: string, args?: unknown): ToolKind {
+  if (isTodoTool(name, args)) return "todo";
+  return kindOf(name);
+}
+
 function asObject(args: unknown): Record<string, unknown> {
   if (args && typeof args === "object" && !Array.isArray(args)) {
     return args as Record<string, unknown>;
@@ -250,7 +257,7 @@ function withRunning(line: string, running: boolean): string {
 }
 
 export function formatToolLine(name: string, args: unknown, status?: string): string {
-  const kind = kindOf(name);
+  const kind = kindOfCall(name, args);
   const obj = asObject(args);
   const path = firstString(obj, PATH_KEYS);
   const pattern = firstString(obj, PATTERN_KEYS);
@@ -318,7 +325,7 @@ export function summarizeTool(
   _status?: string,
 ): ToolRowSummary {
   return {
-    kind: kindOf(name),
+    kind: kindOfCall(name, args),
     line: formatToolLine(name, args),
   };
 }
@@ -332,7 +339,7 @@ export function summarizeToolGroup(
   const counts: Record<string, number> = {};
   const order: ToolKind[] = [];
   for (const item of items) {
-    const kind = kindOf(item.name);
+    const kind = kindOfCall(item.name, item.args);
     if (!counts[kind]) order.push(kind);
     counts[kind] = (counts[kind] || 0) + 1;
   }

@@ -5,7 +5,9 @@ import { useCopilotKit } from "@copilotkit/vue/v2";
 import { noteAskFromTool } from "../ask";
 import { meshLive } from "../meshAgent";
 import MeshActivityWindow from "./MeshActivityWindow.vue";
+import MeshTodoList from "./MeshTodoList.vue";
 import MeshToolWindow from "./MeshToolWindow.vue";
+import { isTodoTool, todosFromMessages } from "../todos.ts";
 import { TOOL_TAIL, formatToolResult, summarizeToolGroup } from "../toolSummary";
 
 const props = defineProps<{
@@ -51,24 +53,47 @@ watch(
   { immediate: true },
 );
 
-const title = computed(() => summarizeToolGroup(rows.value));
-const hidden = computed(() => Math.max(0, rows.value.length - TOOL_TAIL));
+const todoRows = computed(() => rows.value.filter((row) => isTodoTool(row.name, row.args)));
+const toolRows = computed(() => rows.value.filter((row) => !isTodoTool(row.name, row.args)));
+const todos = computed(() => {
+  const msgs = props.messages || [];
+  const cur = props.message;
+  if (cur?.id && msgs.some((row) => row.id === cur.id)) {
+    return todosFromMessages(msgs, cur.id);
+  }
+  return todosFromMessages(cur ? msgs.concat(cur) : msgs, cur?.id);
+});
+const todoPending = computed(() =>
+  todoRows.value.some((row) => row.status === "inProgress" || row.status === "executing"),
+);
+
+const title = computed(() => summarizeToolGroup(toolRows.value));
+const hidden = computed(() => Math.max(0, toolRows.value.length - TOOL_TAIL));
 const resultLine = computed(() => {
-  if (rows.value.length !== 1) return "";
-  return formatToolResult(rows.value[0].name, rows.value[0].result);
+  if (toolRows.value.length !== 1) return "";
+  return formatToolResult(toolRows.value[0].name, toolRows.value[0].result);
 });
 const visibleRows = computed(() => {
-  if (rows.value.length === 1 && resultLine.value) return [];
-  if (rows.value.length === 1) return [];
-  return rows.value.slice(-TOOL_TAIL);
+  if (toolRows.value.length === 1 && resultLine.value) return [];
+  if (toolRows.value.length === 1) return [];
+  return toolRows.value.slice(-TOOL_TAIL);
 });
 const revision = computed(
-  () => title.value + "|" + hidden.value + "|" + resultLine.value + "|" + rows.value.map((r) => r.id + r.status + r.name).join("|"),
+  () =>
+    title.value +
+    "|" +
+    hidden.value +
+    "|" +
+    resultLine.value +
+    "|" +
+    toolRows.value.map((r) => r.id + r.status + r.name).join("|") +
+    "|" +
+    todos.value.map((t) => t.id + t.status).join("|"),
 );
 </script>
 
 <template>
-  <MeshActivityWindow v-if="rows.length" variant="tools" :title="title" :hidden="hidden" :revision="revision">
+  <MeshActivityWindow v-if="toolRows.length" variant="tools" :title="title" :hidden="hidden" :revision="revision">
     <MeshToolWindow
       v-for="row in visibleRows"
       :key="row.id"
@@ -80,4 +105,5 @@ const revision = computed(
     />
     <div v-if="resultLine" class="mesh-act-row mesh-act-result">{{ resultLine }}</div>
   </MeshActivityWindow>
+  <MeshTodoList v-if="todoRows.length" :items="todos" :pending="todoPending" />
 </template>

@@ -61,6 +61,18 @@ test("MCP 工具显示 Explored available MCP tools", () => {
   );
 });
 
+test("CallDynamicTool 里的 TodoWrite 按待办显示", () => {
+  assert.equal(
+    formatToolLine("CallDynamicTool", {
+      namespace: "cursor",
+      toolName: "TodoWrite",
+      arguments: { merge: false, todos: [{ id: "1", content: "改界面", status: "pending" }] },
+    }),
+    "Updated todos",
+  );
+  assert.equal(formatToolLine("TodoWrite", { todos: [{ id: "1", content: "改界面", status: "pending" }] }), "Updated todos");
+});
+
 test("进行中的 Read 用现在分词", () => {
   assert.equal(formatToolLine("Read", { path: "/tmp/a.ts" }, "executing"), "Reading /tmp/a.ts");
 });

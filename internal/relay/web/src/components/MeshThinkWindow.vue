@@ -12,7 +12,10 @@ defineProps<{
     aria-live="polite"
     :aria-label="mode === 'live' ? '进行中' : '思考中'"
   >
-    <span v-if="mode === 'live'" class="mesh-lamp" aria-hidden="true"></span>
+    <template v-if="mode === 'live'">
+      <span class="mesh-lamp" aria-hidden="true"></span>
+      <span>进行中</span>
+    </template>
     <template v-else>
       <svg class="mesh-think-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.4" opacity="0.28" />

@@ -23,7 +23,7 @@ func main() {
 	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "中继约定密码")
 	key := flag.String("key", defaultKey(), "身份密钥文件")
 	name := flag.String("name", hostname(), "节点名称")
-	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi", "启用的引擎")
+	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi,qoder-cn", "启用的引擎")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))

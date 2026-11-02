@@ -80,6 +80,39 @@ func TestScanSlashProjectOverridesUser(t *testing.T) {
 	t.Fatal("missing review")
 }
 
+func TestScanSlashQoderCN(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	cmd := filepath.Join(cwd, ".qoder", "commands", "git-commit.md")
+	if err := os.MkdirAll(filepath.Dir(cmd), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cmd, []byte("---\ndescription: 生成提交信息\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(home, ".qoder-cn", "skills", "code-review", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skill, []byte("---\nname: code-review\ndescription: 按仓库规范做代码审查\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rows := ScanSlash("qoder-cn", cwd, home)
+	got := map[string]string{}
+	for _, row := range rows {
+		got[row.Name] = row.Kind + "|" + row.Source + "|" + row.Description
+	}
+	if got["git-commit"] != "command|project|生成提交信息" {
+		t.Fatalf("command %#v", got["git-commit"])
+	}
+	if got["code-review"] != "skill|user|按仓库规范做代码审查" {
+		t.Fatalf("skill %#v", got["code-review"])
+	}
+	if got["compact"] != "command|builtin|压缩对话上下文" {
+		t.Fatalf("builtin %#v", got["compact"])
+	}
+}
+
 func TestCleanSlashName(t *testing.T) {
 	if got := cleanSlashName("/Foo Bar"); got != "foo-bar" {
 		t.Fatal(got)

@@ -38,13 +38,17 @@ func TestFromEventDone(t *testing.T) {
 }
 
 func TestSplitModel(t *testing.T) {
-	known := []string{"cursor", "claude", "workbuddy", "codex"}
+	known := []string{"cursor", "claude", "workbuddy", "codex", "qoder-cn"}
 	e, n := SplitModel("claude/auto/qwen3.7-plus[1m]", known)
 	if e != "claude" || n != "auto/qwen3.7-plus[1m]" {
 		t.Fatalf("got %s %s", e, n)
 	}
 	e, n = SplitModel("cursor", known)
 	if e != "cursor" || n != "" {
+		t.Fatalf("got %s %s", e, n)
+	}
+	e, n = SplitModel("qoder-cn/auto", known)
+	if e != "qoder-cn" || n != "auto" {
 		t.Fatalf("got %s %s", e, n)
 	}
 }

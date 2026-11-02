@@ -322,14 +322,16 @@ export class MeshAgent extends AbstractAgent {
       };
       (async () => {
         sub.next({ type: EventType.RUN_STARTED, threadId, runId });
+        const failRun = (message: string, toast = true) => {
+          if (toast) showToast(message, "error");
+          sub.next({ type: EventType.RUN_ERROR, message });
+          sub.complete();
+        };
         const payload = lastUserPayload(input.messages || []);
         const text = payload.text || (payload.files.length ? "Please look at the attachments." : "");
         sentText = text;
         if (!text) {
-          showToast("missing user text", "error");
-          sub.next({ type: EventType.RUN_ERROR, message: "missing user text" });
-          sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
-          sub.complete();
+          failRun("missing user text");
           return;
         }
         // a new chat has an empty meshTarget.session; do not reuse a leftover CopilotChat thread.
@@ -339,17 +341,11 @@ export class MeshAgent extends AbstractAgent {
         const node = meshTarget.node || bound.node;
         const model = chatModelOf(meshTarget.model, node, engine);
         if (!model) {
-          showToast("Pick an engine or model first", "error");
-          sub.next({ type: EventType.RUN_ERROR, message: "Pick an engine or model first" });
-          sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
-          sub.complete();
+          failRun("Pick an engine or model first");
           return;
         }
         if (!session && !meshTarget.cwd) {
-          showToast("Pick a working directory first", "error");
-          sub.next({ type: EventType.RUN_ERROR, message: "Pick a working directory first" });
-          sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
-          sub.complete();
+          failRun("Pick a working directory first");
           return;
         }
         const body: Record<string, unknown> = {
@@ -392,6 +388,7 @@ export class MeshAgent extends AbstractAgent {
         let thinkAcc = "";
         let sawContent = false;
         let ended = false;
+        let runFailed = false;
         const closeText = () => {
           if (!textId) return;
           sub.next({ type: EventType.TEXT_MESSAGE_END, messageId: textId });
@@ -427,6 +424,7 @@ export class MeshAgent extends AbstractAgent {
           const fail = chunkFail(obj);
           if (fail) {
             ended = true;
+            runFailed = true;
             showToast(fail, "error");
             sub.next({ type: EventType.RUN_ERROR, message: fail });
             return true;
@@ -567,6 +565,11 @@ export class MeshAgent extends AbstractAgent {
           if (threadId) historyCache.set(threadId, historyEvents);
         }
         cacheLiveThread(threadId);
+        // AG-UI forbids RUN_FINISHED after RUN_ERROR.
+        if (runFailed) {
+          sub.complete();
+          return;
+        }
         sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
         sub.complete();
       })()
@@ -576,7 +579,6 @@ export class MeshAgent extends AbstractAgent {
             type: EventType.RUN_ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
-          sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
           sub.complete();
         })
         .finally(finish);

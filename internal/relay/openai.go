@@ -106,6 +106,7 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/openai/followups", s.handleOpenFollowups)
 	mux.HandleFunc("DELETE /v1/openai/followups", s.handleOpenFollowups)
 	mux.HandleFunc("POST /v1/openai/ingest", s.handleIngest)
+	mux.HandleFunc("GET /v1/openai/mesh", s.handleOpenMesh)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleOpenChat)
 	mux.HandleFunc("GET /v1/to/{id}/v1/models", s.proxyNode("GET", "/v1/models"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/sessions", s.proxyNode("GET", "/v1/openai/sessions"))
@@ -130,6 +131,18 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ingest.publish(chunk)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleOpenMesh answers the desktop settings probe; relay itself is not a local node.
+func (s *Server) handleOpenMesh(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"local": false})
+}
+
+func writePipeErr(w http.ResponseWriter, err error) {
+	if err == nil || pipeHasStarted(err) {
+		return
+	}
+	http.Error(w, err.Error(), http.StatusBadGateway)
 }
 
 func (s *Server) handleOpenEvents(w http.ResponseWriter, r *http.Request) {
@@ -269,9 +282,7 @@ func (s *Server) handleOpenChoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	if err := s.pipeNode(r.Context(), rec, http.MethodPost, "/v1/openai/choice", body, w); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-	}
+	writePipeErr(w, s.pipeNode(r.Context(), rec, http.MethodPost, "/v1/openai/choice", body, w))
 }
 
 func (s *Server) handleOpenFollowups(w http.ResponseWriter, r *http.Request) {
@@ -297,9 +308,7 @@ func (s *Server) handleOpenFollowups(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		path += "?" + r.URL.RawQuery
 	}
-	if err := s.pipeNode(r.Context(), rec, r.Method, path, body, w); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-	}
+	writePipeErr(w, s.pipeNode(r.Context(), rec, r.Method, path, body, w))
 }
 
 func (s *Server) proxyOpenJSON(w http.ResponseWriter, r *http.Request, path string) {
@@ -419,9 +428,7 @@ func (s *Server) handleOpenChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	if err := s.pipeNode(r.Context(), rec, http.MethodPost, "/v1/chat/completions", raw, w); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-	}
+	writePipeErr(w, s.pipeNode(r.Context(), rec, http.MethodPost, "/v1/chat/completions", raw, w))
 }
 
 func splitNodeModel(model string, nodes []Record) (nodeID, rest string) {
@@ -540,13 +547,18 @@ func (s *Server) httpPipe(ctx context.Context, rec Record, method, path string, 
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
-			_, _ = w.Write(buf[:n])
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return &pipeStatus{error: werr, started: true}
+			}
 			if fl != nil {
 				fl.Flush()
 			}
 		}
 		if err != nil {
-			return nil
+			if err == io.EOF {
+				return nil
+			}
+			return &pipeStatus{error: err, started: true}
 		}
 	}
 }
@@ -564,9 +576,7 @@ func (s *Server) proxyNode(method, path string) http.HandlerFunc {
 		if r.URL.RawQuery != "" {
 			u += "?" + r.URL.RawQuery
 		}
-		if err := s.pipeNode(r.Context(), rec, method, u, body, w); err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-		}
+		writePipeErr(w, s.pipeNode(r.Context(), rec, method, u, body, w))
 	}
 }
 
@@ -582,8 +592,6 @@ func (s *Server) proxyNodeStream(method, path string) http.HandlerFunc {
 		if r.URL.RawQuery != "" {
 			u += "?" + r.URL.RawQuery
 		}
-		if err := s.pipeNode(r.Context(), rec, method, u, nil, w); err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-		}
+		writePipeErr(w, s.pipeNode(r.Context(), rec, method, u, nil, w))
 	}
 }

@@ -16,6 +16,21 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func TestLocalModelID(t *testing.T) {
+	ident, err := e2e.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(ident, "unused", "test", driver.NewSet(), nil)
+	prefixed := ident.ID + "/workbuddy/fast"
+	if got := srv.localModelID(prefixed); got != "workbuddy/fast" {
+		t.Fatalf("strip = %q", got)
+	}
+	if got := srv.localModelID("workbuddy/fast"); got != "workbuddy/fast" {
+		t.Fatalf("plain = %q", got)
+	}
+}
+
 func TestNodeServesUIAndCatalogWS(t *testing.T) {
 	ident, err := e2e.Generate()
 	if err != nil {
@@ -55,8 +70,9 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	seen := map[string]bool{}
 	gotSession := false
+	gotPrefixedModel := false
 	for {
-		if seen["nodes"] && seen["engines"] && seen["sessions"] && gotSession {
+		if seen["nodes"] && seen["engines"] && seen["sessions"] && seen["models"] && gotSession && gotPrefixedModel {
 			break
 		}
 		_, raw, err := conn.ReadMessage()
@@ -67,6 +83,9 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 			Type     string              `json:"type"`
 			Nodes    []protocol.NodeInfo `json:"nodes"`
 			Sessions []protocol.Session  `json:"sessions"`
+			Models   []struct {
+				ID string `json:"id"`
+			} `json:"models"`
 		}
 		if json.Unmarshal(raw, &msg) != nil {
 			continue
@@ -74,6 +93,21 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 		seen[msg.Type] = true
 		if msg.Type == "nodes" && len(msg.Nodes) != 1 {
 			t.Fatalf("nodes %d", len(msg.Nodes))
+		}
+		if msg.Type == "models" {
+			prefix := ident.ID + "/"
+			for _, m := range msg.Models {
+				if strings.HasPrefix(m.ID, prefix) {
+					gotPrefixedModel = true
+					break
+				}
+			}
+			if len(msg.Models) == 0 {
+				t.Fatal("expected catalog models")
+			}
+			if !gotPrefixedModel {
+				t.Fatalf("models missing node prefix %q: %#v", prefix, msg.Models)
+			}
 		}
 		if msg.Type == "sessions" {
 			for _, sess := range msg.Sessions {
@@ -83,11 +117,14 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 			}
 		}
 	}
-	if !seen["nodes"] || !seen["engines"] || !seen["sessions"] {
+	if !seen["nodes"] || !seen["engines"] || !seen["sessions"] || !seen["models"] {
 		t.Fatalf("parts %v", seen)
 	}
 	if !gotSession {
 		t.Fatal("missing session s1")
+	}
+	if !gotPrefixedModel {
+		t.Fatal("catalog models must be nodeID/engine/… like the relay")
 	}
 
 	if err := conn.WriteJSON(map[string]string{"type": "watch", "engine": "stub", "session": "s1"}); err != nil {

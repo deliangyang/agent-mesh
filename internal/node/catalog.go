@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,6 +108,12 @@ func (s *Server) webCatalog() (nodes []protocol.NodeInfo, engines []engineRow, m
 	models = openai.FromModels(snap.Models).Data
 	if models == nil {
 		models = []openai.ModelCard{}
+	}
+	// Match the relay catalog: Vue filters models by nodeID/… prefix.
+	for i := range models {
+		if info.ID != "" && !strings.HasPrefix(models[i].ID, info.ID+"/") {
+			models[i].ID = info.ID + "/" + models[i].ID
+		}
 	}
 	dirs = []dirRow{}
 	for _, d := range snap.Dirs {

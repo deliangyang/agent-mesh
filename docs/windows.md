@@ -38,7 +38,7 @@ Double-click `mesh-node.exe`. It:
 - creates `%USERPROFILE%\.agent-mesh\node.key`
 - appends logs to `%USERPROFILE%\.agent-mesh\node.log`
 
-Left-click the tray icon to open the UI again. Closing the browser window does **not** stop the node. Right-click **退出** to quit.
+On first start the tray shows a short balloon (“node is running”). Left-click the tray icon to open the UI again. Closing the browser window does **not** stop the node. Right-click **退出** / **Quit** to quit.
 
 Direct mode (no relay): open `http://127.0.0.1:7700/` and use the node UI.
 

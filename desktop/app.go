@@ -23,7 +23,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// App Wails 后端：本机节点 + 引擎/会话/模型管理。
+// App is the Wails backend: local node plus engine/session/model controls.
 type App struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -60,7 +60,7 @@ type desktopConfig struct {
 	Enabled   map[string]bool `json:"enabled"`
 }
 
-// Status 桌面状态。
+// Status is desktop status.
 type Status struct {
 	NodeID    string   `json:"node_id"`
 	Name      string   `json:"name"`
@@ -75,7 +75,7 @@ type Status struct {
 	LinkError string   `json:"link_error,omitempty"`
 }
 
-// NewApp 创建应用。
+// NewApp creates the app.
 func NewApp() *App {
 	return &App{log: slog.New(slog.NewTextHandler(os.Stderr, nil))}
 }
@@ -85,7 +85,7 @@ func (a *App) runHeadless() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	a.startup(ctx)
-	a.log.Info("无窗口节点已启动", "listen", a.listen, "advertise", a.advertise, "relay", strings.Join(a.relays, ","))
+	a.log.Info("headless node started", "listen", a.listen, "advertise", a.advertise, "relay", strings.Join(a.relays, ","))
 	<-ctx.Done()
 	a.shutdown(context.Background())
 }
@@ -179,7 +179,7 @@ func (a *App) forwardChunks() {
 	}
 }
 
-// NodeStatus 本机节点信息。
+// NodeStatus is local node info.
 func (a *App) NodeStatus() Status {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -204,7 +204,7 @@ func (a *App) NodeStatus() Status {
 	return st
 }
 
-// Engines 本机引擎列表。
+// Engines lists local engines.
 func (a *App) Engines() []protocol.EngineInfo {
 	if a.set == nil {
 		return nil
@@ -212,7 +212,7 @@ func (a *App) Engines() []protocol.EngineInfo {
 	return a.set.Engines(a.ctx)
 }
 
-// SetEngineEnabled 开关引擎。
+// SetEngineEnabled toggles an engine.
 func (a *App) SetEngineEnabled(name string, enabled bool) error {
 	if a.set == nil {
 		return nil
@@ -231,7 +231,7 @@ func (a *App) SetEngineEnabled(name string, enabled bool) error {
 	return nil
 }
 
-// Models 某引擎或全部引擎的模型。
+// Models lists models for one engine or every engine.
 func (a *App) Models(engine string) ([]protocol.Model, error) {
 	if a.set == nil {
 		return nil, nil
@@ -239,7 +239,7 @@ func (a *App) Models(engine string) ([]protocol.Model, error) {
 	return a.set.Models(a.ctx, engine)
 }
 
-// Sessions 会话列表。
+// Sessions lists sessions.
 func (a *App) Sessions(engine string, all bool) ([]protocol.Session, error) {
 	if a.set == nil {
 		return nil, nil
@@ -255,7 +255,7 @@ func (a *App) Sessions(engine string, all bool) ([]protocol.Session, error) {
 	return rows, nil
 }
 
-// History 会话历史。
+// History is session history.
 func (a *App) History(engine, sessionID string, tail int) ([]protocol.Event, error) {
 	d, err := a.set.Get(engine)
 	if err != nil {
@@ -267,7 +267,7 @@ func (a *App) History(engine, sessionID string, tail int) ([]protocol.Event, err
 	return d.History(a.ctx, sessionID, tail)
 }
 
-// Reply 向已有会话追加。
+// Reply appends to an existing session.
 func (a *App) Reply(engine, sessionID, text string) error {
 	d, err := a.set.Get(engine)
 	if err != nil {
@@ -284,7 +284,7 @@ func (a *App) Reply(engine, sessionID, text string) error {
 	return nil
 }
 
-// Send 新开一轮。
+// Send starts a new turn.
 func (a *App) Send(engine, cwd, text string) error {
 	d, err := a.set.Get(engine)
 	if err != nil {
@@ -301,7 +301,7 @@ func (a *App) Send(engine, cwd, text string) error {
 	return nil
 }
 
-// Directories 本机开发目录。
+// Directories lists local workspaces.
 func (a *App) Directories() []protocol.WorkDir {
 	if a.set == nil {
 		return nil
@@ -309,7 +309,7 @@ func (a *App) Directories() []protocol.WorkDir {
 	return a.set.Directories(a.ctx)
 }
 
-// SetMesh 设置中继、密码与对外地址。
+// SetMesh sets relay, password, and public URL.
 func (a *App) SetMesh(relay, password, advertise string) error {
 	var relays []string
 	for _, p := range strings.Split(relay, ",") {
@@ -337,7 +337,7 @@ func (a *App) SetMesh(relay, password, advertise string) error {
 	return a.linkOnce()
 }
 
-// SetRelay 用一个中继地址接入。
+// SetRelay joins using one relay URL.
 func (a *App) SetRelay(raw string) error {
 	a.mu.Lock()
 	pw := a.password
@@ -360,9 +360,9 @@ func (a *App) linkOnce() error {
 	if len(relays) == 0 {
 		a.mu.Lock()
 		a.relayOK = false
-		a.relayErr = "未填写中继地址"
+		a.relayErr = "relay URL is required"
 		a.mu.Unlock()
-		return fmt.Errorf("未填写中继地址")
+		return fmt.Errorf("relay URL is required")
 	}
 	wait := context.Background()
 	if ctx != nil {
@@ -398,7 +398,7 @@ func (a *App) startRegister() {
 	}
 }
 
-// Relays 当前中继。
+// Relays lists current relays.
 func (a *App) Relays() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()

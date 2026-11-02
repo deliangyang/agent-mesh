@@ -10,12 +10,12 @@ function fail(reason: "file-too-large" | "invalid-type" | "upload-failed", messa
   };
 }
 
-test("附件过大和类型错误用中文说明", () => {
-  assert.equal(explainAttachError(fail("file-too-large")), "「shot.png」超过 20MB");
-  assert.equal(explainAttachError(fail("invalid-type")), "「shot.png」类型不支持");
+test("explain oversized and invalid attachments", () => {
+  assert.equal(explainAttachError(fail("file-too-large")), '"shot.png" is over 20MB');
+  assert.equal(explainAttachError(fail("invalid-type")), '"shot.png" type is not supported');
 });
 
-test("读取失败和其它失败都标出文件名", () => {
-  assert.equal(explainAttachError(fail("upload-failed", "Failed to read file as base64")), "「shot.png」读取失败");
-  assert.equal(explainAttachError(fail("upload-failed", "boom")), "「shot.png」上传失败");
+test("name the file on read and other failures", () => {
+  assert.equal(explainAttachError(fail("upload-failed", "Failed to read file as base64")), 'failed to read "shot.png"');
+  assert.equal(explainAttachError(fail("upload-failed", "boom")), 'failed to upload "shot.png"');
 });

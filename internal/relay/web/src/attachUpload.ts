@@ -49,12 +49,12 @@ export function syncAttachJobs(items: { filename?: string; size?: number; status
 }
 
 export function explainAttachError(err: AttachmentUploadError): string {
-  const name = (err.file && err.file.name) || "文件";
-  if (err.reason === "file-too-large") return "「" + name + "」超过 20MB";
-  if (err.reason === "invalid-type") return "「" + name + "」类型不支持";
+  const name = (err.file && err.file.name) || "file";
+  if (err.reason === "file-too-large") return '"' + name + '" is over 20MB';
+  if (err.reason === "invalid-type") return '"' + name + '" type is not supported';
   const raw = String(err.message || "").replace(/\s+/g, " ").trim();
-  if (/failed to read|not readable|abort/i.test(raw)) return "「" + name + "」读取失败";
-  return "「" + name + "」上传失败";
+  if (/failed to read|not readable|abort/i.test(raw)) return 'failed to read "' + name + '"';
+  return 'failed to upload "' + name + '"';
 }
 
 export function onComposerUploadFailed(err: AttachmentUploadError): void {

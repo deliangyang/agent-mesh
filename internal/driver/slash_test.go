@@ -19,20 +19,20 @@ func TestScanSlashCommandsAndSkills(t *testing.T) {
 		}
 	}
 	write(filepath.Join(cwd, ".claude", "commands", "frontend", "review.md"), `---
-description: 审查前端改动
+description: Review frontend changes
 argument-hint: "[files]"
 ---
 # Review
 `)
 	write(filepath.Join(home, ".claude", "skills", "code-review", "SKILL.md"), `---
 name: code-review
-description: 按仓库规范做代码审查
+description: Review code against repo rules
 ---
 # Code Review
 `)
 	write(filepath.Join(home, ".agents", "skills", "tapd-cli", "SKILL.md"), `---
 name: tapd-cli
-description: 操作 TAPD
+description: Operate TAPD
 ---
 `)
 	rows := ScanSlash("claude", cwd, home)
@@ -40,16 +40,16 @@ description: 操作 TAPD
 	for _, row := range rows {
 		got[row.Name] = row.Kind + "|" + row.Source + "|" + row.Description + "|" + row.ArgumentHint
 	}
-	if got["frontend:review"] != "command|project|审查前端改动|[files]" {
+	if got["frontend:review"] != "command|project|Review frontend changes|[files]" {
 		t.Fatalf("command %#v", got["frontend:review"])
 	}
-	if got["code-review"] != "skill|user|按仓库规范做代码审查|" {
+	if got["code-review"] != "skill|user|Review code against repo rules|" {
 		t.Fatalf("skill %#v", got["code-review"])
 	}
-	if got["tapd-cli"] != "skill|user|操作 TAPD|" {
+	if got["tapd-cli"] != "skill|user|Operate TAPD|" {
 		t.Fatalf("agents skill %#v", got["tapd-cli"])
 	}
-	if got["compact"] != "command|builtin|压缩对话上下文|" {
+	if got["compact"] != "command|builtin|Compact the conversation|" {
 		t.Fatalf("builtin %#v", got["compact"])
 	}
 	if rows[0].Kind != "command" {
@@ -87,14 +87,14 @@ func TestScanSlashQoderCN(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cmd), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cmd, []byte("---\ndescription: 生成提交信息\n---\n"), 0o644); err != nil {
+	if err := os.WriteFile(cmd, []byte("---\ndescription: Write a commit message\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	skill := filepath.Join(home, ".qoder-cn", "skills", "code-review", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(skill, []byte("---\nname: code-review\ndescription: 按仓库规范做代码审查\n---\n"), 0o644); err != nil {
+	if err := os.WriteFile(skill, []byte("---\nname: code-review\ndescription: Review code against repo rules\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rows := ScanSlash("qoder-cn", cwd, home)
@@ -102,13 +102,13 @@ func TestScanSlashQoderCN(t *testing.T) {
 	for _, row := range rows {
 		got[row.Name] = row.Kind + "|" + row.Source + "|" + row.Description
 	}
-	if got["git-commit"] != "command|project|生成提交信息" {
+	if got["git-commit"] != "command|project|Write a commit message" {
 		t.Fatalf("command %#v", got["git-commit"])
 	}
-	if got["code-review"] != "skill|user|按仓库规范做代码审查" {
+	if got["code-review"] != "skill|user|Review code against repo rules" {
 		t.Fatalf("skill %#v", got["code-review"])
 	}
-	if got["compact"] != "command|builtin|压缩对话上下文" {
+	if got["compact"] != "command|builtin|Compact the conversation" {
 		t.Fatalf("builtin %#v", got["compact"])
 	}
 }

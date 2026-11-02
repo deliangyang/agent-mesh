@@ -68,7 +68,7 @@ function parseQuestion(v: unknown): AskQuestion | null {
   if (!prompt && !options.length) return null;
   return {
     id: str(m.id) || str(m.header) || prompt || "q",
-    prompt: prompt || str(m.header) || "请选择",
+    prompt: prompt || str(m.header) || "Please choose",
     header: str(m.header),
     multi: Boolean(m.multiSelect || m.multi),
     options,
@@ -217,7 +217,7 @@ export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[
     const key = q.id || q.prompt;
     const sel = picks[key] || picks[q.prompt] || [];
     if (!sel.length) continue;
-    const joined = sel.join("、");
+    const joined = sel.join(", ");
     answers[q.prompt] = joined;
     lines.push((q.header || q.prompt) + " → " + joined);
   }
@@ -228,7 +228,7 @@ export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[
 export async function submitAsk(prompt: AskPrompt, picks: Record<string, string[]>): Promise<boolean> {
   const text = formatAskAnswer(prompt, picks).trim();
   if (!text) {
-    meshAsk.error = "先选一项";
+    meshAsk.error = "Pick an option first";
     return false;
   }
   meshAsk.answering = true;

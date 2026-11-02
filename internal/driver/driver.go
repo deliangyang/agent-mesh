@@ -10,7 +10,7 @@ import (
 	"agent-mesh/internal/protocol"
 )
 
-// Driver 一种本地智能代理引擎。
+// Driver is a local coding-agent engine.
 type Driver interface {
 	Name() string
 	List(ctx context.Context, all bool) ([]protocol.Session, error)
@@ -22,19 +22,19 @@ type Driver interface {
 	Models(ctx context.Context) ([]protocol.Model, error)
 }
 
-// Set 可插拔引擎集合。
+// Set is a pluggable set of engines.
 type Set struct {
 	mu      sync.RWMutex
 	drivers map[string]Driver
 	enabled map[string]bool
 }
 
-// NewSet 创建空集合。
+// NewSet creates an empty set.
 func NewSet() *Set {
 	return &Set{drivers: make(map[string]Driver), enabled: make(map[string]bool)}
 }
 
-// Register 注册引擎，默认启用。
+// Register registers an engine; enabled by default.
 func (s *Set) Register(d Driver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -44,7 +44,7 @@ func (s *Set) Register(d Driver) {
 	}
 }
 
-// SetEnabled 开关引擎。关闭后不再出现在会话列表与模型列表中。
+// SetEnabled enables or disables an engine. Disabled engines drop out of session and model lists.
 func (s *Set) SetEnabled(name string, on bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -55,14 +55,14 @@ func (s *Set) SetEnabled(name string, on bool) error {
 	return nil
 }
 
-// Enabled 引擎是否启用。
+// Enabled reports whether the engine is enabled.
 func (s *Set) Enabled(name string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.enabled[name]
 }
 
-// Get 按名取引擎（不论是否启用）。
+// Get returns an engine by name, even if disabled.
 func (s *Set) Get(name string) (Driver, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -73,7 +73,7 @@ func (s *Set) Get(name string) (Driver, error) {
 	return d, nil
 }
 
-// Names 已注册引擎名。
+// Names registered engine names.
 func (s *Set) Names() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -100,7 +100,7 @@ func (s *Set) snapshot() []Driver {
 	return out
 }
 
-// Engines 探测全部引擎状态。
+// Engines probes every engine.
 func (s *Set) Engines(ctx context.Context) []protocol.EngineInfo {
 	ds := s.snapshot()
 	out := make([]protocol.EngineInfo, len(ds))
@@ -122,7 +122,7 @@ func (s *Set) Engines(ctx context.Context) []protocol.EngineInfo {
 	return out
 }
 
-// Models 汇总模型。engine 为空则全部已启用引擎。
+// Models lists models. An empty engine means every enabled engine.
 func (s *Set) Models(ctx context.Context, engine string) ([]protocol.Model, error) {
 	ds := s.snapshot()
 	type slot struct {
@@ -167,7 +167,7 @@ func (s *Set) Models(ctx context.Context, engine string) ([]protocol.Model, erro
 	return out, nil
 }
 
-// ListAll 汇总全部已启用引擎会话。
+// ListAll lists sessions from every enabled engine.
 func (s *Set) ListAll(ctx context.Context, engine string, all bool) ([]protocol.Session, error) {
 	ds := s.snapshot()
 	if engine != "" {
@@ -212,7 +212,7 @@ func (s *Set) ListAll(ctx context.Context, engine string, all bool) ([]protocol.
 	return out, nil
 }
 
-// DirsOf 从会话汇总开发目录。
+// DirsOf collects workspaces from sessions.
 func DirsOf(rows []protocol.Session) []protocol.WorkDir {
 	type key struct{ eng, path string }
 	seen := map[key]int{}
@@ -234,7 +234,7 @@ func DirsOf(rows []protocol.Session) []protocol.WorkDir {
 	return out
 }
 
-// Directories 从会话中汇总开发目录。
+// Directories collects workspaces from sessions.
 func (s *Set) Directories(ctx context.Context) []protocol.WorkDir {
 	rows, err := s.ListAll(ctx, "", true)
 	if err != nil {
@@ -254,7 +254,7 @@ var slashCache slashMemo
 
 const slashTTL = 8 * time.Second
 
-// SlashItems 当前引擎在 cwd 下可调用的斜杠命令与技能。
+// SlashItems slash commands and skills the current engine can run in cwd.
 func (s *Set) SlashItems(ctx context.Context, engine, cwd string) protocol.SlashList {
 	if engine != "" {
 		if _, err := s.Get(engine); err != nil {

@@ -12,23 +12,23 @@ const title = computed(() => formatTodoTitle(visible.value));
 const show = computed(() => visible.value.length > 0 || !!props.pending);
 
 function statusLabel(status: TodoItem["status"]): string {
-  if (status === "completed") return "已完成";
-  if (status === "in_progress") return "进行中";
-  if (status === "cancelled") return "已取消";
-  return "未开始";
+  if (status === "completed") return "Done";
+  if (status === "in_progress") return "In progress";
+  if (status === "cancelled") return "Cancelled";
+  return "Not started";
 }
 </script>
 
 <template>
   <div v-if="show" class="mesh-todo" role="list" :aria-label="title">
-    <div class="mesh-todo-head">{{ visible.length ? title : "正在更新待办" }}</div>
+    <div class="mesh-todo-head">{{ visible.length ? title : "Updating todos" }}</div>
     <div
       v-for="item in visible"
       :key="item.id"
       class="mesh-todo-item"
       :class="'is-' + item.status"
       role="listitem"
-      :aria-label="todoLabel(item) + '，' + statusLabel(item.status)"
+      :aria-label="todoLabel(item) + ', ' + statusLabel(item.status)"
     >
       <span class="mesh-todo-mark" aria-hidden="true">
         <svg v-if="item.status === 'completed'" viewBox="0 0 12 12" fill="none">

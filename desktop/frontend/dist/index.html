@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>接线台 · Agent Mesh</title>
+  <title>Agent Mesh</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,46 +12,46 @@
     <div class="brand">
       <span class="mark"></span>
       <div>
-        <h1>接线台</h1>
+        <h1>Console</h1>
         <p class="kicker">AGENT MESH</p>
       </div>
     </div>
     <dl class="meta">
-      <div><dt>节点</dt><dd id="nodeName">—</dd></div>
-      <div><dt>身份</dt><dd id="nodeId" class="mono">—</dd></div>
+      <div><dt>Node</dt><dd id="nodeName">—</dd></div>
+      <div><dt>Identity</dt><dd id="nodeId" class="mono">—</dd></div>
       <div><dt>OpenAI</dt><dd id="openaiUrl" class="mono">—</dd></div>
     </dl>
     <form id="relayForm" class="relay">
-      <label>中继</label>
-      <input id="relayInput" type="text" placeholder="https://mesh.ranchulin.com" />
-      <input id="relayPassword" type="password" placeholder="约定密码" />
-      <input id="advertiseInput" type="text" placeholder="对外地址 http://局域网IP:7700" />
-      <button type="submit">连接</button>
-      <span id="relayState" class="relay-state">未连接</span>
+      <label>Relay</label>
+      <input id="relayInput" type="text" placeholder="https://mesh.example.com" />
+      <input id="relayPassword" type="password" placeholder="shared password" />
+      <input id="advertiseInput" type="text" placeholder="public URL http://LAN-IP:7700" />
+      <button type="submit">Connect</button>
+      <span id="relayState" class="relay-state">offline</span>
     </form>
   </header>
 
   <main>
     <aside class="engines">
-      <h2>引擎</h2>
+      <h2>Engines</h2>
       <ul id="engineList"></ul>
     </aside>
 
     <section class="board">
       <div class="toolbar">
-        <h2>会话</h2>
-        <label class="chk"><input id="showAll" type="checkbox" /> 含历史</label>
-        <button id="refresh" type="button">刷新</button>
+        <h2>Sessions</h2>
+        <label class="chk"><input id="showAll" type="checkbox" /> include history</label>
+        <button id="refresh" type="button">Refresh</button>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>状态</th>
-              <th>引擎</th>
-              <th>标题</th>
-              <th>会话</th>
-              <th>目录</th>
+              <th>Status</th>
+              <th>Engine</th>
+              <th>Title</th>
+              <th>Session</th>
+              <th>Workspace</th>
             </tr>
           </thead>
           <tbody id="sessionBody"></tbody>
@@ -61,15 +61,15 @@
 
     <aside class="inspect">
       <div class="panel">
-        <h2>模型</h2>
+        <h2>Models</h2>
         <ul id="modelList" class="models"></ul>
       </div>
       <div class="panel">
-        <h2>开发目录</h2>
+        <h2>Workspaces</h2>
         <ul id="dirList" class="models"></ul>
       </div>
       <div class="panel stream-panel">
-        <h2>监听 <span id="streamHint">OpenAI chunk</span></h2>
+        <h2>Listen <span id="streamHint">OpenAI chunk</span></h2>
         <pre id="stream"></pre>
       </div>
     </aside>
@@ -77,9 +77,9 @@
 
   <footer>
     <select id="sendEngine"></select>
-    <input id="cwdInput" type="text" placeholder="工作目录（新开会话）" />
-    <textarea id="prompt" rows="2" placeholder="追加到选中会话，或在未选中时新开一轮"></textarea>
-    <button id="sendBtn" type="button">发送</button>
+    <input id="cwdInput" type="text" placeholder="workspace (new session)" />
+    <textarea id="prompt" rows="2" placeholder="Follow up on the selected session, or start a new one"></textarea>
+    <button id="sendBtn" type="button">Send</button>
   </footer>
 
   <script src="app.js"></script>

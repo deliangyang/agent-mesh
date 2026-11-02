@@ -1,4 +1,4 @@
-// Package e2e 提供应用层端到端加密：中继只能看到路由元数据，看不到明文。
+// Package e2e provides application E2E encryption: the relay sees routing metadata, not plaintext.
 package e2e
 
 import (
@@ -14,7 +14,7 @@ import (
 	"crypto/ecdh"
 )
 
-// Identity 节点或客户端的长期身份：Ed25519 用于签名，X25519 用于密钥交换。
+// Identity is a long-term node or client identity: Ed25519 for signatures, X25519 for key exchange.
 type Identity struct {
 	ID      string
 	Sign    ed25519.PrivateKey
@@ -28,7 +28,7 @@ type identityFile struct {
 	X25519Private string `json:"x25519_private"`
 }
 
-// Generate 创建新身份。
+// Generate creates a new identity.
 func Generate() (*Identity, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -42,7 +42,7 @@ func Generate() (*Identity, error) {
 	return &Identity{ID: id, Sign: priv, SignPub: pub, X25519: xpriv}, nil
 }
 
-// Public 可安全公布给中继和客户端。
+// Public is safe to publish to relays and clients.
 func (id *Identity) Public() PublicIdentity {
 	return PublicIdentity{
 		ID:        id.ID,
@@ -51,19 +51,19 @@ func (id *Identity) Public() PublicIdentity {
 	}
 }
 
-// PublicIdentity 身份公钥。
+// PublicIdentity is the public identity.
 type PublicIdentity struct {
 	ID        string `json:"id"`
 	SignPub   []byte `json:"sign_pub"`
 	X25519Pub []byte `json:"x25519_pub"`
 }
 
-// SignBytes 对消息签名。
+// SignBytes signs a message.
 func (id *Identity) SignBytes(msg []byte) []byte {
 	return ed25519.Sign(id.Sign, msg)
 }
 
-// Verify 校验签名。
+// Verify verifies a signature.
 func (p PublicIdentity) Verify(msg, sig []byte) bool {
 	if len(p.SignPub) != ed25519.PublicKeySize {
 		return false
@@ -71,12 +71,12 @@ func (p PublicIdentity) Verify(msg, sig []byte) bool {
 	return ed25519.Verify(p.SignPub, msg, sig)
 }
 
-// X25519Public 解析对端 X25519 公钥。
+// X25519Public parses the peer X25519 public key.
 func (p PublicIdentity) X25519Public() (*ecdh.PublicKey, error) {
 	return ecdh.X25519().NewPublicKey(p.X25519Pub)
 }
 
-// Save 以 0600 权限写入密钥文件。
+// Save writes the key file with mode 0600.
 func (id *Identity) Save(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("mkdir identity dir: %w", err)
@@ -100,7 +100,7 @@ func (id *Identity) Save(path string) error {
 	return nil
 }
 
-// LoadOrCreate 读取身份，不存在则生成。
+// LoadOrCreate loads an identity, or creates one if missing.
 func LoadOrCreate(path string) (*Identity, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

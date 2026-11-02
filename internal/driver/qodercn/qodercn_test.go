@@ -30,7 +30,7 @@ func TestListIncludesTranscripts(t *testing.T) {
 	}
 	jsonl := filepath.Join(dir, id+".jsonl")
 	body := `{"type":"system","subtype":"init","cwd":"/tmp/proj","session_id":"` + id + `"}` + "\n" +
-		`{"type":"user","message":{"content":"修复登录超时"}}` + "\n"
+		`{"type":"user","message":{"content":"fix login timeout"}}` + "\n"
 	if err := os.WriteFile(jsonl, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestListIncludesTranscripts(t *testing.T) {
 	if rows[0].CWD != "/tmp/proj" {
 		t.Fatalf("cwd %#v", rows[0])
 	}
-	if rows[0].Title != "修复登录超时" {
+	if rows[0].Title != "fix login timeout" {
 		t.Fatalf("title %#v", rows[0])
 	}
 	if got := d.findJSONL(id, "/tmp/proj"); got != jsonl {
@@ -92,11 +92,11 @@ func TestSessionMetaReadsState(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := filepath.Join(dir, id, "state.json")
-	if err := os.WriteFile(state, []byte(`{"cwd":"/tmp/work","name":"登录重构"}`), 0o644); err != nil {
+	if err := os.WriteFile(state, []byte(`{"cwd":"/tmp/work","name":"login rewrite"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cwd, title := sessionMeta(jsonl)
-	if cwd != "/tmp/work" || title != "登录重构" {
+	if cwd != "/tmp/work" || title != "login rewrite" {
 		t.Fatalf("meta %q %q", cwd, title)
 	}
 }
@@ -119,14 +119,14 @@ func TestModelsUsesSettings(t *testing.T) {
 }
 
 func TestParseQoderModels(t *testing.T) {
-	rows := parseQoderModels("qoder-cn", "Available models:\nauto (current)\nQwen3.8-Max - Qwen 最新基座\n", "auto")
+	rows := parseQoderModels("qoder-cn", "Available models:\nauto (current)\nQwen3.8-Max - Qwen latest base\n", "auto")
 	if len(rows) != 2 {
 		t.Fatalf("len %#v", rows)
 	}
 	if rows[0].ID != "qoder-cn/auto" || !rows[0].Default {
 		t.Fatalf("auto %#v", rows[0])
 	}
-	if rows[1].Name != "Qwen3.8-Max" || rows[1].Title != "Qwen 最新基座" {
+	if rows[1].Name != "Qwen3.8-Max" || rows[1].Title != "Qwen latest base" {
 		t.Fatalf("qwen %#v", rows[1])
 	}
 	jsonRows := parseQoderModels("qoder-cn", `["auto","GLM-5.2"]`, "")
@@ -166,11 +166,11 @@ func TestStreamDelta(t *testing.T) {
 	think := map[string]any{
 		"type": "stream_event",
 		"event": map[string]any{
-			"delta": map[string]any{"type": "thinking_delta", "thinking": "先看目录"},
+			"delta": map[string]any{"type": "thinking_delta", "thinking": "look at the directory first"},
 		},
 	}
 	ev = streamDelta(think, "qoder-cn", "s1")
-	if ev == nil || ev.Type != "thinking" || ev.Text != "先看目录" {
+	if ev == nil || ev.Type != "thinking" || ev.Text != "look at the directory first" {
 		t.Fatalf("think %#v", ev)
 	}
 }

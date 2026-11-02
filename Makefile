@@ -1,6 +1,11 @@
-.PHONY: all relay desktop test web node supervisor
+.PHONY: all binaries web node relay ctl desktop test supervisor setup dist
 
-all: relay desktop
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+GOFLAGS ?= -trimpath -ldflags "-s -w"
+
+all: binaries
+
+binaries: node relay ctl
 
 web:
 	cd internal/relay/web && npm ci && npm run build
@@ -8,24 +13,29 @@ web:
 
 relay: web
 	mkdir -p bin
-	CGO_ENABLED=0 go build -o bin/relay ./cmd/relay
+	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/relay ./cmd/relay
 
 node:
 	mkdir -p bin
-	CGO_ENABLED=0 go build -o bin/node ./cmd/node
+	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/node ./cmd/node
+
+ctl:
+	mkdir -p bin
+	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/ctl ./cmd/ctl
 
 desktop:
 	mkdir -p bin
 	cd desktop && wails build
 	cp -f desktop/build/bin/agent-mesh bin/agent-mesh
 
+setup:
+	./scripts/setup.sh
+
+dist:
+	VERSION=$(VERSION) ./scripts/build-release.sh
+
 supervisor: node
-	mkdir -p $(HOME)/.agent-mesh
-	test -f $(HOME)/.agent-mesh/supervisord.conf || cp deploy/supervisor/supervisord.conf $(HOME)/.agent-mesh/supervisord.conf
-	supervisord -c $(HOME)/.agent-mesh/supervisord.conf || true
-	supervisorctl -c $(HOME)/.agent-mesh/supervisord.conf reread
-	supervisorctl -c $(HOME)/.agent-mesh/supervisord.conf update
-	supervisorctl -c $(HOME)/.agent-mesh/supervisord.conf restart agent-mesh-node
+	./scripts/setup.sh --no-install --supervisor
 
 test:
 	go test $$(go list ./... | grep -v /desktop)

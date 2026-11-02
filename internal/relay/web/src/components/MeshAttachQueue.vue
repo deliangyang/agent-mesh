@@ -43,7 +43,7 @@ const cards = computed((): Card[] => {
   const out: Card[] = [];
   const seen = new Set<string>();
   for (const row of props.items || []) {
-    const name = row.filename || "文件";
+    const name = row.filename || "file";
     const size = row.size || 0;
     const job = jobOf(name, size);
     const key = job?.key || name + "\0" + size;
@@ -97,13 +97,13 @@ function dismiss(card: Card): void {
 function labelOf(card: Card): string {
   if (card.status === "error") return card.error;
   if (card.status === "ready") return card.name;
-  if (card.indeterminate) return "读取中…";
+  if (card.indeterminate) return "Reading…";
   return card.progress + "%";
 }
 </script>
 
 <template>
-  <div v-if="cards.length" class="mesh-attach" role="list" aria-label="待发送附件">
+  <div v-if="cards.length" class="mesh-attach" role="list" aria-label="Attachments to send">
     <div
       v-for="card in cards"
       :key="card.id || card.jobKey"
@@ -134,7 +134,7 @@ function labelOf(card: Card): string {
         />
         <div v-else class="mesh-attach-fallback">{{ card.name }}</div>
         <div v-if="card.status === 'uploading'" class="mesh-attach-veil">
-          <span class="mesh-attach-pct">{{ card.indeterminate ? "读取中" : card.progress + "%" }}</span>
+          <span class="mesh-attach-pct">{{ card.indeterminate ? "Reading" : card.progress + "%" }}</span>
           <span class="mesh-attach-bar" :class="{ indet: card.indeterminate }">
             <span
               class="mesh-attach-bar-fill"
@@ -146,7 +146,7 @@ function labelOf(card: Card): string {
       <button
         type="button"
         class="mesh-attach-x"
-        :aria-label="card.status === 'error' ? '关闭错误' : '移除附件'"
+        :aria-label="card.status === 'error' ? 'Dismiss error' : 'Remove attachment'"
         @click="dismiss(card)"
       >
         ×

@@ -9,7 +9,7 @@ import {
   todosFromMessages,
 } from "./todos.ts";
 
-test("识别 TodoWrite 和套在 CallDynamicTool 里的调用", () => {
+test("detect TodoWrite and calls nested in CallDynamicTool", () => {
   assert.equal(isTodoTool("TodoWrite"), true);
   assert.equal(isTodoTool("todo_write"), true);
   assert.equal(
@@ -23,28 +23,28 @@ test("识别 TodoWrite 和套在 CallDynamicTool 里的调用", () => {
   assert.equal(isTodoTool("CallDynamicTool", { namespace: "cursor", toolName: "Read" }), false);
 });
 
-test("解析 Cursor TodoWrite 参数", () => {
+test("parse Cursor TodoWrite arguments", () => {
   const patch = parseTodoCall("TodoWrite", {
     merge: false,
     todos: [
-      { id: "1", content: "读代码", status: "completed" },
-      { id: "2", content: "改界面", status: "in_progress" },
-      { id: "3", content: "补测试", status: "pending" },
+      { id: "1", content: "read the code", status: "completed" },
+      { id: "2", content: "change the UI", status: "in_progress" },
+      { id: "3", content: "add tests", status: "pending" },
     ],
   });
   assert.equal(patch?.merge, false);
   assert.equal(patch?.items.length, 3);
   assert.equal(patch?.items[1].status, "in_progress");
-  assert.equal(formatTodoTitle(patch?.items || []), "待办 1/3");
+  assert.equal(formatTodoTitle(patch?.items || []), "Todos 1/3");
 });
 
-test("解析套在 CallDynamicTool 里的待办", () => {
+test("parse todos nested in CallDynamicTool", () => {
   const patch = parseTodoCall("CallDynamicTool", {
     namespace: "cursor",
     toolName: "TodoWrite",
     arguments: {
       merge: true,
-      todos: [{ id: "2", content: "改界面", status: "completed" }],
+      todos: [{ id: "2", content: "change the UI", status: "completed" }],
     },
   });
   assert.equal(patch?.merge, true);
@@ -52,20 +52,20 @@ test("解析套在 CallDynamicTool 里的待办", () => {
   assert.equal(patch?.items[0].status, "completed");
 });
 
-test("参数还是 JSON 字符串也能解析", () => {
+test("parse arguments that are still a JSON string", () => {
   const patch = parseTodoCall(
     "TodoWrite",
-    '{"todos":[{"id":"a","content":"写样式","status":"pending"}],"merge":false}',
+    '{"todos":[{"id":"a","content":"write styles","status":"pending"}],"merge":false}',
   );
-  assert.equal(patch?.items[0].content, "写样式");
+  assert.equal(patch?.items[0].content, "write styles");
 });
 
-test("merge 按 id 更新，缺 content 时沿用旧文案", () => {
+test("merge updates by id and keeps old text when content is missing", () => {
   const prev = parseTodoCall("TodoWrite", {
     merge: false,
     todos: [
-      { id: "1", content: "读代码", status: "pending" },
-      { id: "2", content: "改界面", status: "pending" },
+      { id: "1", content: "read the code", status: "pending" },
+      { id: "2", content: "change the UI", status: "pending" },
     ],
   });
   const next = mergeTodos(prev?.items || [], {
@@ -73,49 +73,49 @@ test("merge 按 id 更新，缺 content 时沿用旧文案", () => {
     items: [{ id: "2", content: "", status: "in_progress" }],
   });
   assert.equal(next.length, 2);
-  assert.equal(next[1].content, "改界面");
+  assert.equal(next[1].content, "change the UI");
   assert.equal(next[1].status, "in_progress");
 });
 
-test("merge=false 整表替换", () => {
+test("merge=false replaces the whole list", () => {
   const next = mergeTodos(
-    [{ id: "old", content: "旧任务", status: "pending" }],
+    [{ id: "old", content: "old task", status: "pending" }],
     {
       merge: false,
-      items: [{ id: "new", content: "新任务", status: "pending" }],
+      items: [{ id: "new", content: "new task", status: "pending" }],
     },
   );
   assert.equal(next.length, 1);
   assert.equal(next[0].id, "new");
 });
 
-test("没有文案的条目不算可见待办", () => {
+test("items without text are not visible todos", () => {
   assert.equal(todoLabel({ id: "1", content: "", status: "in_progress" }), "");
   assert.equal(todoLabel({ id: "2", content: "   ", status: "pending" }), "");
 });
 
-test("进行中优先显示 activeForm", () => {
+test("in-progress items prefer activeForm", () => {
   assert.equal(
     todoLabel({
       id: "1",
-      content: "改界面",
-      activeForm: "正在改界面",
+      content: "change the UI",
+      activeForm: "changing the UI",
       status: "in_progress",
     }),
-    "正在改界面",
+    "changing the UI",
   );
   assert.equal(
     todoLabel({
       id: "1",
-      content: "改界面",
-      activeForm: "正在改界面",
+      content: "change the UI",
+      activeForm: "changing the UI",
       status: "completed",
     }),
-    "改界面",
+    "change the UI",
   );
 });
 
-test("从消息历史还原到当前这条为止的待办", () => {
+test("rebuild todos from history up to this message", () => {
   const items = todosFromMessages(
     [
       {
@@ -128,8 +128,8 @@ test("从消息历史还原到当前这条为止的待办", () => {
               arguments: {
                 merge: false,
                 todos: [
-                  { id: "1", content: "读代码", status: "in_progress" },
-                  { id: "2", content: "改界面", status: "pending" },
+                  { id: "1", content: "read the code", status: "in_progress" },
+                  { id: "2", content: "change the UI", status: "pending" },
                 ],
               },
             },
@@ -147,7 +147,7 @@ test("从消息历史还原到当前这条为止的待办", () => {
                 toolName: "TodoWrite",
                 arguments: {
                   merge: true,
-                  todos: [{ id: "1", content: "读代码", status: "completed" }],
+                  todos: [{ id: "1", content: "read the code", status: "completed" }],
                 },
               }),
             },
@@ -163,7 +163,7 @@ test("从消息历史还原到当前这条为止的待办", () => {
               name: "TodoWrite",
               arguments: {
                 merge: true,
-                todos: [{ id: "2", content: "改界面", status: "in_progress" }],
+                todos: [{ id: "2", content: "change the UI", status: "in_progress" }],
               },
             },
           },
@@ -177,6 +177,6 @@ test("从消息历史还原到当前这条为止的待办", () => {
   assert.equal(items[1].status, "pending");
 });
 
-test("残缺 JSON 不生成待办", () => {
+test("partial JSON does not create todos", () => {
   assert.equal(parseTodoCall("TodoWrite", '{"todos":[{"id":"1","content":"'), null);
 });

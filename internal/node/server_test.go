@@ -342,7 +342,7 @@ func TestHandleChatEndsWatchTurn(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("SSE 未在 Done 后结束")
+		t.Fatal("SSE did not finish after Done")
 	}
 }
 
@@ -376,7 +376,7 @@ func TestHandleChoiceKeepsEngine(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	body := `{"engine":"cursor","session":"s1","text":"允许"}`
+	body := `{"engine":"cursor","session":"s1","text":"Allow"}`
 	resp, err := ts.Client().Post(ts.URL+"/v1/openai/choice", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +388,7 @@ func TestHandleChoiceKeepsEngine(t *testing.T) {
 	}
 	time.Sleep(350 * time.Millisecond)
 	if !d.alive.Load() {
-		t.Fatal("Ask 提交后引擎 ctx 被取消")
+		t.Fatal("engine ctx was not canceled after Ask")
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 
 const engineName = "qoder-cn"
 
-// Driver 接管本机 Qoder CLI CN。
+// Driver drives the local Qoder CLI CN.
 type Driver struct {
 	root string
 	bin  string
@@ -46,7 +46,7 @@ func findBin() string {
 	return filepath.Join(home, ".local", "bin", "qodercn")
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	root := os.Getenv("QODERCN_CONFIG_DIR")
 	if root == "" {
@@ -136,13 +136,13 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 		s := protocol.Session{
 			Engine:    d.Name(),
 			ID:        id,
-			Status:    "历史",
+			Status:    "history",
 			JSONL:     path,
 			UpdatedAt: info.ModTime().Unix(),
 		}
 		s.Busy = driver.Recent(path)
 		if s.Busy {
-			s.Status = "在线"
+			s.Status = "online"
 		}
 		cwd, title := sessionMeta(path)
 		s.CWD, s.Title = cwd, title
@@ -206,7 +206,7 @@ func (d *Driver) lookup(ctx context.Context, sessionID string) (protocol.Session
 		return protocol.Session{}, err
 	}
 	cwd, _ := sessionMeta(jsonl)
-	return protocol.Session{Engine: d.Name(), ID: sessionID, CWD: cwd, JSONL: jsonl, Status: "历史"}, nil
+	return protocol.Session{Engine: d.Name(), ID: sessionID, CWD: cwd, JSONL: jsonl, Status: "history"}, nil
 }
 
 func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {

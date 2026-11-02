@@ -1,0 +1,13 @@
+.git
+.bin
+/bin
+/dist
+/desktop/build
+node_modules
+internal/relay/web/node_modules
+internal/relay/web/dist
+__pycache__
+*.pyc
+.env
+*.key
+.agent-mesh

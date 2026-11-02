@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    name: build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: internal/relay/web/package-lock.json
+      - name: Go tests
+        run: go test $(go list ./... | grep -v /desktop)
+      - name: Web tests
+        working-directory: internal/relay/web
+        run: node --experimental-strip-types --test src/events.test.ts src/ask.test.ts src/toolSummary.test.ts src/attachUpload.test.ts src/liveFlags.test.ts src/chatModel.test.ts
+      - name: Build web UI
+        run: make web
+      - name: Build binaries
+        run: make node relay ctl
+      - name: Smoke CLI
+        run: |
+          ./bin/ctl >/dev/null || true
+          ./bin/node -h >/dev/null || true
+          ./bin/relay -h >/dev/null || true

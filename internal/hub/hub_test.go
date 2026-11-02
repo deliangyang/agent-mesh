@@ -71,7 +71,7 @@ func TestPumpEndsAfterDoneWhileWatchStaysOpen(t *testing.T) {
 			}
 			got++
 		case <-deadline:
-			t.Fatal("Pump 未在 Done 后结束")
+			t.Fatal("Pump did not finish after Done")
 		}
 	}
 }

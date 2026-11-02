@@ -179,8 +179,8 @@ export function todoProgress(items: TodoItem[]): { done: number; total: number }
 
 export function formatTodoTitle(items: TodoItem[]): string {
   const { done, total } = todoProgress(items);
-  if (!total) return "待办";
-  return "待办 " + done + "/" + total;
+  if (!total) return "Todos";
+  return "Todos " + done + "/" + total;
 }
 
 export function todoLabel(item: TodoItem): string {

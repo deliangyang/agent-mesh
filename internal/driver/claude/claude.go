@@ -19,13 +19,13 @@ import (
 	"agent-mesh/internal/watchfile"
 )
 
-// Driver 接管本机 Claude Code。
+// Driver drives local Claude Code.
 type Driver struct {
 	root string
 	bin  string
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	root := os.Getenv("CLAUDE_CONFIG_DIR")
 	if root == "" {
@@ -167,7 +167,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			if _, ok := seen[id]; ok {
 				return nil
 			}
-			s := protocol.Session{Engine: d.Name(), ID: id, Status: "历史", JSONL: path, UpdatedAt: info.ModTime().Unix()}
+			s := protocol.Session{Engine: d.Name(), ID: id, Status: "history", JSONL: path, UpdatedAt: info.ModTime().Unix()}
 			seen[id] = driver.WithJSONLTitle(s)
 			return nil
 		})
@@ -231,7 +231,7 @@ func (d *Driver) lookup(ctx context.Context, sessionID string) (protocol.Session
 	if jsonl == "" {
 		return protocol.Session{}, err
 	}
-	return protocol.Session{Engine: d.Name(), ID: sessionID, JSONL: jsonl, Status: "历史"}, nil
+	return protocol.Session{Engine: d.Name(), ID: sessionID, JSONL: jsonl, Status: "history"}, nil
 }
 
 func (d *Driver) peerToken(pid int, sock string) string {
@@ -368,8 +368,8 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) 
 	return out, nil
 }
 
-// skipPrintDiagnostic 丢掉 Claude Code print 模式写到 stderr 的诊断行。
-// 例如 [claude-code:unrecognized_model] {"model":"group/never-stuck[1m]","query_source":"sdk"}
+// skipPrintDiagnostic drops diagnostic lines Claude Code print mode writes to stderr.
+// for example [claude-code:unrecognized_model] {"model":"group/never-stuck[1m]","query_source":"sdk"}
 func skipPrintDiagnostic(line string) bool {
 	return strings.HasPrefix(strings.TrimSpace(line), "[claude-code:")
 }

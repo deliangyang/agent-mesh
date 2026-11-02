@@ -15,7 +15,7 @@ import (
 	"agent-mesh/internal/watchfile"
 )
 
-// Driver 接管本机 Pi coding agent CLI。
+// Driver drives the local Pi coding agent CLI.
 type Driver struct {
 	root string
 	bin  string
@@ -41,7 +41,7 @@ func findBin() string {
 	return filepath.Join(home, ".local", "bin", "pi")
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	root := os.Getenv("PI_CODING_AGENT_DIR")
 	if root == "" {
@@ -74,7 +74,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 }
 
 func defaultModel() []protocol.Model {
-	return []protocol.Model{{ID: "pi", Engine: "pi", Name: "default", Title: "默认", Default: true}}
+	return []protocol.Model{{ID: "pi", Engine: "pi", Name: "default", Title: "default", Default: true}}
 }
 
 func parsePiModels(out string) []protocol.Model {
@@ -148,7 +148,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			ID:        id,
 			Title:     title,
 			CWD:       cwd,
-			Status:    "历史",
+			Status:    "history",
 			JSONL:     path,
 			UpdatedAt: info.ModTime().Unix(),
 		}
@@ -231,7 +231,7 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 
 func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	if !driver.FileExists(d.bin) {
-		return nil, fmt.Errorf("找不到 pi 可执行文件（已试 PATH 与 ~/.npm-global/bin/pi）")
+		return nil, fmt.Errorf("cannot find the pi binary (tried PATH and ~/.npm-global/bin/pi)")
 	}
 	args := []string{"-p", "--mode", "json"}
 	if resume != "" {

@@ -22,14 +22,14 @@ import (
 var convIDRe = regexp.MustCompile(`conversationId"\s*:\s*"([0-9a-f-]{36})"`)
 var uuidRe = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// Driver 接管本机 Cursor Agent CLI。
+// Driver drives the local Cursor Agent CLI.
 type Driver struct {
 	config string
 	data   string
 	bin    string
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	cfg := os.Getenv("CURSOR_CONFIG_DIR")
 	if cfg == "" {
@@ -171,7 +171,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 				ID:        sid,
 				Title:     title,
 				CWD:       cwd,
-				Status:    "在线",
+				Status:    "online",
 				Kind:      "interactive",
 				PID:       pid,
 				Live:      true,
@@ -206,7 +206,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 				ID:        id,
 				Title:     title,
 				CWD:       cwd,
-				Status:    "历史",
+				Status:    "history",
 				JSONL:     d.findJSONL(id, cwd),
 				UpdatedAt: driver.Epoch(obj["updatedAtMs"]),
 			}
@@ -228,7 +228,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			seen[id] = protocol.Session{
 				Engine:    d.Name(),
 				ID:        id,
-				Status:    "历史",
+				Status:    "history",
 				JSONL:     p,
 				UpdatedAt: driver.MtimeUnix(p),
 			}
@@ -314,7 +314,7 @@ func (d *Driver) lookup(ctx context.Context, id string) (protocol.Session, error
 	if jsonl == "" {
 		return protocol.Session{}, err
 	}
-	return protocol.Session{Engine: d.Name(), ID: id, JSONL: jsonl, Status: "历史"}, nil
+	return protocol.Session{Engine: d.Name(), ID: id, JSONL: jsonl, Status: "history"}, nil
 }
 
 func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
@@ -422,7 +422,7 @@ func skipCursorDiagnostic(line string) bool {
 	return strings.HasPrefix(s, "Tool {") || strings.HasPrefix(s, "Tool{")
 }
 
-// CWDHash 与 Cursor CLI 一致的目录 md5。
+// CWDHash is the directory md5 Cursor CLI uses.
 func CWDHash(cwd string) string {
 	sum := md5.Sum([]byte(cwd))
 	return hex.EncodeToString(sum[:])

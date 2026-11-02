@@ -73,7 +73,7 @@ func TestModelsEmptyListNotNull(t *testing.T) {
 		t.Fatalf("object %#v", raw["object"])
 	}
 	if raw["data"] == nil {
-		t.Fatal("data 不应为 null")
+		t.Fatal("data must not be null")
 	}
 }
 
@@ -220,12 +220,12 @@ func TestClientAPIRequiresPassword(t *testing.T) {
 func TestSPAPublicPaths(t *testing.T) {
 	s := New("unused", NewMemory(), nil)
 	if !s.publicPath("/assets/index-abc.js") {
-		t.Fatal("assets 应为公开")
+		t.Fatal("assets should be public")
 	}
 	if !s.publicPath("/login") || !s.publicPath("/favicon.svg") {
-		t.Fatal("登录页静态资源应为公开")
+		t.Fatal("login static assets should be public")
 	}
 	if s.publicPath("/style.css") || s.publicPath("/app.js") || s.publicPath("/") {
-		t.Fatal("对话页不应匿名可访问")
+		t.Fatal("chat page must not be anonymous")
 	}
 }

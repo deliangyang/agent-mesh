@@ -58,7 +58,7 @@ func TestListFillsTitleFromJSONL(t *testing.T) {
 		t.Fatal(err)
 	}
 	jsonl := filepath.Join(dir, id+".jsonl")
-	raw := `{"type":"user","message":{"content":"修复登录超时"}}` + "\n"
+	raw := `{"type":"user","message":{"content":"fix login timeout"}}` + "\n"
 	if err := os.WriteFile(jsonl, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestListFillsTitleFromJSONL(t *testing.T) {
 	}
 	for _, s := range rows {
 		if s.ID == id {
-			if s.Title != "修复登录超时" {
+			if s.Title != "fix login timeout" {
 				t.Fatalf("title %#v", s)
 			}
 			return

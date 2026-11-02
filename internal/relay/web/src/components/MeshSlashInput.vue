@@ -112,7 +112,7 @@ function onKey(ev: KeyboardEvent): void {
   ) {
     ev.preventDefault();
     ev.stopPropagation();
-    submit("请查看附件。");
+    submit("Please look at the attachments.");
     return;
   }
   if (
@@ -248,7 +248,7 @@ function onFocusIn(): void {
 
 function dismissKeyboard(): void {
   blurComposer();
-  // CopilotKit 发送后会立刻 focus 输入框，延后失焦才能收起手机键盘。
+  // CopilotKit focuses the composer right after send; blur later so the mobile keyboard can collapse.
   requestAnimationFrame(() => {
     blurComposer();
     requestAnimationFrame(blurComposer);
@@ -303,7 +303,7 @@ function onSend(orig: () => void): void {
     return;
   }
   if (!(props.modelValue || "").trim() && hasFiles.value) {
-    props.onUpdateModelValue("请查看附件。");
+    props.onUpdateModelValue("Please look at the attachments.");
     void nextTick(() => orig());
     return;
   }
@@ -362,8 +362,8 @@ function onSend(orig: () => void): void {
             :class="{ 'is-stop': showStop }"
             :data-testid="showStop ? 'copilot-chat-input-stop' : 'copilot-chat-input-send'"
             :disabled="showStop ? false : disabled && !hasFiles"
-            :aria-label="showStop ? '停止' : '发送'"
-            :title="showStop ? '停止' : '发送'"
+            :aria-label="showStop ? 'Stop' : 'Send'"
+            :title="showStop ? 'Stop' : 'Send'"
             @click="onSend(onClick)"
           >
             <svg v-if="showStop" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -382,7 +382,7 @@ function onSend(orig: () => void): void {
         </div>
       </template>
     </CopilotChatInput>
-    <div v-if="open" class="mesh-slash" role="listbox" aria-label="命令与技能">
+    <div v-if="open" class="mesh-slash" role="listbox" aria-label="Commands and skills">
       <button
         v-for="(item, index) in filtered"
         :key="item.kind + ':' + item.name"

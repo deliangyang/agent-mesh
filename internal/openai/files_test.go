@@ -11,7 +11,7 @@ import (
 func TestApplyFilesWritesInbox(t *testing.T) {
 	cwd := t.TempDir()
 	raw := []byte("hello")
-	got, err := ApplyFiles(cwd, "看这个", []ChatFile{{
+	got, err := ApplyFiles(cwd, "look at this", []ChatFile{{
 		Name: "../x.png",
 		MIME: "image/png",
 		Data: base64.StdEncoding.EncodeToString(raw),
@@ -19,7 +19,7 @@ func TestApplyFilesWritesInbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, "看这个") || !strings.Contains(got, "<<MESH_ATTACH>>") {
+	if !strings.Contains(got, "look at this") || !strings.Contains(got, "<<MESH_ATTACH>>") {
 		t.Fatalf("prompt %q", got)
 	}
 	if strings.Contains(got, "..") {
@@ -43,8 +43,8 @@ func TestApplyFilesNeedsCwd(t *testing.T) {
 }
 
 func TestStripAttachBlock(t *testing.T) {
-	got := StripAttachBlock("正文\n\n<<MESH_ATTACH>>\n- /tmp/a.png\n<</MESH_ATTACH>>")
-	if got != "正文" {
+	got := StripAttachBlock("body\n\n<<MESH_ATTACH>>\n- /tmp/a.png\n<</MESH_ATTACH>>")
+	if got != "body" {
 		t.Fatalf("got %q", got)
 	}
 }

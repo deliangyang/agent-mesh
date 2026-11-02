@@ -33,7 +33,7 @@ async function loadRepos(): Promise<void> {
   if (!cwd.value) {
     repos.value = [];
     bundle.value = null;
-    error.value = "先选一个工作目录";
+    error.value = "Pick a working directory first";
     return;
   }
   loading.value = true;
@@ -118,22 +118,22 @@ function toggleFile(path: string): void {
 
 const emptyHint = computed(() => {
   if (error.value) return "";
-  if (!cwd.value) return "选好工作目录后再看改动。";
-  if (!repos.value.length) return "这个目录下面还没有 git 仓库。";
-  if (bundle.value && !(bundle.value.files || []).length) return "工作区是干净的。";
+  if (!cwd.value) return "Pick a working directory to see the diff.";
+  if (!repos.value.length) return "No git repo under this directory.";
+  if (bundle.value && !(bundle.value.files || []).length) return "The working tree is clean.";
   return "";
 });
 </script>
 
 <template>
   <div v-if="open" class="mesh-diff-mask" @click="emit('close')"></div>
-  <aside v-if="open" class="mesh-diff" role="dialog" aria-label="项目改动">
+  <aside v-if="open" class="mesh-diff" role="dialog" aria-label="Project diff">
     <header class="mesh-diff-head">
       <div>
-        <div class="mesh-diff-name">改动</div>
-        <div class="mesh-diff-cwd">{{ cwd || "未选工作目录" }}</div>
+        <div class="mesh-diff-name">Diff</div>
+        <div class="mesh-diff-cwd">{{ cwd || "no working directory selected" }}</div>
       </div>
-      <button type="button" class="ghost" aria-label="关闭改动" @click="emit('close')">关闭</button>
+      <button type="button" class="ghost" aria-label="CloseDiff" @click="emit('close')">Close</button>
     </header>
     <div class="mesh-diff-repos">
       <button
@@ -145,11 +145,11 @@ const emptyHint = computed(() => {
         @click="loadDiff(r.path)"
       >
         <span class="mesh-diff-repo-name">{{ r.name }}</span>
-        <span class="mesh-diff-repo-meta">{{ r.branch || "—" }}{{ r.dirty ? " · 有改动" : "" }}</span>
+        <span class="mesh-diff-repo-meta">{{ r.branch || "—" }}{{ r.dirty ? " · dirty" : "" }}</span>
       </button>
     </div>
     <div class="mesh-diff-body">
-      <div v-if="loading" class="mesh-diff-empty">正在读取 git diff…</div>
+      <div v-if="loading" class="mesh-diff-empty">Reading git diff…</div>
       <div v-else-if="emptyHint" class="mesh-diff-empty">{{ emptyHint }}</div>
       <div v-else>
         <button
@@ -165,7 +165,7 @@ const emptyHint = computed(() => {
             <span class="mesh-diff-file-st">{{ f.status }}</span>
           </span>
           <div v-if="openFile === f.path" class="mesh-diff-hunks" @click.stop>
-            <pre v-if="!f.patch" class="mesh-diff-empty">没有可展开的 diff</pre>
+            <pre v-if="!f.patch" class="mesh-diff-empty">No expandable diff</pre>
             <div v-else class="mesh-diff-code">
               <div v-for="(ln, i) in linesOf(f)" :key="i" class="mesh-diff-ln" :data-k="ln.kind">
                 {{ ln.text }}

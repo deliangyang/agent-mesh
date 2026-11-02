@@ -89,6 +89,6 @@ func TestTunnelIngestPublishes(t *testing.T) {
 			t.Fatalf("%#v", got)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("ingest 未到达订阅者")
+		t.Fatal("ingest did not reach subscribers")
 	}
 }

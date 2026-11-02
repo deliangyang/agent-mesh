@@ -10,11 +10,11 @@ defineProps<{
     :data-mode="mode || 'think'"
     role="status"
     aria-live="polite"
-    :aria-label="mode === 'live' ? '进行中' : '思考中'"
+    :aria-label="mode === 'live' ? 'In progress' : 'Thinking'"
   >
     <template v-if="mode === 'live'">
       <span class="mesh-lamp" aria-hidden="true"></span>
-      <span>进行中</span>
+      <span>In progress</span>
     </template>
     <template v-else>
       <svg class="mesh-think-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -26,7 +26,7 @@ defineProps<{
           stroke-linecap="round"
         />
       </svg>
-      <span>思考中</span>
+      <span>Thinking</span>
     </template>
   </div>
 </template>

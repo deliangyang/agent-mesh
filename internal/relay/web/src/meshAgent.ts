@@ -208,7 +208,7 @@ function pushHasUser(text: string): boolean {
 function redirectIfUnauthorized(resp: Response): void {
   if (resp.status === 401) {
     location.href = "/login";
-    throw new Error("未登录");
+    throw new Error("not signed in");
   }
 }
 
@@ -250,7 +250,7 @@ async function readSSE(
 
 export class MeshAgent extends AbstractAgent {
   constructor() {
-    super({ agentId: "default", description: "Agent Mesh 会话" });
+    super({ agentId: "default", description: "Agent Mesh session" });
   }
 
   clone(): MeshAgent {
@@ -266,7 +266,7 @@ export class MeshAgent extends AbstractAgent {
       const runId = input.runId || crypto.randomUUID();
       const threadId = input.threadId || this.threadId;
       const cached = historyCache.get(threadId) || [];
-      // 同一会话已在画面上时回放当前列表；换会话则用该会话缓存，不要把旧对话快照带过去。
+      // replay the current list when the same session is already on screen; switching sessions uses that session's cache instead of the old snapshot.
       const reuseLive = historyThread === threadId && this.messages.length > 0;
       if (cached.length) {
         historyEvents = cached;
@@ -307,31 +307,31 @@ export class MeshAgent extends AbstractAgent {
       (async () => {
         sub.next({ type: EventType.RUN_STARTED, threadId, runId });
         const payload = lastUserPayload(input.messages || []);
-        const text = payload.text || (payload.files.length ? "请查看附件。" : "");
+        const text = payload.text || (payload.files.length ? "Please look at the attachments." : "");
         sentText = text;
         if (!text) {
-          showToast("缺少用户文本", "error");
-          sub.next({ type: EventType.RUN_ERROR, message: "缺少用户文本" });
+          showToast("missing user text", "error");
+          sub.next({ type: EventType.RUN_ERROR, message: "missing user text" });
           sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
           sub.complete();
           return;
         }
-        // 新建对话时 meshTarget.session 为空，不能沿用 CopilotChat 残留的旧 thread。
+        // a new chat has an empty meshTarget.session; do not reuse a leftover CopilotChat thread.
         const bound = threadId.includes("|") ? parseThreadId(threadId) : { node: "", engine: "", session: "" };
         const session = meshTarget.session;
         const engine = meshTarget.engine || bound.engine;
         const node = meshTarget.node || bound.node;
         const model = chatModelOf(meshTarget.model, node, engine);
         if (!model) {
-          showToast("请先选择引擎或模型", "error");
-          sub.next({ type: EventType.RUN_ERROR, message: "请先选择引擎或模型" });
+          showToast("Pick an engine or model first", "error");
+          sub.next({ type: EventType.RUN_ERROR, message: "Pick an engine or model first" });
           sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
           sub.complete();
           return;
         }
         if (!session && !meshTarget.cwd) {
-          showToast("请先选择工作目录", "error");
-          sub.next({ type: EventType.RUN_ERROR, message: "请先选择工作目录" });
+          showToast("Pick a working directory first", "error");
+          sub.next({ type: EventType.RUN_ERROR, message: "Pick a working directory first" });
           sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
           sub.complete();
           return;
@@ -587,7 +587,7 @@ export function resetDraft(): void {
   try {
     if (meshAgent.isRunning) meshAgent.abortRun();
   } catch {
-    /* 没有进行中的请求 */
+    /* no in-flight request */
   }
   meshAgent.threadId = "";
   meshAgent.setMessages([]);
@@ -638,7 +638,7 @@ function keepLiveTranscript(evs: MeshEvent[]): boolean {
 
 export function applyHistory(evs: MeshEvent[], reset: boolean): void {
   const incoming = evs || [];
-  // 新建会话的历史可能尚为空；空快照不能覆盖正在流式输出的对话。
+  // a new session's history may still be empty; an empty snapshot must not overwrite a live stream.
   if (reset && keepLiveTranscript(incoming)) return;
   const thread = meshAgent.threadId || historyThread;
   if (reset) {

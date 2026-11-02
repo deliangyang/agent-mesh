@@ -11,7 +11,7 @@ let seq = 0;
 function redirectIfUnauthorized(resp: Response): void {
   if (resp.status === 401) {
     location.href = "/login";
-    throw new Error("未登录");
+    throw new Error("not signed in");
   }
 }
 
@@ -38,7 +38,7 @@ export async function loadSlashItems(node: string, engine: string, cwd: string):
   } catch (err) {
     if (token === seq) slashItems.value = [];
     const text = explainError(err);
-    if (text.includes("网络")) showToast(text, "error");
+    if (/network|offline|failed to fetch/i.test(text)) showToast(text, "error");
   }
 }
 

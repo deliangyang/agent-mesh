@@ -19,7 +19,7 @@ const (
 	chunkSendWait  = 2 * time.Second
 )
 
-// Hub 监听本机已启用引擎的在线会话，转成 OpenAI chunk 推给订阅者和中继。
+// Hub watches live sessions on enabled local engines and pushes OpenAI chunks to subscribers and the relay.
 type Hub struct {
 	Drivers  *driver.Set
 	NodeID   string
@@ -42,7 +42,7 @@ type watchSlot struct {
 	gen    int
 }
 
-// New 创建集线器。
+// New creates a hub.
 func New(drivers *driver.Set, nodeID, nodeName string, log *slog.Logger) *Hub {
 	if log == nil {
 		log = slog.Default()
@@ -58,28 +58,28 @@ func New(drivers *driver.Set, nodeID, nodeName string, log *slog.Logger) *Hub {
 	}
 }
 
-// SetRelays 设置中继 ingest 地址（不含路径）。
+// SetRelays sets relay ingest URLs (no path).
 func (h *Hub) SetRelays(urls []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.relays = append([]string(nil), urls...)
 }
 
-// SetPassword 中继约定密码，ingest 时带 Bearer。
+// SetPassword is the relay password, sent as Bearer on ingest.
 func (h *Hub) SetPassword(pw string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.password = pw
 }
 
-// SetPushIngest 设置隧道推送。返回 true 时不再走 HTTP ingest。
+// SetPushIngest sets tunnel push. When it returns true, HTTP ingest is skipped.
 func (h *Hub) SetPushIngest(fn func(openai.Chunk) bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.pushIngest = fn
 }
 
-// Subscribe 订阅 chunk。调用方必须 Unsubscribe。
+// Subscribe subscribes to chunks. Callers must Unsubscribe.
 func (h *Hub) Subscribe(buf int) (int, <-chan openai.Chunk) {
 	if buf < 256 {
 		buf = 256
@@ -93,7 +93,7 @@ func (h *Hub) Subscribe(buf int) (int, <-chan openai.Chunk) {
 	return id, ch
 }
 
-// Unsubscribe 取消订阅。
+// Unsubscribe unsubscribes.
 func (h *Hub) Unsubscribe(id int) {
 	h.mu.Lock()
 	ch, ok := h.subs[id]
@@ -112,7 +112,7 @@ type chunkSub struct {
 	ch chan openai.Chunk
 }
 
-// Broadcast 向本地订阅者和中继推送。
+// Broadcast pushes to local subscribers and the relay.
 func (h *Hub) Broadcast(chunk openai.Chunk) {
 	h.mu.Lock()
 	subs := make([]chunkSub, 0, len(h.subs))
@@ -188,7 +188,7 @@ func (h *Hub) post(u string, raw []byte, password string) {
 
 func keyOf(engine, id string) string { return engine + "/" + id }
 
-// Start 周期扫描在线会话并挂上 Watch。
+// Start scans live sessions on a loop and attaches Watch.
 func (h *Hub) Start(ctx context.Context) {
 	h.scan(ctx)
 	t := time.NewTicker(2 * time.Second)
@@ -295,7 +295,7 @@ func (h *Hub) runWatch(ctx context.Context, gen int, sess protocol.Session) {
 	}
 }
 
-// WatchOne 显式跟踪一个会话（含历史），直到 ctx 取消。
+// WatchOne follows one session, including history, until ctx is canceled.
 func (h *Hub) WatchOne(ctx context.Context, engine, sessionID string) (<-chan openai.Chunk, error) {
 	d, err := h.Drivers.Get(engine)
 	if err != nil {
@@ -328,8 +328,8 @@ func (h *Hub) WatchOne(ctx context.Context, engine, sessionID string) (<-chan op
 	return out, nil
 }
 
-// Pump 把引擎事件流转成 OpenAI chunk 并广播。
-// 看到 Done 后短静默无新事件就结束输出通道，不关掉底层 Watch。
+// Pump turns an engine event stream into OpenAI chunks and broadcasts them.
+// after Done, a short quiet period with no new events closes the output channel without stopping the underlying Watch.
 func (h *Hub) Pump(engine, session, model string, evs <-chan protocol.Event) <-chan openai.Chunk {
 	out := make(chan openai.Chunk, 256)
 	go func() {
@@ -371,7 +371,7 @@ func (h *Hub) Pump(engine, session, model string, evs <-chan protocol.Event) <-c
 			select {
 			case out <- chunk:
 			case <-time.After(30 * time.Second):
-				h.Log.Debug("pump 下游阻塞过久，结束本轮", "session", ev.Session, "type", ev.Type)
+				h.Log.Debug("pump downstream blocked too long; ending this turn", "session", ev.Session, "type", ev.Type)
 				return
 			}
 			if ev.Done || quiet != nil {

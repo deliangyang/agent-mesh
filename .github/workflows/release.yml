@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to attach (empty = git describe)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: internal/relay/web/package-lock.json
+      - name: Tests
+        run: make test
+      - name: Package
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.tag }}
+        run: |
+          if [ -z "$VERSION" ]; then
+            VERSION="$(git describe --tags --always)"
+          fi
+          export VERSION
+          ./scripts/build-release.sh
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-mesh-dist
+          path: dist/*
+      - name: GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -1,4 +1,4 @@
-// Package followup 在引擎机器上持久化会话的追加对话队列。
+// Package followup persists a session follow-up queue on the engine machine.
 package followup
 
 import (
@@ -16,14 +16,14 @@ import (
 	"agent-mesh/internal/driver"
 )
 
-// Item 一条等待处理的追加消息。
+// Item is a queued follow-up.
 type Item struct {
 	ID      string `json:"id"`
 	Text    string `json:"text"`
 	Created int64  `json:"created"`
 }
 
-// File 一个会话的队列快照。
+// File is a snapshot of one session's follow-up queue.
 type File struct {
 	Engine  string `json:"engine"`
 	Session string `json:"session"`
@@ -36,7 +36,7 @@ var (
 	root string
 )
 
-// SetRoot 测试用数据目录。空则回到 ~/.agent-mesh/followups。
+// SetRoot is the test data dir. Empty falls back to ~/.agent-mesh/followups.
 func SetRoot(dir string) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -118,7 +118,7 @@ func writeFile(path string, f File) error {
 	return os.Rename(tmp, path)
 }
 
-// List 读取会话队列。
+// List reads a session queue.
 func List(engine, session string) (File, error) {
 	if engine == "" || session == "" {
 		return File{Engine: engine, Session: session, Items: []Item{}}, nil
@@ -137,14 +137,14 @@ func List(engine, session string) (File, error) {
 	return f, nil
 }
 
-// Push 追加一条，返回写入后的快照。
+// Push appends an item and returns the snapshot after write.
 func Push(engine, session, cwd, text string) (File, error) {
 	text = strings.TrimSpace(text)
 	if engine == "" || session == "" {
-		return File{}, fmt.Errorf("需要 engine 和 session")
+		return File{}, fmt.Errorf("engine and session are required")
 	}
 	if text == "" {
-		return File{}, fmt.Errorf("缺少文本")
+		return File{}, fmt.Errorf("text is required")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -165,14 +165,14 @@ func Push(engine, session, cwd, text string) (File, error) {
 	return f, nil
 }
 
-// Update 改一条文本。
+// Update updates one item's text.
 func Update(engine, session, id, text string) (File, error) {
 	text = strings.TrimSpace(text)
 	if engine == "" || session == "" || id == "" {
-		return File{}, fmt.Errorf("需要 engine、session 和 id")
+		return File{}, fmt.Errorf("engine, session, and id are required")
 	}
 	if text == "" {
-		return File{}, fmt.Errorf("缺少文本")
+		return File{}, fmt.Errorf("text is required")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -190,7 +190,7 @@ func Update(engine, session, id, text string) (File, error) {
 		}
 	}
 	if !found {
-		return File{}, fmt.Errorf("follow-up %s 不存在", id)
+		return File{}, fmt.Errorf("follow-up %s does not exist", id)
 	}
 	f.Engine = engine
 	f.Session = session
@@ -200,10 +200,10 @@ func Update(engine, session, id, text string) (File, error) {
 	return f, nil
 }
 
-// Delete 删一条。
+// Delete deletes one item.
 func Delete(engine, session, id string) (File, error) {
 	if engine == "" || session == "" || id == "" {
-		return File{}, fmt.Errorf("需要 engine、session 和 id")
+		return File{}, fmt.Errorf("engine, session, and id are required")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -222,7 +222,7 @@ func Delete(engine, session, id string) (File, error) {
 		out = append(out, it)
 	}
 	if !found {
-		return File{}, fmt.Errorf("follow-up %s 不存在", id)
+		return File{}, fmt.Errorf("follow-up %s does not exist", id)
 	}
 	f.Items = out
 	f.Engine = engine
@@ -236,10 +236,10 @@ func Delete(engine, session, id string) (File, error) {
 	return f, nil
 }
 
-// Pop 取出最早的一条。队列空时 ok=false。
+// Pop pops the oldest item. ok is false when the queue is empty.
 func Pop(engine, session string) (Item, File, bool, error) {
 	if engine == "" || session == "" {
-		return Item{}, File{}, false, fmt.Errorf("需要 engine 和 session")
+		return Item{}, File{}, false, fmt.Errorf("engine and session are required")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -267,10 +267,10 @@ func Pop(engine, session string) (Item, File, bool, error) {
 	return it, f, true, nil
 }
 
-// Unshift 把一条塞回队首（发送失败时用）。
+// Unshift pushes an item back to the front (used when send fails).
 func Unshift(engine, session, cwd string, it Item) error {
 	if engine == "" || session == "" || it.Text == "" {
-		return fmt.Errorf("需要 engine、session 和文本")
+		return fmt.Errorf("engine, session, and text are required")
 	}
 	if it.ID == "" {
 		it.ID = newID()
@@ -296,7 +296,7 @@ func Unshift(engine, session, cwd string, it Item) error {
 	return writeFile(path, f)
 }
 
-// ListAll 扫描磁盘上所有非空队列。
+// ListAll scans every non-empty queue on disk.
 func ListAll() ([]File, error) {
 	mu.Lock()
 	defer mu.Unlock()

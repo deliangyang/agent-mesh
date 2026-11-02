@@ -59,7 +59,7 @@ func TestListAndDiff(t *testing.T) {
 		if f.Path == "a.txt" && f.Patch != "" {
 			sawEdit = true
 		}
-		if f.Path == "new.txt" && f.Status == "未跟踪" {
+		if f.Path == "new.txt" && f.Status == "untracked" {
 			sawNew = true
 		}
 	}

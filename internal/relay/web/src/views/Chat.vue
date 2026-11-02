@@ -62,7 +62,7 @@ function closeNavIfMobile(afterClick = false): void {
     navOpen.value = false;
     return;
   }
-  // 等这次点击结束，避免侧栏收起后点穿到输入框弹出键盘
+  // wait until this click finishes so closing the drawer does not punch through to the composer and open the keyboard
   window.setTimeout(() => {
     navOpen.value = false;
   }, 500);
@@ -77,12 +77,12 @@ function guardComposer(): void {
 }
 
 const labels = {
-  chatInputPlaceholder: "输入消息，/ 调用命令或技能",
-  welcomeMessageText: "有什么可以帮你的？",
-  chatDisclaimerText: "AI 可能会出错，请核实重要信息。",
-  modalHeaderTitle: "对话",
-  reasoningMessageThinkingLabel: "思考中…",
-  chatInputToolbarAddButtonLabel: "添加图片或文件",
+  chatInputPlaceholder: "Message, or / for commands and skills",
+  welcomeMessageText: "How can I help?",
+  chatDisclaimerText: "AI can be wrong. Check anything that matters.",
+  modalHeaderTitle: "Chat",
+  reasoningMessageThinkingLabel: "Thinking…",
+  chatInputToolbarAddButtonLabel: "Add images or files",
 };
 
 const copied = ref(false);
@@ -90,8 +90,8 @@ let copiedTimer = 0;
 
 const linkHint = computed(() => {
   if (meshLink.state === "live") return "";
-  if (meshLink.state === "connecting") return "正在连接节点";
-  return "连接已断开，正在重连";
+  if (meshLink.state === "connecting") return "Connecting to the node";
+  return "Disconnected; reconnecting";
 });
 
 const attachConfig = {
@@ -120,12 +120,12 @@ const engineCards = computed(() => {
 
 const nodePickLabel = computed(() => {
   const n = catalog.nodes.find((row) => row.id === filters.node);
-  return n ? nodeName(n.id, n.name) : "未选";
+  return n ? nodeName(n.id, n.name) : "None";
 });
 
 const enginePickLabel = computed(() => {
   const e = engineCards.value.find((row) => row.name === filters.engine);
-  return e ? e.title || e.name : "未选";
+  return e ? e.title || e.name : "None";
 });
 
 const modelOptions = computed(() => {
@@ -187,10 +187,10 @@ const sessionGroups = computed((): SessionGroup[] => {
   const yesterday = today - 86400000;
   const week = today - 6 * 86400000;
   const groups: SessionGroup[] = [
-    { label: "今天", items: [] },
-    { label: "昨天", items: [] },
-    { label: "7天内", items: [] },
-    { label: "更早", items: [] },
+    { label: "Today", items: [] },
+    { label: "Yesterday", items: [] },
+    { label: "Past 7 days", items: [] },
+    { label: "Older", items: [] },
   ];
   for (const s of sessionRows.value) {
     const t = sessionStamp(s) * 1000;
@@ -199,7 +199,7 @@ const sessionGroups = computed((): SessionGroup[] => {
     else if (t >= week) groups[2].items.push(s);
     else groups[3].items.push(s);
   }
-  return groups.filter((g) => g.items.length || (creating.value && g.label === "今天"));
+  return groups.filter((g) => g.items.length || (creating.value && g.label === "Today"));
 });
 
 const threadId = computed(() => {
@@ -212,8 +212,8 @@ const isDraftChat = computed(() => chatKey.value === "draft" || chatKey.value.st
 const chatThreadId = computed(() => (isDraftChat.value ? chatKey.value : threadId.value || undefined));
 
 const chatTitle = computed(() => {
-  if (creating.value) return meshLive.title || "新会话";
-  return selected.value?.title || meshLive.title || "对话";
+  if (creating.value) return meshLive.title || "New chat";
+  return selected.value?.title || meshLive.title || "Chat";
 });
 
 const welcomeHint = computed(() => {
@@ -221,9 +221,9 @@ const welcomeHint = computed(() => {
   const engine = engineCards.value.find((e) => e.name === filters.engine);
   const nodeLabel = nodeName(filters.node, node?.name);
   const engineLabel = engine?.title || engine?.name || "";
-  if (engineLabel && filters.node) return `将发到 ${nodeLabel} 的 ${engineLabel}`;
-  if (filters.node) return `节点 ${nodeLabel}`;
-  return "先在左侧选好节点和引擎";
+  if (engineLabel && filters.node) return `Will send to ${engineLabel} on ${nodeLabel}`;
+  if (filters.node) return `Node ${nodeLabel}`;
+  return "Pick a node and engine on the left";
 });
 
 async function copyTitle(): Promise<void> {
@@ -290,11 +290,11 @@ function thinkHintAfter(message: { id?: string }): boolean {
 }
 
 function nodeName(id: string, name?: string): string {
-  return name || id || "节点";
+  return name || id || "Node";
 }
 
 function modelLabel(id: string): string {
-  if (!id) return "选择模型";
+  if (!id) return "Pick a model";
   for (const n of catalog.nodes) {
     if (n.id && id.startsWith(n.id + "/")) return id.slice(n.id.length + 1);
   }
@@ -483,7 +483,7 @@ function hydrateFromQuery(): void {
       id: sid,
       engine,
       node_id: node,
-      title: engine || "会话",
+      title: engine || "session",
     } as Session);
   if (hit.engine) filters.engine = hit.engine;
   syncModelToEngine();
@@ -535,7 +535,7 @@ watch(
         engine: filters.engine,
         node_id: filters.node,
         cwd: filters.dir,
-        title: meshLive.title || "新会话",
+        title: meshLive.title || "New chat",
         live: true,
         updated_at: Math.floor(Date.now() / 1000),
       } as Session);
@@ -557,7 +557,7 @@ watch(
     meshTarget.session = s?.id || meshLive.session || "";
     meshTarget.model = filters.model;
     meshTarget.cwd = filters.dir;
-    // 草稿会话钉在 draft-* thread 上；中途改 thread-id 会 abort 首轮流式输出。
+    // draft chats stay on a draft-* thread; changing thread-id mid-turn aborts the first stream.
     if (isDraftChat.value) return;
     meshAgent.threadId = threadId.value;
   },
@@ -654,12 +654,12 @@ function stopTurn(slot: { onStop?: () => void }): void {
   try {
     slot.onStop?.();
   } catch {
-    /* CopilotKit 未挂停止 */
+    /* CopilotKit did not attach stop */
   }
   try {
     if (meshAgent.isRunning) meshAgent.abortRun();
   } catch {
-    /* 没有进行中的请求 */
+    /* no in-flight request */
   }
 }
 
@@ -759,8 +759,8 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="ghost mesh-theme-btn"
-          :title="theme === 'dark' ? '切换到浅色主题' : '切换到暗黑主题'"
-          :aria-label="theme === 'dark' ? '切换到浅色主题' : '切换到暗黑主题'"
+          :title="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+          :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
           @click="flipTheme"
         >
           <svg v-if="theme === 'dark'" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -782,9 +782,9 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <form method="post" action="/logout">
-          <button type="submit" class="ghost">退出</button>
+          <button type="submit" class="ghost">Sign out</button>
         </form>
-        <button type="button" class="ghost mesh-nav-close" aria-label="关闭侧边栏" @click="closeNav">
+        <button type="button" class="ghost mesh-nav-close" aria-label="Close sidebar" @click="closeNav">
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
@@ -799,7 +799,7 @@ onBeforeUnmount(() => {
           aria-controls="mesh-node-cards"
           @click="picksOpen.node = !picksOpen.node"
         >
-          <span class="mesh-pick-kicker">节点</span>
+          <span class="mesh-pick-kicker">Node</span>
           <span class="mesh-pick-current">{{ nodePickLabel }}</span>
           <svg class="mesh-pick-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M4.2 2.4 8.4 6 4.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -816,7 +816,7 @@ onBeforeUnmount(() => {
           >
             {{ nodeName(n.id, n.name) }}
           </button>
-          <div v-if="!catalog.nodes.length" class="mesh-pick-empty">接入节点后即可开始</div>
+          <div v-if="!catalog.nodes.length" class="mesh-pick-empty">Connect a node to get started</div>
         </div>
         <button
           type="button"
@@ -826,7 +826,7 @@ onBeforeUnmount(() => {
           aria-controls="mesh-engine-cards"
           @click="picksOpen.engine = !picksOpen.engine"
         >
-          <span class="mesh-pick-kicker">引擎</span>
+          <span class="mesh-pick-kicker">Engine</span>
           <span class="mesh-pick-current">{{ enginePickLabel }}</span>
           <svg class="mesh-pick-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M4.2 2.4 8.4 6 4.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -843,30 +843,30 @@ onBeforeUnmount(() => {
           >
             {{ e.title || e.name }}
           </button>
-          <div v-if="!engineCards.length" class="mesh-pick-empty">先选一个节点</div>
+          <div v-if="!engineCards.length" class="mesh-pick-empty">Pick a node first</div>
         </div>
       </div>
       <button class="mesh-new" type="button" @click="newSession">
         <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
-        新会话
+        New chat
       </button>
       <div class="mesh-drawer-toolbar">
-        <span>对话</span>
-        <button class="ghost" type="button" @click="refreshCatalog">刷新</button>
+        <span>Chat</span>
+        <button class="ghost" type="button" @click="refreshCatalog">Refresh</button>
       </div>
       <div class="mesh-threads">
         <div v-for="g in sessionGroups" :key="g.label" class="mesh-time-group">
           <div class="mesh-time-label">{{ g.label }}</div>
           <button
-            v-if="creating && !selected?.id && g.label === '今天'"
+            v-if="creating && !selected?.id && g.label === 'Today'"
             type="button"
             class="mesh-thread sel"
             :class="{ live: chatStreaming }"
           >
             <span v-if="chatStreaming" class="mesh-lamp" aria-hidden="true"></span>
-            <span class="mesh-thread-name">{{ meshLive.title || "新会话" }}</span>
+            <span class="mesh-thread-name">{{ meshLive.title || "New chat" }}</span>
           </button>
           <button
             v-for="s in g.items"
@@ -880,10 +880,10 @@ onBeforeUnmount(() => {
             @click="openSession(s)"
           >
             <span v-if="sessionStreaming(s)" class="mesh-lamp" aria-hidden="true"></span>
-            <span class="mesh-thread-name">{{ s.title || "未命名对话" }}</span>
+            <span class="mesh-thread-name">{{ s.title || "Untitled chat" }}</span>
           </button>
         </div>
-        <div v-if="!sessionRows.length && !creating" class="mesh-empty">还没有对话，点上面开一轮</div>
+        <div v-if="!sessionRows.length && !creating" class="mesh-empty">No chats yet. Start one above.</div>
       </div>
     </aside>
     <section class="mesh-chat">
@@ -891,8 +891,8 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="ghost mesh-nav-toggle"
-          :aria-label="navOpen ? '收起侧边栏' : '展开侧边栏'"
-          :title="navOpen ? '收起侧边栏' : '展开侧边栏'"
+          :aria-label="navOpen ? 'Hide sidebar' : 'Show sidebar'"
+          :title="navOpen ? 'Hide sidebar' : 'Show sidebar'"
           @click="toggleNav"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -904,37 +904,37 @@ onBeforeUnmount(() => {
           type="button"
           class="mesh-chat-title"
           :class="{ live: liveHint === 'live', copied: copied, ended: turnEnded }"
-          :title="copied ? '已复制标题和会话编号' : '点击复制标题和会话编号'"
-          :aria-label="copied ? '已复制标题和会话编号' : '复制标题和会话编号'"
+          :title="copied ? 'Copied title and session id' : 'Copy title and session id'"
+          :aria-label="copied ? 'Copied title and session id' : 'Copy title and session id'"
           @click="copyTitle"
         >
           <span
             v-if="liveHint === 'live'"
             class="mesh-lamp"
             role="status"
-            aria-label="正在输出"
+            aria-label="Streaming"
           ></span>
           <span
             v-else-if="turnEnded"
             class="mesh-ended"
             role="status"
-            aria-label="已结束"
-          >已结束</span>
-          <span class="mesh-chat-title-text">{{ copied ? "已复制" : chatTitle }}</span>
+            aria-label="Done"
+          >Done</span>
+          <span class="mesh-chat-title-text">{{ copied ? "Copied" : chatTitle }}</span>
         </button>
         <button
           type="button"
           class="ghost mesh-diff-toggle"
           :class="{ on: diffOpen }"
-          title="查看项目改动"
-          aria-label="查看项目改动"
+          title="View project diff"
+          aria-label="View project diff"
           @click="diffOpen = !diffOpen"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 3.5h8M4 8h5.5M4 12.5h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
             <path d="M11.2 6.2 13 8l-1.8 1.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          改动
+          Diff
         </button>
       </div>
       <MeshDiffPanel :open="diffOpen" @close="diffOpen = false" />
@@ -948,7 +948,7 @@ onBeforeUnmount(() => {
         >
           <template #welcome-message>
             <div class="mesh-welcome">
-              <h1>有什么可以帮你的？</h1>
+              <h1>How can I help?</h1>
               <p>{{ welcomeHint }}</p>
             </div>
           </template>
@@ -974,7 +974,7 @@ onBeforeUnmount(() => {
                   type="button"
                   class="mesh-copy"
                   :aria-label="label"
-                  :title="copied ? '已复制' : label"
+                  :title="copied ? 'Copied' : label"
                   @click="onCopy"
                 >
                   <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1007,7 +1007,7 @@ onBeforeUnmount(() => {
               type="button"
               class="mesh-copy"
               :aria-label="label"
-              :title="copied ? '已复制' : label"
+              :title="copied ? 'Copied' : label"
               @click="onCopy"
             >
               <svg v-if="copied" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1047,7 +1047,7 @@ onBeforeUnmount(() => {
                     </svg>
                     <span>{{ modelLabel(filters.model) }}</span>
                   </button>
-                  <div v-if="openPick === 'model'" class="mesh-pop" role="listbox" aria-label="选择模型">
+                  <div v-if="openPick === 'model'" class="mesh-pop" role="listbox" aria-label="Pick a model">
                     <button
                       v-for="m in modelOptions"
                       :key="m.id"
@@ -1058,14 +1058,14 @@ onBeforeUnmount(() => {
                     >
                       {{ modelLabel(m.id) }}
                     </button>
-                    <div v-if="!modelOptions.length" class="mesh-pop-empty">暂无模型</div>
+                    <div v-if="!modelOptions.length" class="mesh-pop-empty">No models</div>
                   </div>
                 </div>
                 <div class="mesh-chip">
                   <button
                     type="button"
                     class="mesh-chip-btn is-dir"
-                    :title="filters.dir || '选择工作目录'"
+                    :title="filters.dir || 'Pick a working directory'"
                     @click.stop="togglePick('dir')"
                   >
                     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1076,9 +1076,9 @@ onBeforeUnmount(() => {
                         stroke-linejoin="round"
                       />
                     </svg>
-                    <span>{{ filters.dir ? dirBase(filters.dir) : "工作目录" }}</span>
+                    <span>{{ filters.dir ? dirBase(filters.dir) : "Workspace" }}</span>
                   </button>
-                  <div v-if="openPick === 'dir'" class="mesh-pop" role="listbox" aria-label="选择工作目录">
+                  <div v-if="openPick === 'dir'" class="mesh-pop" role="listbox" aria-label="Pick a working directory">
                     <button
                       v-for="d in dirOptions"
                       :key="(d.node_id || '') + d.path + (d.engine || '')"
@@ -1090,7 +1090,7 @@ onBeforeUnmount(() => {
                     >
                       <span class="mesh-pop-dir">{{ d.path }}</span>
                     </button>
-                    <div v-if="!dirOptions.length" class="mesh-pop-empty">暂无工作目录</div>
+                    <div v-if="!dirOptions.length" class="mesh-pop-empty">No workspaces</div>
                   </div>
                 </div>
               </div>
@@ -1139,8 +1139,8 @@ onBeforeUnmount(() => {
       <div class="mesh-link-card">
         <span class="mesh-lamp mesh-link-lamp" aria-hidden="true"></span>
         <p class="mesh-link-title">{{ linkHint }}</p>
-        <p class="mesh-link-copy">连上之后会自动刷新对话、目录和进行中的进度。</p>
-        <button type="button" class="mesh-link-reload" @click="reloadPage">刷新页面</button>
+        <p class="mesh-link-copy">Once connected, chats, directories, and live progress refresh on their own.</p>
+        <button type="button" class="mesh-link-reload" @click="reloadPage">Reload</button>
       </div>
     </div>
   </div>

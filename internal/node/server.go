@@ -17,7 +17,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Server 跑在装有各 Agent 的机器上，处理加密 RPC 与 OpenAI 兼容接口。
+// Server runs on a machine with the agents and handles encrypted RPC plus the OpenAI-compatible API.
 type Server struct {
 	Ident   *e2e.Identity
 	Listen  string
@@ -39,7 +39,7 @@ type tunnelConn struct {
 	wmu  *sync.Mutex
 }
 
-// New 创建节点服务。
+// New creates the node server.
 func New(ident *e2e.Identity, listen, name string, drivers *driver.Set, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
@@ -59,7 +59,7 @@ func New(ident *e2e.Identity, listen, name string, drivers *driver.Set, log *slo
 	return s
 }
 
-// Info 公开信息。
+// Info is public info.
 func (s *Server) Info() protocol.NodeInfo {
 	pub := s.Ident.Public()
 	return protocol.NodeInfo{
@@ -72,7 +72,7 @@ func (s *Server) Info() protocol.NodeInfo {
 	}
 }
 
-// Handler HTTP 路由。
+// Handler is the HTTP router.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -305,7 +305,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// ListenAndServe 启动节点 HTTP。
+// ListenAndServe starts the node HTTP server.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	hs := &http.Server{Addr: s.Listen, Handler: s.Handler()}
 	s.mu.Lock()

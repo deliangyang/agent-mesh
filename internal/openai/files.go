@@ -17,14 +17,14 @@ const (
 	attachCloseMark = "<</MESH_ATTACH>>"
 )
 
-// ChatFile 对话附件，data 为标准 Base64。
+// ChatFile is a chat attachment; data is standard Base64.
 type ChatFile struct {
 	Name string `json:"name"`
 	MIME string `json:"mime"`
 	Data string `json:"data"`
 }
 
-// CollectFiles 优先用请求里的 files，否则从最后一条用户内容块抽出。
+// CollectFiles prefers request files, otherwise extracts them from the last user content block.
 func CollectFiles(req ChatRequest) []ChatFile {
 	if len(req.Files) > 0 {
 		return req.Files
@@ -38,17 +38,17 @@ func CollectFiles(req ChatRequest) []ChatFile {
 	return nil
 }
 
-// ApplyFiles 把附件写到 cwd/.agent-mesh/inbox，并在提示末尾附上路径。
+// ApplyFiles writes attachments to cwd/.agent-mesh/inbox and appends their paths to the prompt.
 func ApplyFiles(cwd, text string, files []ChatFile) (string, error) {
 	if len(files) == 0 {
 		return text, nil
 	}
 	if len(files) > maxChatFiles {
-		return "", fmt.Errorf("最多 %d 个附件", maxChatFiles)
+		return "", fmt.Errorf("at most %d attachments", maxChatFiles)
 	}
 	cwd = strings.TrimSpace(cwd)
 	if cwd == "" {
-		return "", fmt.Errorf("发送附件需要工作目录")
+		return "", fmt.Errorf("sending attachments requires a working directory")
 	}
 	dir := filepath.Join(cwd, ".agent-mesh", "inbox")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -59,10 +59,10 @@ func ApplyFiles(cwd, text string, files []ChatFile) (string, error) {
 	for i, f := range files {
 		raw, err := decodeFileData(f.Data)
 		if err != nil {
-			return "", fmt.Errorf("附件 %s: %w", safeFileName(f.Name), err)
+			return "", fmt.Errorf("attachment %s: %w", safeFileName(f.Name), err)
 		}
 		if len(raw) > maxChatFileB {
-			return "", fmt.Errorf("附件 %s 超过 20MB", safeFileName(f.Name))
+			return "", fmt.Errorf("attachment %s is over 20MB", safeFileName(f.Name))
 		}
 		name := safeFileName(f.Name)
 		path := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", stamp, i+1, name))
@@ -77,12 +77,12 @@ func ApplyFiles(cwd, text string, files []ChatFile) (string, error) {
 	}
 	body := strings.TrimSpace(text)
 	if body == "" {
-		body = "请查看附件。"
+		body = "Please look at the attachments."
 	}
-	return body + "\n\n" + attachOpenMark + "\n用户上传了以下附件，请用 Read 工具查看：\n" + strings.Join(lines, "\n") + "\n" + attachCloseMark, nil
+	return body + "\n\n" + attachOpenMark + "\nThe user uploaded these attachments; inspect them with the Read tool:\n" + strings.Join(lines, "\n") + "\n" + attachCloseMark, nil
 }
 
-// StripAttachBlock 去掉提示里的附件路径块，供历史展示。
+// StripAttachBlock strips the attachment path block from a prompt for history display.
 func StripAttachBlock(text string) string {
 	s := text
 	for {

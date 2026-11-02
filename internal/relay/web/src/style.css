@@ -113,10 +113,10 @@ html.dark [data-copilotkit],
   --sidebar-ring: var(--signal);
 }
 
-/* CopilotKit @layer base 会给每个 [data-copilotkit] 铺 background-color: var(--background)。
-   暗色下变量即使已改成 --paper（#171e1b），消息节点再铺一层仍会和
-   html/body 的 --wall（#121816）、侧栏 --wall、对话区 --paper 叠成一块块暗底。
-   根节点跟纸色，嵌套节点透下去。 */
+/* CopilotKit @layer base paints background-color: var(--background) on every [data-copilotkit].
+   In dark mode the variable is already --paper (#171e1b), so a second coat on message nodes
+   stacks against html/body --wall (#121816), the drawer --wall, and the chat --paper.
+   Keep the root on paper and let nested nodes stay transparent. */
 .mesh-root[data-copilotkit] [data-copilotkit] {
   background-color: transparent;
 }
@@ -165,10 +165,10 @@ html.dark #app {
   outline-offset: 2px;
 }
 
-/* 石墨铅芯轨：闲置是淡墨，悬停加实，拖动点亮苔绿。
-   Chrome 121+ 的叠加滚动条只认 scrollbar-width/color，会忽略 webkit 伪元素；
-   Safari 仍走 ::-webkit-scrollbar，所以两套一起写。选择器覆盖到 body，
-   以免 CopilotKit 传送到根节点外的菜单掉回系统滚动条。 */
+/* Graphite scrollbar: faint when idle, solid on hover, moss-green while dragging.
+   Overlay scrollbars on Chrome 121+ only honor scrollbar-width/color and ignore
+   webkit pseudo-elements; Safari still uses ::-webkit-scrollbar, so both are set.
+   Selectors reach body so menus CopilotKit portals outside the root keep the theme. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--rail-thumb) transparent;
@@ -1126,7 +1126,7 @@ html.dark #app {
   max-width: none !important;
 }
 
-/* 短对话时把消息贴到输入框上方，避免中间留下大块空白 */
+/* Pin short chats against the composer so the middle does not stay empty. */
 .mesh-chat [data-testid="copilot-chat-view-scroll"] > div {
   box-sizing: border-box;
   min-height: 100%;
@@ -1149,7 +1149,7 @@ html.dark #app {
   margin-right: 0;
 }
 
-/* 输入浮层盖在滚动区上。不铺底色时，模型和目录会叠在最后几行对话上，看起来像字重了。 */
+/* The input overlay sits on the scroll pane. Without a fill, model and directory chips stack on the last chat lines. */
 .mesh-chat [data-testid="copilot-input-overlay"] {
   box-sizing: border-box;
   padding-left: var(--chat-gutter);
@@ -1439,7 +1439,7 @@ html.dark #app {
   display: none;
 }
 
-/* CopilotKit 思考气泡没有 testid；空槽若未覆盖，展开的 1fr 网格会把对话撑出大块空白 */
+/* CopilotKit thinking bubbles have no testid; an uncovered empty slot expands 1fr and leaves a blank chat pane. */
 .mesh-chat [data-copilotkit][data-message-id]:not([data-testid]),
 .mesh-reason-skip {
   display: none !important;
@@ -1533,7 +1533,7 @@ html.dark #app {
   line-height: 1.45;
 }
 
-/* 代码块：单层井，密排等宽，避免 Shiki .line 块级化后再叠加 pre 换行 */
+/* Code blocks: one well, tight monospace, so Shiki .line blocks do not double pre newlines. */
 .copilot-chat-assistant-markdown [data-streamdown="code-block"] {
   position: relative;
   width: 100%;
@@ -1638,7 +1638,7 @@ html.dark #app {
   tab-size: 8;
 }
 
-/* CopilotKit 把 .line 设成 block，Shiki 行间又留了换行，行距会被算两次 */
+/* CopilotKit sets .line to block and Shiki keeps newlines between lines, so line-height would be counted twice. */
 .copilot-chat-assistant-markdown [data-streamdown="code-body"] .line,
 .copilot-chat-assistant-markdown [data-streamdown="code"] .line,
 .copilot-chat-assistant-markdown .shiki .line {

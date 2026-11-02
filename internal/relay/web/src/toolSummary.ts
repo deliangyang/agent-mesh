@@ -149,7 +149,7 @@ function parseJsonObject(s: string): Record<string, unknown> | null {
         return parsed as Record<string, unknown>;
       }
     } catch {
-      /* 半截 JSON 再往下抽字段 */
+      /* keep pulling fields from partial JSON */
     }
     return null;
   };

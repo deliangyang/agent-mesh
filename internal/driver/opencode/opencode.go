@@ -15,13 +15,13 @@ import (
 	"agent-mesh/internal/watchfile"
 )
 
-// Driver 接管本机 OpenCode CLI。
+// Driver drives the local OpenCode CLI.
 type Driver struct {
 	root string
 	bin  string
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	root := os.Getenv("OPENCODE_DATA_DIR")
 	if root == "" {
@@ -272,7 +272,7 @@ func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-ch
 
 func defaultModel(engine string) []protocol.Model {
 	return []protocol.Model{{
-		ID: engine, Engine: engine, Name: "default", Title: "默认", Default: true,
+		ID: engine, Engine: engine, Name: "default", Title: "default", Default: true,
 	}}
 }
 
@@ -368,7 +368,7 @@ func parseSessionList(engine, out string) []protocol.Session {
 			ID:        id,
 			Title:     title,
 			CWD:       cwd,
-			Status:    "历史",
+			Status:    "history",
 			UpdatedAt: driver.Epoch(tm),
 		}
 		outRows = append(outRows, driver.WithJSONLTitle(s))

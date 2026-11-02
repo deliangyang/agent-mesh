@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// PollJSONL 跟踪 jsonl 新增行，直到 ctx 取消。
+// PollJSONL follows new jsonl lines until ctx is canceled.
 func PollJSONL(ctx context.Context, path string, fromEnd bool, interval time.Duration) (<-chan map[string]any, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -61,7 +61,7 @@ func trimNL(b []byte) []byte {
 	return b
 }
 
-// TailJSONL 读取末尾若干行。
+// TailJSONL reads the last few lines.
 func TailJSONL(path string, n int, handle func(map[string]any)) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {

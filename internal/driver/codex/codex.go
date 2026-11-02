@@ -344,20 +344,21 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 	return out, nil
 }
 
-func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	cmd := exec.CommandContext(ctx, d.bin, "queue", sessionID, text)
 	if err := cmd.Run(); err == nil {
 		return d.Watch(ctx, sessionID)
 	}
-	return d.runExec(ctx, "", text, sessionID)
+	return d.runExec(ctx, "", text, sessionID, model)
 }
 
-func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
-	return d.runExec(ctx, cwd, text, resume)
+func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
+	return d.runExec(ctx, cwd, text, resume, model)
 }
 
-func (d *Driver) runExec(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *Driver) runExec(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	args := []string{"exec", "--json"}
+	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	if resume != "" {
 		args = append(args, "resume", resume)
 	}

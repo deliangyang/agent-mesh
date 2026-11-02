@@ -284,7 +284,7 @@ func (d *Driver) inject(sess protocol.Session, text string) error {
 	return nil
 }
 
-func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	sess, err := d.lookup(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -294,18 +294,19 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan prot
 			return d.Watch(ctx, sess.ID)
 		}
 	}
-	return d.runPrint(ctx, sess.CWD, text, sess.ID)
+	return d.runPrint(ctx, sess.CWD, text, sess.ID, model)
 }
 
-func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
-	return d.runPrint(ctx, cwd, text, resume)
+func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
+	return d.runPrint(ctx, cwd, text, resume, model)
 }
 
-func (d *Driver) runPrint(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	args := []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}
 	if resume != "" {
 		args = append(args, "--resume", resume)
 	}
+	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, text)
 	cmd := exec.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {

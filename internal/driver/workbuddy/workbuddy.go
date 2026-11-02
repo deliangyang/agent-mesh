@@ -283,7 +283,7 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 	return out, nil
 }
 
-func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	gws := d.discover()
 	if len(gws) == 0 {
 		return nil, fmt.Errorf("no live workbuddy gateway")
@@ -296,6 +296,9 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan prot
 	watchCtx, cancelWatch := context.WithCancel(ctx)
 	ch, watchErr := d.Watch(watchCtx, sessionID)
 	body := map[string]string{"text": text}
+	if name := driver.CLIModel(model, d.Name()); name != "" {
+		body["model"] = name
+	}
 	raw, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gw.URL+"/api/v1/sessions/"+sessionID+"/reply", bytes.NewReader(raw))
 	if err != nil {
@@ -330,9 +333,9 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan prot
 	return ch, nil
 }
 
-func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	if resume != "" {
-		return d.Reply(ctx, resume, text)
+		return d.Reply(ctx, resume, text, model)
 	}
 	gws := d.discover()
 	if len(gws) == 0 {
@@ -356,7 +359,11 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan pro
 	}); err != nil {
 		return nil, fmt.Errorf("acp initialize: %w", err)
 	}
-	res, err := acp.call(ctx, "session/new", map[string]any{"cwd": cwd, "mcpServers": []any{}})
+	newParams := map[string]any{"cwd": cwd, "mcpServers": []any{}}
+	if name := driver.CLIModel(model, d.Name()); name != "" {
+		newParams["model"] = name
+	}
+	res, err := acp.call(ctx, "session/new", newParams)
 	if err != nil {
 		return nil, fmt.Errorf("session/new: %w", err)
 	}

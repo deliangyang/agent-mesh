@@ -38,11 +38,11 @@ func (stubDriver) Watch(ctx context.Context, sessionID string) (<-chan protocol.
 	return ch, nil
 }
 
-func (stubDriver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (stubDriver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	return nil, nil
 }
 
-func (stubDriver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (stubDriver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	return nil, nil
 }
 
@@ -92,6 +92,7 @@ type recDriver struct {
 	sessions []string
 	mu       sync.Mutex
 	replies  []string
+	models   []string
 }
 
 func (d *recDriver) Name() string { return d.name }
@@ -119,9 +120,10 @@ func (d *recDriver) Watch(ctx context.Context, sessionID string) (<-chan protoco
 	return ch, nil
 }
 
-func (d *recDriver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *recDriver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	d.mu.Lock()
 	d.replies = append(d.replies, sessionID)
+	d.models = append(d.models, model)
 	d.mu.Unlock()
 	for _, id := range d.sessions {
 		if id == sessionID {
@@ -134,7 +136,10 @@ func (d *recDriver) Reply(ctx context.Context, sessionID, text string) (<-chan p
 	return nil, fmt.Errorf("session %s not unique or missing", sessionID)
 }
 
-func (d *recDriver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *recDriver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
+	d.mu.Lock()
+	d.models = append(d.models, model)
+	d.mu.Unlock()
 	ch := make(chan protocol.Event, 1)
 	ch <- protocol.Event{Type: "assistant", Text: "send-" + d.name, Session: resume, Engine: d.name, Done: true}
 	close(ch)
@@ -189,6 +194,36 @@ func TestHandleChatUsesSessionEngine(t *testing.T) {
 	cursor.mu.Unlock()
 	if n != 1 {
 		t.Fatalf("cursor replies %d claude %#v", n, claude.replies)
+	}
+}
+
+func TestHandleChatPassesModel(t *testing.T) {
+	ident, err := e2e.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur := &recDriver{name: "cursor"}
+	set := driver.NewSet()
+	set.Register(cur)
+	srv := New(ident, "unused", "test", set, nil)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	body := `{"model":"cursor/composer-2.5","stream":false,"messages":[{"role":"user","content":"hi"}],"cwd":"/tmp"}`
+	resp, err := ts.Client().Post(ts.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d %s", resp.StatusCode, raw)
+	}
+	cur.mu.Lock()
+	got := append([]string{}, cur.models...)
+	cur.mu.Unlock()
+	if len(got) != 1 || got[0] != "composer-2.5" {
+		t.Fatalf("models %#v", got)
 	}
 }
 
@@ -270,7 +305,7 @@ func (d *hangWatchDriver) List(ctx context.Context, all bool) ([]protocol.Sessio
 	return []protocol.Session{{Engine: "cursor", ID: "s1", Title: "demo", Live: true}}, nil
 }
 
-func (d *hangWatchDriver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *hangWatchDriver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	ch := make(chan protocol.Event, 2)
 	go func() {
 		ch <- protocol.Event{Type: "assistant", Text: "ok", Session: sessionID, Engine: "cursor", Done: true}
@@ -318,7 +353,7 @@ type choiceDriver struct {
 
 func (d *choiceDriver) Name() string { return "cursor" }
 
-func (d *choiceDriver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *choiceDriver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	ch := make(chan protocol.Event, 1)
 	go func() {
 		time.Sleep(200 * time.Millisecond)

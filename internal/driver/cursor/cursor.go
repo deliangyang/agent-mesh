@@ -317,19 +317,19 @@ func (d *Driver) lookup(ctx context.Context, id string) (protocol.Session, error
 	return protocol.Session{Engine: d.Name(), ID: id, JSONL: jsonl, Status: "历史"}, nil
 }
 
-func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	sess, err := d.lookup(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	return d.runPrint(ctx, sess.CWD, text, sess.ID)
+	return d.runPrint(ctx, sess.CWD, text, sess.ID, model)
 }
 
-func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
-	return d.runPrint(ctx, cwd, text, resume)
+func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
+	return d.runPrint(ctx, cwd, text, resume, model)
 }
 
-func (d *Driver) runPrint(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	args := []string{"-p", "--output-format", "stream-json", "--stream-partial-output", "--trust", "--approve-mcps"}
 	if resume != "" {
 		args = append(args, "--resume", resume)
@@ -337,6 +337,7 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume string) (<-chan
 	if cwd != "" {
 		args = append(args, "--workspace", cwd)
 	}
+	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	cmd := exec.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd

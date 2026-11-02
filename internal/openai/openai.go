@@ -206,6 +206,30 @@ func SplitModel(id string, known []string) (engine, name string) {
 	return engine, name
 }
 
+func knownEngine(name string, known []string) bool {
+	for _, k := range known {
+		if k == name {
+			return true
+		}
+	}
+	return false
+}
+
+// EngineModel 从 chat 请求拆出引擎和模型名。engine 字段优先；前缀对不上则不用该模型名。
+func EngineModel(model, engineField string, known []string) (engine, name string) {
+	engine, name = SplitModel(model, known)
+	if engineField == "" {
+		return engine, name
+	}
+	if engine == engineField {
+		return engine, name
+	}
+	if name == "" && engine != "" && !knownEngine(engine, known) {
+		return engineField, engine
+	}
+	return engineField, ""
+}
+
 // DoneChunk 结束块。
 func DoneChunk(id, model string) Chunk {
 	stop := "stop"

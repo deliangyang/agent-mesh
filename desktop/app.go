@@ -273,7 +273,7 @@ func (a *App) Reply(engine, sessionID, text string) error {
 	if err != nil {
 		return err
 	}
-	evs, err := d.Reply(a.ctx, sessionID, text)
+	evs, err := d.Reply(a.ctx, sessionID, text, "")
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func (a *App) Send(engine, cwd, text string) error {
 	if err != nil {
 		return err
 	}
-	evs, err := d.Send(a.ctx, cwd, text, "")
+	evs, err := d.Send(a.ctx, cwd, text, "", "")
 	if err != nil {
 		return err
 	}

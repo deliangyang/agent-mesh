@@ -16,8 +16,8 @@ type Driver interface {
 	List(ctx context.Context, all bool) ([]protocol.Session, error)
 	History(ctx context.Context, sessionID string, tail int) ([]protocol.Event, error)
 	Watch(ctx context.Context, sessionID string) (<-chan protocol.Event, error)
-	Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error)
-	Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error)
+	Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error)
+	Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error)
 	Probe(ctx context.Context) protocol.EngineInfo
 	Models(ctx context.Context) ([]protocol.Model, error)
 }

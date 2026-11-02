@@ -53,6 +53,26 @@ func TestSplitModel(t *testing.T) {
 	}
 }
 
+func TestEngineModel(t *testing.T) {
+	known := []string{"cursor", "claude", "workbuddy", "codex", "qoder-cn"}
+	cases := []struct {
+		model, field, engine, name string
+	}{
+		{"cursor/composer-2.5", "", "cursor", "composer-2.5"},
+		{"cursor/composer-2.5", "cursor", "cursor", "composer-2.5"},
+		{"composer-2.5", "cursor", "cursor", "composer-2.5"},
+		{"claude/auto/qwen", "cursor", "cursor", ""},
+		{"cursor", "", "cursor", ""},
+		{"qoder-cn/auto", "qoder-cn", "qoder-cn", "auto"},
+	}
+	for _, tc := range cases {
+		e, n := EngineModel(tc.model, tc.field, known)
+		if e != tc.engine || n != tc.name {
+			t.Fatalf("EngineModel(%q, %q)=%s %s want %s %s", tc.model, tc.field, e, n, tc.engine, tc.name)
+		}
+	}
+}
+
 func TestLastUserText(t *testing.T) {
 	got := LastUserText([]ChatMessage{
 		{Role: "system", Content: "s"},

@@ -350,7 +350,7 @@ func (s *Server) dispatchChoice(ctx context.Context, req protocol.Request) proto
 		return protocol.Response{ID: req.ID, Error: "需要 engine"}
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
-	_, engine, evs, err := s.startPrompt(runCtx, p.Engine, p.Session, p.CWD, p.Text)
+	_, engine, evs, err := s.startPrompt(runCtx, p.Engine, p.Session, p.CWD, p.Text, "")
 	if err != nil {
 		stop()
 		return protocol.Response{ID: req.ID, Error: err.Error()}
@@ -387,7 +387,7 @@ func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
-	_, engine, evs, err := s.startPrompt(runCtx, req.Engine, req.Session, req.CWD, req.Text)
+	_, engine, evs, err := s.startPrompt(runCtx, req.Engine, req.Session, req.CWD, req.Text, "")
 	if err != nil {
 		stop()
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -410,10 +410,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
-	engine, _ := openai.SplitModel(req.Model, s.Drivers.Names())
-	if req.Engine != "" {
-		engine = req.Engine
-	}
+	engine, modelName := openai.EngineModel(req.Model, req.Engine, s.Drivers.Names())
 	if engine == "" {
 		http.Error(w, "model 需要形如 cursor 或 cursor/composer-2.5", http.StatusBadRequest)
 		return
@@ -431,6 +428,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Session != "" {
 		if _, name, ok := s.driverForSession(r.Context(), req.Session, engine); ok {
+			if name != engine {
+				modelName = ""
+			}
 			engine = name
 		}
 	}
@@ -463,7 +463,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	// Pump 结束后取消本轮 Watch，长期跟踪仍由 Hub.runWatch 负责。
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
 	defer stop()
-	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text)
+	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text, modelName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -586,28 +586,29 @@ func (s *Server) matchSessionDriver(rows []protocol.Session, session, prefer str
 	return d, hit.Engine, true
 }
 
-func (s *Server) startPrompt(ctx context.Context, engine, session, cwd, text string) (driver.Driver, string, <-chan protocol.Event, error) {
+func (s *Server) startPrompt(ctx context.Context, engine, session, cwd, text, model string) (driver.Driver, string, <-chan protocol.Event, error) {
 	d, err := s.Drivers.Get(engine)
 	if err != nil {
 		return nil, engine, nil, err
 	}
+	model = driver.CLIModel(model, engine)
 	if session == "" {
-		evs, err := d.Send(ctx, cwd, text, "")
+		evs, err := d.Send(ctx, cwd, text, "", model)
 		return d, engine, evs, err
 	}
-	evs, err := d.Reply(ctx, session, text)
+	evs, err := d.Reply(ctx, session, text, model)
 	if err == nil {
 		return d, engine, evs, nil
 	}
 	if alt, name, ok := s.driverForSession(ctx, session, engine); ok && name != engine {
-		evs, err = alt.Reply(ctx, session, text)
+		evs, err = alt.Reply(ctx, session, text, "")
 		if err == nil {
 			return alt, name, evs, nil
 		}
 		d, engine = alt, name
 	}
 	if sessionGone(err) {
-		evs, err = d.Send(ctx, cwd, text, session)
+		evs, err = d.Send(ctx, cwd, text, session, model)
 	}
 	return d, engine, evs, err
 }

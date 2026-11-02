@@ -285,7 +285,7 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Reply(ctx, p.SessionID, p.Text)
+		return d.Reply(ctx, p.SessionID, p.Text, driver.CLIModel(p.Model, p.Engine))
 	case protocol.MethodSend:
 		var p protocol.SendParams
 		_ = json.Unmarshal(req.Params, &p)
@@ -293,7 +293,7 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Send(ctx, p.CWD, p.Text, p.Resume)
+		return d.Send(ctx, p.CWD, p.Text, p.Resume, driver.CLIModel(p.Model, p.Engine))
 	default:
 		return nil, fmt.Errorf("method %s is not a stream", req.Method)
 	}

@@ -25,6 +25,7 @@ import {
   localePref,
   t,
 } from "../locale";
+import { platformLabel } from "../platform";
 import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
 import { slashItems, watchSlashCatalog } from "../slash";
@@ -871,11 +872,12 @@ onBeforeUnmount(() => {
             v-for="n in catalog.nodes"
             :key="n.id"
             type="button"
-            class="mesh-card"
+            class="mesh-card mesh-card-node"
             :class="{ sel: filters.node === n.id }"
             @click="pickNode(n.id)"
           >
-            {{ nodeName(n.id, n.name) }}
+            <span class="mesh-card-title">{{ nodeName(n.id, n.name) }}</span>
+            <span v-if="platformLabel(n)" class="mesh-card-meta">{{ platformLabel(n) }}</span>
           </button>
           <div v-if="!catalog.nodes.length" class="mesh-pick-empty">{{ t("nav.connectNode") }}</div>
         </div>

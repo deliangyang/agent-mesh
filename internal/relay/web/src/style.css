@@ -389,6 +389,24 @@ html.dark #app {
   font-weight: 500;
 }
 
+.mesh-card-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.mesh-card-title {
+  display: block;
+}
+
+.mesh-card-meta {
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
 .mesh-pick-empty {
   color: var(--mute);
   font-size: 12px;

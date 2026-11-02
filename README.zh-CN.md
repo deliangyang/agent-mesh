@@ -14,7 +14,7 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![CI](https://github.com/deliangyang/agent-mesh/actions/workflows/ci.yml/badge.svg)
 
-**[安装](#快速开始)** · **[Windows](docs/windows.zh-CN.md)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
+**[安装](#快速开始)** · **[Windows](docs/windows.zh-CN.md)** · **[macOS](docs/macos.zh-CN.md)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
 
 <p align="center">
   <img src="docs/screenshots/desktop.png" alt="电脑端：选择节点、引擎、会话后对话" width="920">
@@ -67,6 +67,8 @@ curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts
 Linux 会安装 systemd 单元并 `enable --now`。macOS 会安装 launchd 配置（`RunAtLoad` + `KeepAlive`）。图形界面会再写 Linux 的 `.desktop` 或 macOS 的 `Agent Mesh.app`。字符界面（SSH 且没有 `DISPLAY` / `WAYLAND_DISPLAY`）自动按 **headless** 装，并提示填写或修改中继地址（`MESH_RELAY`）；直接回车保留当前值，以后也可改 `~/.agent-mesh/node.env`。可用 `--headless` / `--desktop` 强制模式。不需要开机服务时加 `--no-service`。
 
 **Windows 节点：** 没有 `install-node.sh`。下 Release zip（或 `make node-windows`），按 **[Windows 部署](docs/windows.zh-CN.md)** 做。双击 `mesh-node.exe` 进托盘；要挂中继就在快捷方式里加 `-relay`。
+
+**macOS 节点：** 用 `install-node.sh`（launchd + 可选 `Agent Mesh.app`）。细节见 **[macOS 部署](docs/macos.zh-CN.md)**。
 
 如果 GitHub Release 下载不了（国内部分网络常见），加镜像前缀：
 

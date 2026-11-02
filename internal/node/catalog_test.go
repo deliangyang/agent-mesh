@@ -91,8 +91,13 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 			continue
 		}
 		seen[msg.Type] = true
-		if msg.Type == "nodes" && len(msg.Nodes) != 1 {
-			t.Fatalf("nodes %d", len(msg.Nodes))
+		if msg.Type == "nodes" {
+			if len(msg.Nodes) != 1 {
+				t.Fatalf("nodes %d", len(msg.Nodes))
+			}
+			if msg.Nodes[0].OS == "" || msg.Nodes[0].Arch == "" {
+				t.Fatalf("node platform %#v", msg.Nodes[0])
+			}
 		}
 		if msg.Type == "models" {
 			prefix := ident.ID + "/"

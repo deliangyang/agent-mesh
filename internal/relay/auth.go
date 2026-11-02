@@ -96,7 +96,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		password = body.Password
 	}
 	if s.Password == "" || subtle.ConstantTimeCompare([]byte(password), []byte(s.Password)) != 1 {
-		http.Error(w, "密码错误", http.StatusUnauthorized)
+		http.Error(w, "wrong password", http.StatusUnauthorized)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{

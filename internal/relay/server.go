@@ -17,7 +17,7 @@ import (
 
 const ttl = 30 * time.Second
 
-// Record 已登记节点。
+// Record is a registered node.
 type Record struct {
 	Info      protocol.NodeInfo
 	Advertise string
@@ -25,7 +25,7 @@ type Record struct {
 	Snapshot  protocol.NodeSnapshot
 }
 
-// Directory 节点目录，可替换为 Redis 等实现。
+// Directory is the node directory; a Redis-backed impl can replace it.
 type Directory interface {
 	Upsert(Record)
 	Get(id string) (Record, bool)
@@ -35,13 +35,13 @@ type Directory interface {
 	SetSnapshot(id string, snap protocol.NodeSnapshot)
 }
 
-// Memory 内存目录，适合单中继；多中继可换共享存储。
+// Memory is an in-memory directory for a single relay; shared storage can replace it for many relays.
 type Memory struct {
 	mu    sync.RWMutex
 	nodes map[string]Record
 }
 
-// NewMemory 创建内存目录。
+// NewMemory creates an in-memory directory.
 func NewMemory() *Memory {
 	return &Memory{nodes: make(map[string]Record)}
 }
@@ -129,7 +129,7 @@ func mergeSnapshot(old, neu protocol.NodeSnapshot) protocol.NodeSnapshot {
 	return neu
 }
 
-// Server 只转发加密信封，不解密；OpenAI 通道明文汇聚会话监听。
+// Server forwards encrypted envelopes without decrypting them. The OpenAI path aggregates live sessions in plaintext.
 type Server struct {
 	Listen   string
 	Dir      Directory
@@ -145,7 +145,7 @@ type Server struct {
 	lastCat  Catalog
 }
 
-// New 创建中继。
+// New creates a relay.
 func New(listen string, dir Directory, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
@@ -166,7 +166,7 @@ func New(listen string, dir Directory, log *slog.Logger) *Server {
 	return s
 }
 
-// Handler 路由。
+// Handler is the router.
 func (s *Server) Handler() http.Handler {
 	s.initAuth()
 	mux := http.NewServeMux()
@@ -274,7 +274,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// ListenAndServe 启动中继。
+// ListenAndServe starts the relay.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	go func() {
 		t := time.NewTicker(10 * time.Second)

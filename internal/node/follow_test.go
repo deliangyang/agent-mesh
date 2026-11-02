@@ -56,13 +56,13 @@ func TestDrainSessionWaitsBusyThenSends(t *testing.T) {
 	}()
 	time.Sleep(200 * time.Millisecond)
 	if d.replies.Load() != 0 {
-		t.Fatal("busy 时不应发送")
+		t.Fatal("must not send while busy")
 	}
 	d.busy.Store(false)
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
-		t.Fatal("idle 后未 drain")
+		t.Fatal("did not drain after idle")
 	}
 	if d.replies.Load() != 1 {
 		t.Fatalf("replies %d", d.replies.Load())
@@ -71,12 +71,12 @@ func TestDrainSessionWaitsBusyThenSends(t *testing.T) {
 
 func TestPatchFollowQueues(t *testing.T) {
 	rows := []protocol.FollowQueue{
-		{Engine: "cursor", Session: "s1", Items: []protocol.FollowItem{{ID: "1", Text: "先修"}}},
+		{Engine: "cursor", Session: "s1", Items: []protocol.FollowItem{{ID: "1", Text: "fix first"}}},
 	}
 	rows = patchFollowQueues(rows, protocol.FollowQueue{
 		Engine:  "cursor",
 		Session: "s1",
-		Items:   []protocol.FollowItem{{ID: "1", Text: "先修"}, {ID: "2", Text: "再改"}},
+		Items:   []protocol.FollowItem{{ID: "1", Text: "fix first"}, {ID: "2", Text: "then change"}},
 	})
 	if len(rows) != 1 || len(rows[0].Items) != 2 {
 		t.Fatalf("upsert %#v", rows)
@@ -84,7 +84,7 @@ func TestPatchFollowQueues(t *testing.T) {
 	rows = patchFollowQueues(rows, protocol.FollowQueue{
 		Engine:  "claude",
 		Session: "s2",
-		Items:   []protocol.FollowItem{{ID: "3", Text: "新会话"}},
+		Items:   []protocol.FollowItem{{ID: "3", Text: "New chat"}},
 	})
 	if len(rows) != 2 {
 		t.Fatalf("add %#v", rows)

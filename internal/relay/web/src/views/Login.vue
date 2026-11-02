@@ -20,13 +20,13 @@ async function submit(): Promise<void> {
       body: JSON.stringify({ password: password.value }),
     });
     if (!resp.ok) {
-      err.value = "密码不对，再试一次";
+      err.value = "wrong password; try again";
       return;
     }
     const pick = loadLastPick();
     await router.replace(pick ? { path: "/", query: pickToQuery(pick) } : "/");
   } catch (e) {
-    err.value = "网络连接失败，请检查网络后重试";
+    err.value = "network error; check the connection and try again";
     toastError(e);
   } finally {
     busy.value = false;
@@ -51,11 +51,11 @@ async function submit(): Promise<void> {
         </svg>
         <span class="mesh-brand-word">Mesh</span>
       </div>
-      <h1>进入对话</h1>
-      <p class="hint">输入约定密码</p>
-      <input v-model="password" type="password" autofocus required placeholder="密码" />
+      <h1>Enter chat</h1>
+      <p class="hint">Enter the shared password</p>
+      <input v-model="password" type="password" autofocus required placeholder="Password" />
       <p v-if="err" class="mesh-err">{{ err }}</p>
-      <button type="submit" :disabled="busy">进入</button>
+      <button type="submit" :disabled="busy">Enter</button>
     </form>
   </div>
 </template>

@@ -2,7 +2,7 @@ package web
 
 import "embed"
 
-// Dist 中继网页静态资源。
+// Dist is the relay web static tree.
 //
 //go:embed all:dist
 var Dist embed.FS

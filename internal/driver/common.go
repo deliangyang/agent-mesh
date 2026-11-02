@@ -24,7 +24,7 @@ var userQueryRe = regexp.MustCompile(`(?s)<user_query>(.*?)</user_query>`)
 var envelopeOpenRe = regexp.MustCompile(`(?i)<([a-z][a-z0-9_]*)\b[^>]*>`)
 var leftoverEnvelopeTagRe = regexp.MustCompile(`(?i)</?(?:[a-z][a-z0-9]*_[a-z0-9_]*|timestamp|communication)\b[^>]*>`)
 
-// PIDAlive 判断进程是否存在。
+// PIDAlive reports whether a process is still running.
 func PIDAlive(pid int) bool {
 	if pid <= 0 {
 		return false
@@ -33,7 +33,7 @@ func PIDAlive(pid int) bool {
 	return err == nil
 }
 
-// Truncate 压缩空白并按字符截断，不会切开中文。
+// Truncate collapses whitespace and truncates on rune boundaries so CJK is not split.
 func Truncate(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if n <= 0 {
@@ -79,16 +79,16 @@ func cutByteSlice(b []byte, n int) []byte {
 	return b
 }
 
-// FullText 保留换行，仅在超长时按完整字符截断。
+// FullText keeps newlines and truncates on full characters when too long.
 func FullText(s string) string {
 	s = strings.TrimRight(s, "\n")
 	if len(s) <= maxEventText {
 		return s
 	}
-	return cutBytes(s, maxEventText) + "\n…(已截断)"
+	return cutBytes(s, maxEventText) + "\n…(truncated)"
 }
 
-// EventTime 从 jsonl 对象取时间戳。
+// EventTime reads a timestamp from a jsonl object.
 func EventTime(obj map[string]any) int64 {
 	if obj == nil {
 		return 0
@@ -101,7 +101,7 @@ func EventTime(obj map[string]any) int64 {
 	return 0
 }
 
-// ExtractUserText 抽出用户可见文本。
+// ExtractUserText extracts user-visible text.
 func ExtractUserText(text string) string {
 	if text == "" {
 		return ""
@@ -205,7 +205,7 @@ func stripEnvelopeTags(text string) string {
 	return strings.TrimSpace(t)
 }
 
-// ContentToText 将内容块转为文本。
+// ContentToText turns content blocks into text.
 func ContentToText(content any) string {
 	if content == nil {
 		return ""
@@ -687,7 +687,7 @@ func parseVendorJSONL(obj map[string]any, kind string) []protocol.Event {
 	case "auto_retry_start":
 		text := strField(obj, "errorMessage")
 		if text == "" {
-			text = "正在重试"
+			text = "Retrying"
 		}
 		return []protocol.Event{{Type: "log", Text: Truncate(text, 160)}}
 	case "event_msg":
@@ -926,7 +926,7 @@ func piMessageUpdate(obj map[string]any) []protocol.Event {
 	return []protocol.Event{}
 }
 
-// ParseJSONL 把一条 jsonl 解析为结构化事件（含工具调用/结果）。
+// ParseJSONL parses one jsonl object into structured events, including tool calls and results.
 func ParseJSONL(obj map[string]any) []protocol.Event {
 	if obj == nil {
 		return nil
@@ -1089,7 +1089,7 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 	return nil
 }
 
-// EventsFromJSONL 解析并补上引擎/会话。
+// EventsFromJSONL parses events and fills engine/session.
 func sessionIDOf(obj map[string]any) string {
 	if obj == nil {
 		return ""
@@ -1140,7 +1140,7 @@ type jsonlTitleHit struct {
 
 var jsonlTitleCache sync.Map
 
-// JSONLTitle 从会话记录里取最新标题，没有则用首条用户消息。
+// JSONLTitle reads the latest title from the session log, or the first user message.
 func JSONLTitle(path string) string {
 	if path == "" {
 		return ""
@@ -1209,7 +1209,7 @@ func scanJSONLTitle(f *os.File, start, limit int64, skipPartial bool) (title, us
 	return title, user
 }
 
-// MatchSession 按完整 ID 优先、前缀次之匹配唯一会话。
+// MatchSession matches a unique session by full id, then by prefix.
 func MatchSession(rows []protocol.Session, id string) (protocol.Session, error) {
 	if id == "" {
 		return protocol.Session{}, fmt.Errorf("session %s not unique or missing", id)
@@ -1234,7 +1234,7 @@ func MatchSession(rows []protocol.Session, id string) (protocol.Session, error) 
 	return protocol.Session{}, fmt.Errorf("session %s not unique or missing", id)
 }
 
-// WithJSONLTitle 会话标题为空时从 jsonl 补上。
+// WithJSONLTitle fills an empty session title from jsonl.
 func WithJSONLTitle(s protocol.Session) protocol.Session {
 	if s.Title == "" && s.JSONL != "" {
 		s.Title = JSONLTitle(s.JSONL)
@@ -1242,7 +1242,7 @@ func WithJSONLTitle(s protocol.Session) protocol.Session {
 	return s
 }
 
-// FormatJSONL 将会话 jsonl 对象格式化为进度行。
+// FormatJSONL formats a session jsonl object as a progress line.
 func FormatJSONL(obj map[string]any) string {
 	var b strings.Builder
 	for _, ev := range ParseJSONL(obj) {
@@ -1254,17 +1254,17 @@ func FormatJSONL(obj map[string]any) string {
 		}
 		switch ev.Type {
 		case "user":
-			b.WriteString("[用户] ")
+			b.WriteString("[user] ")
 		case "assistant", "delta":
 			if !strings.HasPrefix(ev.Text, "[") {
-				b.WriteString("[助手] ")
+				b.WriteString("[assistant] ")
 			}
 		case "thinking", "reasoning":
-			b.WriteString("[思考] ")
+			b.WriteString("[thinking] ")
 		case "tool_call":
-			b.WriteString("[工具调用] ")
+			b.WriteString("[tool call] ")
 		case "tool_result":
-			b.WriteString("[工具结果] ")
+			b.WriteString("[tool result] ")
 		}
 		if ev.Preview != "" {
 			b.WriteString(ev.Preview)
@@ -1275,7 +1275,7 @@ func FormatJSONL(obj map[string]any) string {
 	return b.String()
 }
 
-// ReadJSONFile 读取 JSON 对象。
+// ReadJSONFile reads a JSON object.
 func ReadJSONFile(path string) (map[string]any, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1288,7 +1288,7 @@ func ReadJSONFile(path string) (map[string]any, error) {
 	return obj, nil
 }
 
-// Home 用户主目录。
+// Home user home directory.
 func Home() string {
 	h, err := os.UserHomeDir()
 	if err != nil {
@@ -1297,7 +1297,7 @@ func Home() string {
 	return h
 }
 
-// Epoch 将多种时间戳转为 Unix 秒。
+// Epoch converts several timestamp shapes to Unix seconds.
 func Epoch(v any) int64 {
 	switch n := v.(type) {
 	case float64:
@@ -1330,7 +1330,7 @@ func Epoch(v any) int64 {
 	}
 }
 
-// MtimeUnix 文件修改时间。
+// MtimeUnix file mtime.
 func MtimeUnix(path string) int64 {
 	st, err := os.Stat(path)
 	if err != nil {
@@ -1339,7 +1339,7 @@ func MtimeUnix(path string) int64 {
 	return st.ModTime().Unix()
 }
 
-// FilterSince 只保留 since 之后的事件；无时间戳的条目一律保留。
+// FilterSince keeps events after since; entries without a timestamp are always kept.
 func FilterSince(evs []protocol.Event, since int64) []protocol.Event {
 	if since <= 0 || len(evs) == 0 {
 		return evs
@@ -1353,7 +1353,7 @@ func FilterSince(evs []protocol.Event, since int64) []protocol.Event {
 	return out
 }
 
-// LastTurns 只保留最近 n 轮用户发言及其后的事件。
+// LastTurns keeps the last n user turns and the events after them.
 func LastTurns(evs []protocol.Event, n int) []protocol.Event {
 	if n <= 0 || len(evs) == 0 {
 		if evs == nil {
@@ -1373,7 +1373,7 @@ func LastTurns(evs []protocol.Event, n int) []protocol.Event {
 	return evs[starts[len(starts)-n]:]
 }
 
-// Recent 文件是否在 20 秒内更新。
+// Recent whether the file changed in the last 20 seconds.
 func Recent(path string) bool {
 	st, err := os.Stat(path)
 	if err != nil {
@@ -1382,7 +1382,7 @@ func Recent(path string) bool {
 	return time.Since(st.ModTime()) <= 20*time.Second
 }
 
-// FileExists 路径是否存在。
+// FileExists whether the path exists.
 func FileExists(path string) bool {
 	if path == "" {
 		return false
@@ -1391,7 +1391,7 @@ func FileExists(path string) bool {
 	return err == nil
 }
 
-// TitleOf 引擎显示名。
+// TitleOf engine display name.
 func TitleOf(name string) string {
 	switch name {
 	case "workbuddy":
@@ -1413,7 +1413,7 @@ func TitleOf(name string) string {
 	}
 }
 
-// DataHome 用户数据目录。
+// DataHome user data directory.
 func DataHome() string {
 	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
 		return x
@@ -1421,7 +1421,7 @@ func DataHome() string {
 	return filepath.Join(Home(), ".local", "share")
 }
 
-// StreamJSONL 把 stdout 里的 JSONL 转成事件。
+// StreamJSONL turns JSONL on stdout into events.
 func StreamJSONL(r io.Reader, engine, session string, emit func(protocol.Event)) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -1445,7 +1445,7 @@ func StreamJSONL(r io.Reader, engine, session string, emit func(protocol.Event))
 	}
 }
 
-// RunOutput 带超时执行命令，返回合并后的输出。
+// RunOutput runs a command with a timeout and returns combined output.
 func RunOutput(ctx context.Context, timeout time.Duration, bin string, args ...string) (string, error) {
 	if bin == "" {
 		return "", os.ErrNotExist
@@ -1463,7 +1463,7 @@ func RunOutput(ctx context.Context, timeout time.Duration, bin string, args ...s
 	return strings.TrimSpace(buf.String()), err
 }
 
-// BinVersion 尝试读取命令版本。
+// BinVersion tries to read a command version.
 func BinVersion(ctx context.Context, bin string) string {
 	for _, args := range [][]string{{"--version"}, {"-v"}, {"version"}} {
 		out, err := RunOutput(ctx, 2*time.Second, bin, args...)

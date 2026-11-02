@@ -73,7 +73,7 @@ func TestRelayModelsViaTunnel(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(list.Data) == 0 {
-		t.Fatal("models empty, tunnel 未把节点模型带上来")
+		t.Fatal("models empty; tunnel did not surface node models")
 	}
 	want := ident.ID + "/stub/demo"
 	if list.Data[0].ID != want {
@@ -148,6 +148,6 @@ func TestIngestViaTunnel(t *testing.T) {
 			t.Fatalf("%s", raw)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("隧道 ingest 未到达中继")
+		t.Fatal("tunnel ingest did not reach the relay")
 	}
 }

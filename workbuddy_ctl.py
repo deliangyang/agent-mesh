@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""接管本机 WorkBuddy：列出进行中的任务，追加对话，并实时跟踪进度。
+"""Drive local WorkBuddy: list running tasks, follow up, and stream progress.
 
-WorkBuddy 桌面端会拉起本地 CodeBuddy CLI 网关（ACP / REST）。
-本工具发现这些网关、读取会话库和 jsonl 记录，然后通过：
+The WorkBuddy desktop app starts a local CodeBuddy CLI gateway (ACP / REST).
+This tool finds those gateways, reads the session store and jsonl, then:
 
-- GET  /api/v1/sessions/live          查看当前会话
-- POST /api/v1/sessions/{id}/reply    向正在进行的会话追加消息
-- POST /api/v1/acp                    ACP（initialize / session/load / session/prompt）
-- 跟踪 projects/<cwd>/<id>.jsonl      实时打印对话进度
+- GET  /api/v1/sessions/live          current session
+- POST /api/v1/sessions/{id}/reply    append to a live session
+- POST /api/v1/acp                    ACP (initialize / session/load / session/prompt)
+- follows projects/<cwd>/<id>.jsonl   and prints progress
 
 Usage:
     python3 workbuddy_ctl.py list
     python3 workbuddy_ctl.py list --all
     python3 workbuddy_ctl.py status
     python3 workbuddy_ctl.py watch SESSION_ID
-    python3 workbuddy_ctl.py reply SESSION_ID "请继续，补上测试"
-    python3 workbuddy_ctl.py send "帮我看看这个目录" --cwd /path/to/project
+    python3 workbuddy_ctl.py reply SESSION_ID "please continue and add tests"
+    python3 workbuddy_ctl.py send "please look at this directory" --cwd /path/to/project
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ USER_QUERY_RE = re.compile(r"<user_query>(.*?)</user_query>", re.S)
 
 
 # ---------------------------------------------------------------------------
-# 路径与发现
+# paths and discovery
 # ---------------------------------------------------------------------------
 
 
@@ -66,7 +66,7 @@ def now_ms() -> int:
 
 
 def ts_to_epoch(value: Any) -> float:
-    """WorkBuddy 时间戳可能是毫秒或秒。"""
+    """WorkBuddy timestamps may be milliseconds or seconds."""
     if value is None:
         return 0.0
     try:
@@ -93,12 +93,12 @@ def age_text(value: Any) -> str:
         return "-"
     sec = max(0, time.time() - epoch)
     if sec < 60:
-        return f"{int(sec)}秒前"
+        return f"{int(sec)}s ago"
     if sec < 3600:
-        return f"{int(sec // 60)}分钟前"
+        return f"{int(sec // 60)}m ago"
     if sec < 86400:
-        return f"{int(sec // 3600)}小时前"
-    return f"{int(sec // 86400)}天前"
+        return f"{int(sec // 3600)}h ago"
+    return f"{int(sec // 86400)}d ago"
 
 
 def pid_alive(pid: int) -> bool:
@@ -261,12 +261,12 @@ class GatewayError(RuntimeError):
 
 
 class GatewayClient:
-    """WorkBuddy 本地 CLI 网关 HTTP 客户端。"""
+    """HTTP client for the local WorkBuddy CLI gateway."""
 
     def __init__(self, url: str, password: str, timeout: float = 15.0) -> None:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
-            raise GatewayError(f"不支持的网关地址: {url}")
+            raise GatewayError(f"unsupported gateway URL: {url}")
         self.host = parsed.hostname or "127.0.0.1"
         self.port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self.password = password
@@ -412,7 +412,7 @@ class AcpEvent:
 
 
 class AcpClient:
-    """ACP：先 connect，再挂 SSE，随后 POST JSON-RPC。"""
+    """ACP: connect, attach SSE, then POST JSON-RPC."""
 
     def __init__(self, gateway: GatewayClient) -> None:
         self.gateway = gateway
@@ -448,7 +448,7 @@ class AcpClient:
         self.connection_id = data.get("connectionId") or ""
         self.session_token = data.get("sessionToken") or ""
         if not self.connection_id:
-            raise GatewayError("ACP connect 未返回 connectionId")
+            raise GatewayError("ACP connect did not return connectionId")
         conn, resp = self.gateway.open_stream(
             "GET",
             "/api/v1/acp",
@@ -591,7 +591,7 @@ class AcpClient:
                 self._events.extend(extras)
                 self._cv.notify_all()
         if reply is None:
-            raise GatewayError(f"ACP 调用没有返回结果: {method}")
+            raise GatewayError(f"ACP call returned no result: {method}")
         if reply.get("error"):
             err = reply["error"]
             if isinstance(err, dict):
@@ -645,7 +645,7 @@ class AcpClient:
     def session_prompt(self, text: str, session_id: Optional[str] = None) -> Iterator[AcpEvent]:
         sid = session_id or self.session_id
         if not sid:
-            raise GatewayError("ACP session/prompt 缺少 sessionId")
+            raise GatewayError("ACP session/prompt missing sessionId")
         yield from self._post_rpc(
             "session/prompt",
             {
@@ -657,7 +657,7 @@ class AcpClient:
 
 
 # ---------------------------------------------------------------------------
-# 会话索引
+# session index
 # ---------------------------------------------------------------------------
 
 
@@ -794,7 +794,7 @@ def merge_sessions(root: Path, gateways: List[LiveGateway]) -> List[SessionInfo]
             except Exception:
                 pass
 
-    # jsonl 有、库里没有的会话
+    # sessions that have jsonl but are missing from the store
     projects = root / "projects"
     if projects.is_dir():
         for path in projects.glob("**/*.jsonl"):
@@ -825,11 +825,11 @@ def pick_default_gateway(gateways: List[LiveGateway], session: Optional[SessionI
         return conversation[0]
     if gateways:
         return gateways[0]
-    raise GatewayError("没有发现正在运行的 WorkBuddy 网关。请先打开 WorkBuddy 客户端。")
+    raise GatewayError("no running WorkBuddy gateway found; open the WorkBuddy client first")
 
 
 # ---------------------------------------------------------------------------
-# 进度展示
+# progress display
 # ---------------------------------------------------------------------------
 
 
@@ -847,7 +847,7 @@ def format_jsonl_event(obj: Dict[str, Any], verbose: bool = False) -> Optional[s
         text = extract_user_query(content_to_text(obj.get("content")))
         if not text:
             return None
-        label = "用户" if role == "user" else "助手"
+        label = "user" if role == "user" else "assistant"
         return f"[{label}] {truncate(text, 400 if verbose else 240)}"
     if kind == "function_call":
         name = obj.get("name") or "tool"
@@ -855,21 +855,21 @@ def format_jsonl_event(obj: Dict[str, Any], verbose: bool = False) -> Optional[s
         args = display or obj.get("arguments") or ""
         if isinstance(args, (dict, list)):
             args = json.dumps(args, ensure_ascii=False)
-        return f"[工具调用] {name} {truncate(str(args), 200)}"
+        return f"[tool call] {name} {truncate(str(args), 200)}"
     if kind == "function_call_result":
         output = content_to_text(obj.get("output") or obj.get("content") or obj.get("result"))
         if not output:
             output = json.dumps(obj, ensure_ascii=False)[:200]
-        return f"[工具结果] {truncate(output, 200)}"
+        return f"[tool result] {truncate(output, 200)}"
     if kind == "reasoning" and verbose:
         text = content_to_text(obj.get("rawContent") or obj.get("content"))
         if text:
-            return f"[思考] {truncate(text, 200)}"
+            return f"[thinking] {truncate(text, 200)}"
         return None
     if kind == "ai-title":
-        return f"[标题] {obj.get('aiTitle') or ''}"
+        return f"[title] {obj.get('aiTitle') or ''}"
     if kind == "custom-title":
-        return f"[标题] {obj.get('customTitle') or ''}"
+        return f"[title] {obj.get('customTitle') or ''}"
     return None
 
 
@@ -879,10 +879,10 @@ def format_acp_event(event: AcpEvent, verbose: bool = False) -> Optional[str]:
         if payload.get("error"):
             err = payload["error"]
             msg = err.get("message") if isinstance(err, dict) else str(err)
-            return f"[结束] 出错: {msg}"
+            return f"[done] error: {msg}"
         result = payload.get("result") or {}
         reason = result.get("stopReason") or "end_turn"
-        return f"[结束] stopReason={reason}"
+        return f"[done] stopReason={reason}"
     method = payload.get("method")
     params = payload.get("params") or {}
     if method == "session/update":
@@ -892,16 +892,16 @@ def format_acp_event(event: AcpEvent, verbose: bool = False) -> Optional[str]:
             text = content_to_text(update.get("content") or update.get("text"))
             if not text:
                 return None
-            prefix = "思考" if "thought" in kind else "助手"
+            prefix = "thinking" if "thought" in kind else "assistant"
             return f"[{prefix}] {text}" if verbose or "thought" not in kind else None
         if kind in {"tool_call", "tool_call_update"}:
             name = update.get("title") or update.get("toolName") or update.get("kind") or "tool"
             status = update.get("status") or ""
-            return f"[工具] {name} {status}".strip()
+            return f"[tool] {name} {status}".strip()
         if kind == "available_commands_update":
             return None
         if verbose:
-            return f"[更新] {truncate(json.dumps(update, ensure_ascii=False), 200)}"
+            return f"[update] {truncate(json.dumps(update, ensure_ascii=False), 200)}"
         return None
     if method:
         return f"[ACP] {method}"
@@ -948,7 +948,7 @@ class JsonlWatcher:
 
 
 # ---------------------------------------------------------------------------
-# 命令
+# commands
 # ---------------------------------------------------------------------------
 
 
@@ -1006,27 +1006,27 @@ def cmd_list(args: argparse.Namespace) -> int:
         )
         return EXIT_SUCCESS
 
-    print(f"WorkBuddy 目录: {root}")
-    print(f"在线网关: {len(gateways)}")
+    print(f"WorkBuddy dir: {root}")
+    print(f"live gateways: {len(gateways)}")
     for gw in gateways:
-        kind = "宿主" if gw.host else "会话"
+        kind = "host" if gw.host else "session"
         print(
             f"  [{kind}] pid={gw.pid} {gw.url} session={gw.session_id} cwd={gw.cwd or '-'}"
         )
     print()
     if not sessions:
-        print("当前没有正在进行的任务。用 --all 查看历史会话。")
+        print("no running tasks; pass --all to list history")
         return EXIT_SUCCESS
 
-    print(f"{'状态':<8} {'更新时间':<20} {'会话 ID':<38} 标题 / 目录")
+    print(f"{'Status':<8} {'Updated':<20} {'Session ID':<38} Title / cwd")
     for info in sessions:
         if info.running:
-            flag = "进行中"
+            flag = "In progress"
         elif info.live:
-            flag = "在线"
+            flag = "online"
         else:
-            flag = info.status or "历史"
-        title = info.title or "(无标题)"
+            flag = info.status or "history"
+        title = info.title or "(untitled)"
         print(
             f"{flag:<8} {fmt_time(info.updated_at):<20} {info.session_id:<38} {title}"
         )
@@ -1037,7 +1037,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             extra.append(info.model)
         open_todos = [t for t in info.todos if t.get("status") not in {"completed", "cancelled", "canceled"}]
         if open_todos:
-            extra.append(f"未完成子任务 {len(open_todos)}")
+            extra.append(f"open todos {len(open_todos)}")
         if extra:
             print("         " + "  |  ".join(extra))
     return EXIT_SUCCESS
@@ -1051,20 +1051,20 @@ def find_session(root: Path, session_id: str, sessions: List[SessionInfo]) -> Se
     if len(prefix) == 1:
         return prefix[0]
     if len(prefix) > 1:
-        raise GatewayError(f"会话 ID 前缀不唯一: {session_id}")
-    raise GatewayError(f"未找到会话: {session_id}")
+        raise GatewayError(f"session id prefix is not unique: {session_id}")
+    raise GatewayError(f"session not found: {session_id}")
 
 
 def cmd_status(args: argparse.Namespace) -> int:
     root = workbuddy_dir()
     gateways = discover_gateways(root)
     if not gateways:
-        print("没有发现正在运行的 WorkBuddy 网关。", file=sys.stderr)
+        print("no running WorkBuddy gateway found", file=sys.stderr)
         return EXIT_NOT_FOUND
     rows = []
     for gw in gateways:
         if not gw.password:
-            rows.append({"pid": gw.pid, "url": gw.url, "error": "读不到网关密码"})
+            rows.append({"pid": gw.pid, "url": gw.url, "error": "cannot read the gateway password"})
             continue
         client = GatewayClient(gw.url, gw.password, timeout=5)
         try:
@@ -1087,14 +1087,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     for row in rows:
         print(f"pid={row['pid']} {row['url']}")
         if row.get("error"):
-            print(f"  错误: {row['error']}")
+            print(f"  error: {row['error']}")
             continue
         health = row.get("health") or {}
         status = row.get("status") or {}
         live = row.get("live") or {}
-        print(f"  健康: {health.get('status')}  uptime={health.get('uptime')}")
-        print(f"  忙碌: {status.get('busy')}  当前会话: {live.get('sessionId')}")
-        print(f"  写入占用: {live.get('writerOccupied')}")
+        print(f"  health: {health.get('status')}  uptime={health.get('uptime')}")
+        print(f"  busy: {status.get('busy')}  current session: {live.get('sessionId')}")
+        print(f"  writer occupied: {live.get('writerOccupied')}")
     return EXIT_SUCCESS
 
 
@@ -1128,7 +1128,7 @@ def watch_loop(
             if on_stop and on_stop():
                 stopped = True
     except KeyboardInterrupt:
-        print("\n已停止跟踪。")
+        print("\nstopped following.")
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
@@ -1138,11 +1138,11 @@ def cmd_watch(args: argparse.Namespace) -> int:
     info = find_session(root, args.session_id, sessions)
     path = Path(info.jsonl_path) if info.jsonl_path else find_jsonl(root, info.session_id)
     if path is None:
-        print(f"会话 {info.session_id} 没有 jsonl 记录，无法跟踪进度。", file=sys.stderr)
+        print(f"session {info.session_id} has no jsonl; cannot follow progress", file=sys.stderr)
         return EXIT_NOT_FOUND
-    print(f"跟踪 {info.session_id}")
-    print(f"文件  {path}")
-    print(f"目录  {info.cwd or '-'}")
+    print(f"following {info.session_id}")
+    print(f"file  {path}")
+    print(f"cwd  {info.cwd or '-'}")
     print("---")
     watcher = JsonlWatcher(path)
     if args.from_start:
@@ -1157,7 +1157,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
                     print(line, flush=True)
             time.sleep(args.interval)
     except KeyboardInterrupt:
-        print("\n已停止跟踪。")
+        print("\nstopped following.")
         return EXIT_SUCCESS
 
 
@@ -1167,7 +1167,7 @@ def cmd_history(args: argparse.Namespace) -> int:
     info = find_session(root, args.session_id, sessions)
     path = Path(info.jsonl_path) if info.jsonl_path else find_jsonl(root, info.session_id)
     if path is None or not path.is_file():
-        print(f"未找到会话记录: {info.session_id}", file=sys.stderr)
+        print(f"session record not found: {info.session_id}", file=sys.stderr)
         return EXIT_NOT_FOUND
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     keep = lines[-args.tail :] if args.tail > 0 else lines
@@ -1184,7 +1184,7 @@ def cmd_history(args: argparse.Namespace) -> int:
             print(line)
             printed += 1
     if printed == 0:
-        print("没有可展示的对话内容。")
+        print("nothing to show")
     return EXIT_SUCCESS
 
 
@@ -1199,7 +1199,7 @@ def resolve_text(args: argparse.Namespace) -> str:
 def cmd_reply(args: argparse.Namespace) -> int:
     text = resolve_text(args)
     if not text:
-        print("请提供要追加的对话内容。", file=sys.stderr)
+        print("provide the follow-up text", file=sys.stderr)
         return EXIT_INVALID_ARGS
     root = workbuddy_dir()
     gateways = discover_gateways(root)
@@ -1207,26 +1207,26 @@ def cmd_reply(args: argparse.Namespace) -> int:
     info = find_session(root, args.session_id, sessions)
     gw = pick_default_gateway(gateways, info)
     if not gw.password:
-        print("读不到网关密码，无法发送。", file=sys.stderr)
+        print("cannot read the gateway password; cannot send", file=sys.stderr)
         return EXIT_FAILURE
     client = GatewayClient(gw.url, gw.password)
     jsonl = Path(info.jsonl_path) if info.jsonl_path else find_jsonl(root, info.session_id)
-    print(f"目标会话: {info.session_id}")
-    print(f"网关: {gw.url} (pid={gw.pid} {'宿主' if gw.host else '会话'})")
-    print(f"目录: {info.cwd or gw.cwd or '-'}")
+    print(f"target session: {info.session_id}")
+    print(f"gateway: {gw.url} (pid={gw.pid} {'host' if gw.host else 'session'})")
+    print(f"cwd: {info.cwd or gw.cwd or '-'}")
 
     delivered = False
     if info.live and not gw.host:
         try:
             client.reply(info.session_id, text)
             delivered = True
-            print("已通过 live reply 追加到正在进行的会话。")
+            print("appended to the live session via live reply")
         except GatewayError as exc:
-            print(f"live reply 不可用（{exc}），改走 ACP。")
+            print(f"live reply unavailable ({exc}); falling back to ACP")
 
     if delivered:
         if args.watch and jsonl:
-            print("--- 进度 ---")
+            print("--- progress ---")
             watch_loop(jsonl, verbose=args.verbose)
         return EXIT_SUCCESS
 
@@ -1235,17 +1235,17 @@ def cmd_reply(args: argparse.Namespace) -> int:
         cwd = info.cwd or gw.cwd or os.getcwd()
         try:
             acp.session_load(info.session_id, cwd=cwd)
-            print(f"已加载会话 {acp.session_id}")
+            print(f"loaded session {acp.session_id}")
         except GatewayError as exc:
-            print(f"session/load 失败（{exc}），改为新建会话。")
+            print(f"session/load failed ({exc}); creating a new session")
             acp.session_new(cwd, session_id=info.session_id)
-            print(f"已新建会话 {acp.session_id}")
-        print("已发送 prompt，等待回复…")
+            print(f"created session {acp.session_id}")
+        print("prompt sent; waiting for a reply…")
         if args.watch:
             watcher = JsonlWatcher(jsonl) if jsonl else None
             if watcher:
                 watcher.seek_end()
-            print("--- 进度 ---")
+            print("--- progress ---")
             for event in acp.session_prompt(text):
                 if watcher:
                     for obj in watcher.poll():
@@ -1267,25 +1267,25 @@ def cmd_reply(args: argparse.Namespace) -> int:
 def cmd_send(args: argparse.Namespace) -> int:
     text = resolve_text(args)
     if not text:
-        print("请提供要发送的内容。", file=sys.stderr)
+        print("provide the text to send", file=sys.stderr)
         return EXIT_INVALID_ARGS
     root = workbuddy_dir()
     gateways = discover_gateways(root)
     gw = pick_default_gateway(gateways)
     if not gw.password:
-        print("读不到网关密码，无法发送。", file=sys.stderr)
+        print("cannot read the gateway password; cannot send", file=sys.stderr)
         return EXIT_FAILURE
     cwd = args.cwd or (None if gw.host else gw.cwd) or os.getcwd()
     client = GatewayClient(gw.url, gw.password)
-    print(f"网关: {gw.url} (pid={gw.pid})")
-    print(f"工作目录: {cwd}")
+    print(f"gateway: {gw.url} (pid={gw.pid})")
+    print(f"working directory: {cwd}")
 
     if args.via == "runs":
         run_id = client.create_run(text, conversation_id=args.session_id)
-        print(f"已创建 run: {run_id}")
+        print(f"created run: {run_id}")
         if not args.watch:
             return EXIT_SUCCESS
-        print("--- 进度 ---")
+        print("--- progress ---")
         conn, resp = client.open_stream(
             "GET",
             f"/api/v1/runs/{run_id}/stream",
@@ -1305,7 +1305,7 @@ def cmd_send(args: argparse.Namespace) -> int:
                         if line.startswith("data:"):
                             print(line[5:].strip(), flush=True)
         except KeyboardInterrupt:
-            print("\n已停止跟踪。")
+            print("\nstopped following.")
         finally:
             conn.close()
         return EXIT_SUCCESS
@@ -1319,13 +1319,13 @@ def cmd_send(args: argparse.Namespace) -> int:
                 acp.session_new(cwd, session_id=args.session_id)
         else:
             acp.session_new(cwd)
-        print(f"会话: {acp.session_id}")
-        print("已发送 prompt，等待回复…")
+        print(f"session: {acp.session_id}")
+        print("prompt sent; waiting for a reply…")
         jsonl = find_jsonl(root, acp.session_id)
         watcher = JsonlWatcher(jsonl) if jsonl else None
         if watcher:
             watcher.seek_end()
-        print("--- 进度 ---")
+        print("--- progress ---")
         for event in acp.session_prompt(text):
             if watcher:
                 for obj in watcher.poll():
@@ -1340,58 +1340,58 @@ def cmd_send(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="接管本机 WorkBuddy：列出任务、追加对话、实时跟踪进度。",
+        description="Drive local WorkBuddy: list tasks, follow up, and stream progress.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
+Examples:
   %(prog)s list
   %(prog)s list --all
   %(prog)s status
   %(prog)s watch 7c8b3554-b3d5-4372-8761-51c1769b6523
-  %(prog)s reply 7c8b3554 --watch -- 请补上单元测试
-  %(prog)s send --cwd /home/ydl/WorkBuddy/x --watch -- 列出当前目录
+  %(prog)s reply 7c8b3554 --watch -- please add unit tests
+  %(prog)s send --cwd /path/to/project --watch -- list this directory
         """,
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="输出思考过程和更完整内容")
+    parser.add_argument("-v", "--verbose", action="store_true", help="print thinking and fuller content")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_list = sub.add_parser("list", help="列出正在进行（或全部）的任务")
-    p_list.add_argument("--all", action="store_true", help="包含历史会话")
-    p_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    p_list = sub.add_parser("list", help="List running (or all) tasks")
+    p_list.add_argument("--all", action="store_true", help="include history")
+    p_list.add_argument("--json", action="store_true", help="JSON output")
     p_list.set_defaults(func=cmd_list)
 
-    p_status = sub.add_parser("status", help="查看本机网关健康状态和当前会话")
-    p_status.add_argument("--json", action="store_true", help="以 JSON 输出")
+    p_status = sub.add_parser("status", help="Show local gateway health and the current session")
+    p_status.add_argument("--json", action="store_true", help="JSON output")
     p_status.set_defaults(func=cmd_status)
 
-    p_watch = sub.add_parser("watch", help="实时跟踪某个会话的 jsonl 进度")
-    p_watch.add_argument("session_id", help="会话 ID，支持前缀")
-    p_watch.add_argument("--from-start", action="store_true", help="从文件开头开始打印")
-    p_watch.add_argument("--interval", type=float, default=0.3, help="轮询间隔秒数")
-    p_watch.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_watch = sub.add_parser("watch", help="Follow a session's jsonl in real time")
+    p_watch.add_argument("session_id", help="session id; prefixes allowed")
+    p_watch.add_argument("--from-start", action="store_true", help="print from the start of the file")
+    p_watch.add_argument("--interval", type=float, default=0.3, help="poll interval in seconds")
+    p_watch.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_watch.set_defaults(func=cmd_watch)
 
-    p_hist = sub.add_parser("history", help="打印会话最近的对话摘要")
-    p_hist.add_argument("session_id", help="会话 ID，支持前缀")
-    p_hist.add_argument("--tail", type=int, default=80, help="读取末尾多少行 jsonl")
-    p_hist.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_hist = sub.add_parser("history", help="Print a recent transcript summary")
+    p_hist.add_argument("session_id", help="session id; prefixes allowed")
+    p_hist.add_argument("--tail", type=int, default=80, help="how many trailing jsonl lines to read")
+    p_hist.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_hist.set_defaults(func=cmd_history)
 
-    p_reply = sub.add_parser("reply", help="向已有会话追加一条用户消息")
-    p_reply.add_argument("session_id", help="会话 ID，支持前缀")
-    p_reply.add_argument("text", nargs="*", help="要追加的内容，也可从标准输入读入")
-    p_reply.add_argument("--watch", action="store_true", help="发送后持续打印进度")
-    p_reply.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_reply = sub.add_parser("reply", help="Append a user message to an existing session")
+    p_reply.add_argument("session_id", help="session id; prefixes allowed")
+    p_reply.add_argument("text", nargs="*", help="text to append; stdin is also accepted")
+    p_reply.add_argument("--watch", action="store_true", help="keep printing progress after send")
+    p_reply.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_reply.set_defaults(func=cmd_reply)
 
-    p_send = sub.add_parser("send", help="在网关上发起新对话（或加载指定会话）")
-    p_send.add_argument("text", nargs="*", help="要发送的内容，也可从标准输入读入")
-    p_send.add_argument("--cwd", help="工作目录，默认用当前目录或网关目录")
-    p_send.add_argument("--session-id", help="指定已有会话 ID，相当于续聊")
-    p_send.add_argument("--watch", action="store_true", default=True, help="发送后打印进度（默认开启）")
-    p_send.add_argument("--no-watch", dest="watch", action="store_false", help="只发送，不跟踪进度")
-    p_send.add_argument("--via", choices=["acp", "runs"], default="acp", help="发送通道")
-    p_send.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_send = sub.add_parser("send", help="Start a new chat on the gateway (or load a session)")
+    p_send.add_argument("text", nargs="*", help="text to send; stdin is also accepted")
+    p_send.add_argument("--cwd", help="working directory; defaults to cwd or the gateway dir")
+    p_send.add_argument("--session-id", help="Existing session id; same as resume")
+    p_send.add_argument("--watch", action="store_true", default=True, help="print progress after send (default on)")
+    p_send.add_argument("--no-watch", dest="watch", action="store_false", help="send only; do not follow")
+    p_send.add_argument("--via", choices=["acp", "runs"], default="acp", help="send channel")
+    p_send.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_send.set_defaults(func=cmd_send)
     return parser
 
@@ -1402,10 +1402,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         return int(args.func(args))
     except GatewayError as exc:
-        print(f"错误: {exc}", file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return EXIT_FAILURE
     except KeyboardInterrupt:
-        print("\n已中断。", file=sys.stderr)
+        print("\ninterrupted.", file=sys.stderr)
         return 130
 
 

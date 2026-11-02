@@ -409,7 +409,7 @@ func (s *Server) handleOpenChat(w http.ResponseWriter, r *http.Request) {
 	}
 	nodeID, model := splitNodeModel(req.Model, s.Dir.List())
 	if nodeID == "" {
-		http.Error(w, "model 需要形如 {nodeID}/{engine} 或本中继仅一节点时的 {engine}", http.StatusBadRequest)
+		http.Error(w, "model must look like {nodeID}/{engine}, or {engine} when this relay has a single node", http.StatusBadRequest)
 		return
 	}
 	req.Model = model

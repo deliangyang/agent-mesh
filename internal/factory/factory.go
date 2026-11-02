@@ -13,12 +13,12 @@ import (
 	"agent-mesh/internal/driver/workbuddy"
 )
 
-// AllNames 本机支持的全部引擎。
+// AllNames all engines this machine supports.
 func AllNames() []string {
 	return []string{"workbuddy", "claude", "cursor", "codex", "opencode", "pi", "qoder-cn"}
 }
 
-// Attach 按名称注册引擎。
+// Attach registers engines by name.
 func Attach(set *driver.Set, names []string) {
 	for _, name := range names {
 		switch strings.TrimSpace(strings.ToLower(name)) {
@@ -40,7 +40,7 @@ func Attach(set *driver.Set, names []string) {
 	}
 }
 
-// Default 注册全部引擎。
+// Default registers every engine.
 func Default() *driver.Set {
 	set := driver.NewSet()
 	Attach(set, AllNames())

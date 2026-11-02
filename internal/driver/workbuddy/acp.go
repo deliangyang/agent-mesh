@@ -28,7 +28,7 @@ func newACP(ctx context.Context, gw gateway) (*acpClient, error) {
 	}
 	var payload map[string]any
 	if json.Unmarshal(raw, &payload) != nil {
-		return nil, fmt.Errorf("acp connect 响应不是 JSON")
+		return nil, fmt.Errorf("acp connect response is not JSON")
 	}
 	if data, ok := payload["data"].(map[string]any); ok {
 		payload = data
@@ -36,7 +36,7 @@ func newACP(ctx context.Context, gw gateway) (*acpClient, error) {
 	c.connectionID, _ = payload["connectionId"].(string)
 	c.sessionToken, _ = payload["sessionToken"].(string)
 	if c.connectionID == "" {
-		return nil, fmt.Errorf("acp connect 未返回 connectionId")
+		return nil, fmt.Errorf("acp connect did not return connectionId")
 	}
 	return c, nil
 }
@@ -141,22 +141,22 @@ func readSSEResult(r io.Reader) ([]byte, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-	return nil, fmt.Errorf("acp 流没有返回结果")
+	return nil, fmt.Errorf("acp stream returned no result")
 }
 
 func decodeRPC(raw []byte, id int64) (map[string]any, error) {
 	var payload map[string]any
 	if json.Unmarshal(raw, &payload) != nil {
-		return nil, fmt.Errorf("acp 响应不是 JSON")
+		return nil, fmt.Errorf("acp response is not JSON")
 	}
 	if data, ok := payload["data"].(map[string]any); ok {
 		payload = data
 	}
 	if payload["id"] != nil && fmt.Sprint(payload["id"]) != strconv.FormatInt(id, 10) {
-		// 部分网关用字符串 id，只要有 result 即可。
+		// some gateways use string ids; a result is enough.
 		if _, ok := payload["result"]; !ok {
 			if _, ok := payload["error"]; !ok {
-				return nil, fmt.Errorf("acp 响应 id 不匹配")
+				return nil, fmt.Errorf("acp response id mismatch")
 			}
 		}
 	}

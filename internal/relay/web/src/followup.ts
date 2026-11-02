@@ -18,7 +18,7 @@ const queues = new Map<string, FollowItem[]>();
 function redirectIfUnauthorized(resp: Response): void {
   if (resp.status === 401) {
     location.href = "/login";
-    throw new Error("未登录");
+    throw new Error("not signed in");
   }
 }
 
@@ -213,7 +213,7 @@ export async function pullLastFollowup(): Promise<string> {
 }
 
 export function shouldQueueFollowup(isRunning: boolean): boolean {
-  // 只有当前轮还在跑时才进追加队列。空闲时若因队列非空也拦截，输入气泡和回复都会丢。
+  // queue a follow-up only while the current turn is running. Blocking while idle because the queue is non-empty drops both the bubble and the reply.
   return isRunning;
 }
 

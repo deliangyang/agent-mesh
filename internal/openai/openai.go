@@ -9,7 +9,7 @@ import (
 	"agent-mesh/internal/protocol"
 )
 
-// Chunk 对齐 OpenAI chat.completion.chunk。
+// Chunk matches OpenAI chat.completion.chunk.
 type Chunk struct {
 	ID      string   `json:"id"`
 	Object  string   `json:"object"`
@@ -19,20 +19,20 @@ type Chunk struct {
 	Mesh    Mesh     `json:"agent_mesh,omitempty"`
 }
 
-// Choice 流式选择。
+// Choice is a streaming choice.
 type Choice struct {
 	Index        int     `json:"index"`
 	Delta        Delta   `json:"delta"`
 	FinishReason *string `json:"finish_reason"`
 }
 
-// Delta 增量。
+// Delta is a delta.
 type Delta struct {
 	Role    string `json:"role,omitempty"`
 	Content string `json:"content,omitempty"`
 }
 
-// Mesh 本系统附加元数据，客户端可忽略。
+// Mesh is mesh metadata clients may ignore.
 type Mesh struct {
 	Engine   string `json:"engine,omitempty"`
 	Session  string `json:"session,omitempty"`
@@ -44,13 +44,13 @@ type Mesh struct {
 	Preview  string `json:"preview,omitempty"`
 }
 
-// ModelList OpenAI /v1/models 响应。
+// ModelList is an OpenAI /v1/models response.
 type ModelList struct {
 	Object string      `json:"object"`
 	Data   []ModelCard `json:"data"`
 }
 
-// ModelCard OpenAI 模型卡片。
+// ModelCard is an OpenAI model card.
 type ModelCard struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -58,7 +58,7 @@ type ModelCard struct {
 	OwnedBy string `json:"owned_by"`
 }
 
-// Completion OpenAI 非流式 chat.completion。
+// Completion is a non-streaming OpenAI chat.completion.
 type Completion struct {
 	ID      string             `json:"id"`
 	Object  string             `json:"object"`
@@ -68,14 +68,14 @@ type Completion struct {
 	Mesh    Mesh               `json:"agent_mesh,omitempty"`
 }
 
-// CompletionChoice 非流式选择。
+// CompletionChoice is a non-streaming choice.
 type CompletionChoice struct {
 	Index        int    `json:"index"`
 	Message      Delta  `json:"message"`
 	FinishReason string `json:"finish_reason"`
 }
 
-// ChatRequest OpenAI chat.completions 请求，附带本系统扩展字段。
+// ChatRequest is an OpenAI chat.completions request plus mesh fields.
 type ChatRequest struct {
 	Model    string        `json:"model"`
 	Stream   bool          `json:"stream"`
@@ -86,20 +86,20 @@ type ChatRequest struct {
 	Files    []ChatFile    `json:"files,omitempty"`
 }
 
-// ChatMessage 对话消息。
+// ChatMessage is a chat message.
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
 }
 
-// NewID 生成 chatcmpl id。
+// NewID creates a chatcmpl id.
 func NewID() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return "chatcmpl-" + hex.EncodeToString(b[:])
 }
 
-// FromModels 把引擎模型转为 OpenAI 列表。
+// FromModels turns engine models into an OpenAI list.
 func FromModels(rows []protocol.Model) ModelList {
 	out := ModelList{Object: "list", Data: []ModelCard{}}
 	now := time.Now().Unix()
@@ -114,7 +114,7 @@ func FromModels(rows []protocol.Model) ModelList {
 	return out
 }
 
-// FromEvent 把引擎进度转为 OpenAI chunk。done 事件会带 finish_reason=stop。
+// FromEvent turns engine progress into an OpenAI chunk. Done events include finish_reason=stop.
 func FromEvent(id string, model string, nodeID, nodeName string, ev protocol.Event) Chunk {
 	if id == "" {
 		id = NewID()
@@ -156,7 +156,7 @@ func FromEvent(id string, model string, nodeID, nodeName string, ev protocol.Eve
 	return chunk
 }
 
-// LastUserText 取最后一条用户消息。
+// LastUserText returns the last user text.
 func LastUserText(msgs []ChatMessage) string {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if strings.EqualFold(msgs[i].Role, "user") {
@@ -187,7 +187,7 @@ func contentText(v any) string {
 	return ""
 }
 
-// SplitModel 解析 engine/name，engine 必须命中 known。
+// SplitModel parses engine/name; engine must be in known.
 func SplitModel(id string, known []string) (engine, name string) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -215,7 +215,7 @@ func knownEngine(name string, known []string) bool {
 	return false
 }
 
-// EngineModel 从 chat 请求拆出引擎和模型名。engine 字段优先；前缀对不上则不用该模型名。
+// EngineModel splits engine and model from a chat request. The engine field wins; a mismatched prefix drops the model name.
 func EngineModel(model, engineField string, known []string) (engine, name string) {
 	engine, name = SplitModel(model, known)
 	if engineField == "" {
@@ -230,7 +230,7 @@ func EngineModel(model, engineField string, known []string) (engine, name string
 	return engineField, ""
 }
 
-// DoneChunk 结束块。
+// DoneChunk is the done chunk.
 func DoneChunk(id, model string) Chunk {
 	stop := "stop"
 	return Chunk{

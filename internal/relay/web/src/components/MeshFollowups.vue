@@ -34,7 +34,7 @@ async function editLast(): Promise<void> {
         class="mesh-follow-stop"
         @click="emit('stop')"
       >
-        停止
+        Stop
       </button>
     </div>
     <button
@@ -42,14 +42,14 @@ async function editLast(): Promise<void> {
       :key="item.id"
       type="button"
       class="mesh-follow-item"
-      :title="'编辑这条追加'"
+      :title="'Edit this follow-up'"
       @click="edit(item.id)"
     >
       <span class="mesh-follow-dot" aria-hidden="true"></span>
       <span class="mesh-follow-text">{{ item.text }}</span>
     </button>
     <div class="mesh-follow-foot">
-      <button type="button" class="mesh-follow-hint" @click="editLast">↑ 编辑</button>
+      <button type="button" class="mesh-follow-hint" @click="editLast">↑ Edit</button>
       <p v-if="meshFollow.error" class="mesh-follow-err">{{ meshFollow.error }}</p>
     </div>
   </div>

@@ -308,7 +308,7 @@ func (s *Server) handleOpenStream(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGitRepos(w http.ResponseWriter, r *http.Request) {
 	cwd := r.URL.Query().Get("cwd")
 	if cwd == "" {
-		http.Error(w, "需要 cwd", http.StatusBadRequest)
+		http.Error(w, "cwd is required", http.StatusBadRequest)
 		return
 	}
 	rows, err := gitdiff.List(r.Context(), cwd)
@@ -328,7 +328,7 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 		repo = r.URL.Query().Get("cwd")
 	}
 	if repo == "" {
-		http.Error(w, "需要 repo", http.StatusBadRequest)
+		http.Error(w, "repo is required", http.StatusBadRequest)
 		return
 	}
 	bundle, err := gitdiff.Diff(r.Context(), repo)
@@ -344,10 +344,10 @@ func (s *Server) dispatchChoice(ctx context.Context, req protocol.Request) proto
 	_ = json.Unmarshal(req.Params, &p)
 	p.Text = strings.TrimSpace(p.Text)
 	if p.Text == "" {
-		return protocol.Response{ID: req.ID, Error: "缺少选项内容"}
+		return protocol.Response{ID: req.ID, Error: "missing choice text"}
 	}
 	if p.Engine == "" {
-		return protocol.Response{ID: req.ID, Error: "需要 engine"}
+		return protocol.Response{ID: req.ID, Error: "engine is required"}
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
 	_, engine, evs, err := s.startPrompt(runCtx, p.Engine, p.Session, p.CWD, p.Text, "")
@@ -379,11 +379,11 @@ func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Text = strings.TrimSpace(req.Text)
 	if req.Text == "" {
-		http.Error(w, "缺少选项内容", http.StatusBadRequest)
+		http.Error(w, "missing choice text", http.StatusBadRequest)
 		return
 	}
 	if req.Engine == "" {
-		http.Error(w, "需要 engine", http.StatusBadRequest)
+		http.Error(w, "engine is required", http.StatusBadRequest)
 		return
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
@@ -412,13 +412,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	engine, modelName := openai.EngineModel(req.Model, req.Engine, s.Drivers.Names())
 	if engine == "" {
-		http.Error(w, "model 需要形如 cursor 或 cursor/composer-2.5", http.StatusBadRequest)
+		http.Error(w, "model must look like cursor or cursor/composer-2.5", http.StatusBadRequest)
 		return
 	}
 	text := openai.LastUserText(req.Messages)
 	files := openai.CollectFiles(req)
 	if text == "" && len(files) == 0 {
-		http.Error(w, "messages 缺少用户文本", http.StatusBadRequest)
+		http.Error(w, "messages missing user text", http.StatusBadRequest)
 		return
 	}
 	text, err := openai.ApplyFiles(req.CWD, text, files)
@@ -459,8 +459,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
-	// 浏览器断开不能把引擎进程一起杀掉，进度改走广播 / WebSocket。
-	// Pump 结束后取消本轮 Watch，长期跟踪仍由 Hub.runWatch 负责。
+	// a dropped browser must not kill the engine process; progress continues over broadcast / WebSocket.
+	// cancel this turn's Watch after Pump; long-term follow stays with Hub.runWatch.
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
 	defer stop()
 	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text, modelName)

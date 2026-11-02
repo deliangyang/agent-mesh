@@ -24,11 +24,11 @@ func ensureGUIEnv() error {
 	if adoptX11Fallback() {
 		return nil
 	}
-	return fmt.Errorf("未检测到 DISPLAY / WAYLAND_DISPLAY。请在图形桌面里启动，或加 -headless 仅跑节点服务")
+	return fmt.Errorf("DISPLAY / WAYLAND_DISPLAY was not found. Start from a graphical desktop, or pass -headless to run the node only")
 }
 
 func prepareWebKitEnv() {
-	// DMA-BUF 会在 WebView 创建前打开 /dev/dri，Wails 的 GpuPolicyNever 拦不住。
+	// DMA-BUF opens /dev/dri before the WebView is created; Wails GpuPolicyNever cannot stop it.
 	setenvDefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	setenvDefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
 	setenvDefault("LIBGL_DRI3_DISABLE", "1")
@@ -36,7 +36,7 @@ func prepareWebKitEnv() {
 	if driAccessible() {
 		return
 	}
-	// 当前用户不在 video/render 组，Mesa 仍会探测 DRM 节点。走软件渲染并压掉探测日志。
+	// the current user is not in video/render, but Mesa still probes DRM nodes. Use software rendering and quiet the probe logs.
 	setenvDefault("LIBGL_ALWAYS_SOFTWARE", "1")
 	setenvDefault("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe")
 	setenvDefault("GALLIUM_DRIVER", "llvmpipe")
@@ -92,7 +92,7 @@ func adoptFromSession() bool {
 		if env["DISPLAY"] == "" && env["WAYLAND_DISPLAY"] == "" {
 			continue
 		}
-		// 只收当前用户的会话环境
+		// only keep the current user's session environment
 		status := readProcStatus(pid)
 		uids := strings.Fields(status["Uid"])
 		if len(uids) > 0 && uids[0] != uid {

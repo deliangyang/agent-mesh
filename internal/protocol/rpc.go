@@ -1,8 +1,8 @@
-// Package protocol 定义客户端、中继、节点之间的 RPC 与流式事件。
+// Package protocol defines RPC and streaming events between client, relay, and node.
 //
-// 信任边界：
-//   - 中继只路由 Envelope 的 From/To，不能解密 Ciphertext
-//   - 客户端可直连节点，也可经中继转发，应用层加密相同
+// Trust boundary:
+//   - the relay only routes Envelope From/To and cannot decrypt Ciphertext
+//   - clients may talk to a node directly or through the relay; application encryption is the same
 package protocol
 
 import "encoding/json"
@@ -23,7 +23,7 @@ const (
 	MethodChoice    = "choice"
 )
 
-// Request 加密前的 RPC 请求。
+// Request is an RPC request before encryption.
 type Request struct {
 	ID     string          `json:"id"`
 	Method string          `json:"method"`
@@ -31,7 +31,7 @@ type Request struct {
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
-// Response 加密前的 RPC 响应。
+// Response is an RPC response before encryption.
 type Response struct {
 	ID    string          `json:"id"`
 	OK    bool            `json:"ok"`
@@ -39,7 +39,7 @@ type Response struct {
 	Body  json.RawMessage `json:"body,omitempty"`
 }
 
-// Event 流式进度。
+// Event is streaming progress.
 type Event struct {
 	Type    string `json:"type"`
 	Role    string `json:"role,omitempty"`
@@ -52,14 +52,14 @@ type Event struct {
 	Done    bool   `json:"done,omitempty"`
 }
 
-// WorkDir 引擎用过的开发目录。
+// WorkDir is a workspace an engine has used.
 type WorkDir struct {
 	Path   string `json:"path"`
 	Engine string `json:"engine,omitempty"`
 	Count  int    `json:"count,omitempty"`
 }
 
-// Session 统一会话视图。
+// Session is the shared session view.
 type Session struct {
 	Engine    string `json:"engine"`
 	ID        string `json:"id"`
@@ -77,7 +77,7 @@ type Session struct {
 	NodeName  string `json:"node_name,omitempty"`
 }
 
-// EngineInfo 本机一种 coding agent 引擎的状态。
+// EngineInfo is the status of one local coding-agent engine.
 type EngineInfo struct {
 	Name      string `json:"name"`
 	Title     string `json:"title,omitempty"`
@@ -88,7 +88,7 @@ type EngineInfo struct {
 	Detail    string `json:"detail,omitempty"`
 }
 
-// Model 引擎可用模型。
+// Model is a model the engine can use.
 type Model struct {
 	ID      string `json:"id"`
 	Engine  string `json:"engine"`
@@ -97,7 +97,7 @@ type Model struct {
 	Default bool   `json:"default,omitempty"`
 }
 
-// SlashItem 引擎可调用的斜杠命令或技能。
+// SlashItem is a slash command or skill the engine can invoke.
 type SlashItem struct {
 	Name         string `json:"name"`
 	Kind         string `json:"kind"`
@@ -106,36 +106,36 @@ type SlashItem struct {
 	Source       string `json:"source,omitempty"`
 }
 
-// SlashList 斜杠目录。
+// SlashList is a slash catalog.
 type SlashList struct {
 	Items []SlashItem `json:"items"`
 }
 
-// ModelsParams 查询模型列表。
+// ModelsParams lists models.
 type ModelsParams struct {
 	Engine string `json:"engine,omitempty"`
 }
 
-// EngineToggleParams 开关引擎。
+// EngineToggleParams toggles an engine.
 type EngineToggleParams struct {
 	Engine  string `json:"engine"`
 	Enabled bool   `json:"enabled"`
 }
 
-// ListParams 列出任务。
+// ListParams lists tasks.
 type ListParams struct {
 	Engine string `json:"engine,omitempty"`
 	All    bool   `json:"all,omitempty"`
 }
 
-// HistoryParams 历史摘要。
+// HistoryParams is a history summary.
 type HistoryParams struct {
 	Engine    string `json:"engine"`
 	SessionID string `json:"session_id"`
 	Tail      int    `json:"tail,omitempty"`
 }
 
-// ReplyParams 追加对话。
+// ReplyParams appends to a session.
 type ReplyParams struct {
 	Engine    string `json:"engine"`
 	SessionID string `json:"session_id"`
@@ -144,7 +144,7 @@ type ReplyParams struct {
 	Watch     bool   `json:"watch,omitempty"`
 }
 
-// SendParams 新开一轮。
+// SendParams starts a new turn.
 type SendParams struct {
 	Engine string `json:"engine"`
 	CWD    string `json:"cwd,omitempty"`
@@ -153,19 +153,19 @@ type SendParams struct {
 	Model  string `json:"model,omitempty"`
 }
 
-// WatchParams 跟踪进度。
+// WatchParams follows progress.
 type WatchParams struct {
 	Engine    string `json:"engine"`
 	SessionID string `json:"session_id"`
 }
 
-// CommandsParams 查询斜杠命令。
+// CommandsParams lists slash commands.
 type CommandsParams struct {
 	Engine string `json:"engine,omitempty"`
 	CWD    string `json:"cwd,omitempty"`
 }
 
-// FollowupsParams 追加队列。
+// FollowupsParams is the follow-up queue.
 type FollowupsParams struct {
 	Action  string `json:"action,omitempty"`
 	Engine  string `json:"engine,omitempty"`
@@ -175,7 +175,7 @@ type FollowupsParams struct {
 	Text    string `json:"text,omitempty"`
 }
 
-// ChoiceParams 回答 Ask / 权限卡。
+// ChoiceParams answers an Ask / permission card.
 type ChoiceParams struct {
 	Engine  string `json:"engine"`
 	Session string `json:"session,omitempty"`
@@ -183,7 +183,7 @@ type ChoiceParams struct {
 	Text    string `json:"text"`
 }
 
-// NodeInfo 节点公开信息（不含私钥）。
+// NodeInfo is public node info (no private key).
 type NodeInfo struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name,omitempty"`
@@ -194,7 +194,7 @@ type NodeInfo struct {
 	LastSeen int64    `json:"last_seen,omitempty"`
 }
 
-// RegisterRequest 节点向中继登记。签名覆盖 ID+Listen+Unix。
+// RegisterRequest is a node registration. The signature covers ID+Listen+Unix.
 type RegisterRequest struct {
 	Info      NodeInfo     `json:"info"`
 	Unix      int64        `json:"unix"`
@@ -202,14 +202,14 @@ type RegisterRequest struct {
 	Snapshot  NodeSnapshot `json:"snapshot,omitempty"`
 }
 
-// FollowItem 一条等待处理的追加消息。
+// FollowItem is a queued follow-up.
 type FollowItem struct {
 	ID      string `json:"id"`
 	Text    string `json:"text"`
 	Created int64  `json:"created"`
 }
 
-// FollowQueue 一个会话的追加队列快照。
+// FollowQueue is a snapshot of one session's follow-up queue.
 type FollowQueue struct {
 	Engine  string       `json:"engine"`
 	Session string       `json:"session"`
@@ -218,7 +218,7 @@ type FollowQueue struct {
 	NodeID  string       `json:"node_id,omitempty"`
 }
 
-// NodeSnapshot 节点推给中继的只读快照，供公网中继在无法回连时展示。
+// NodeSnapshot is a read-only snapshot a node pushes to the relay, for public relays that cannot call back.
 type NodeSnapshot struct {
 	Models    []Model       `json:"models"`
 	Engines   []EngineInfo  `json:"engines"`
@@ -227,7 +227,7 @@ type NodeSnapshot struct {
 	Followups []FollowQueue `json:"followups"`
 }
 
-// TunnelFrame 节点反向隧道上的请求/响应帧。
+// TunnelFrame is a request/response frame on the node reverse tunnel.
 type TunnelFrame struct {
 	ID     string            `json:"id,omitempty"`
 	Method string            `json:"method,omitempty"`
@@ -240,7 +240,7 @@ type TunnelFrame struct {
 	Error  string            `json:"error,omitempty"`
 }
 
-// MustJSON 序列化，失败时返回空对象。
+// MustJSON marshals JSON, or an empty object on failure.
 func MustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {

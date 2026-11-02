@@ -6,26 +6,26 @@ import (
 
 func TestPushPopUpdateDelete(t *testing.T) {
 	SetRoot(t.TempDir())
-	f, err := Push("cursor", "sess-1", "/tmp/app", "先修缩放")
+	f, err := Push("cursor", "sess-1", "/tmp/app", "fix scaling first")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Items) != 1 || f.Items[0].Text != "先修缩放" || f.CWD != "/tmp/app" {
+	if len(f.Items) != 1 || f.Items[0].Text != "fix scaling first" || f.CWD != "/tmp/app" {
 		t.Fatalf("push %#v", f)
 	}
 	id1 := f.Items[0].ID
-	f, err = Push("cursor", "sess-1", "", "再改命令")
+	f, err = Push("cursor", "sess-1", "", "then change the command")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(f.Items) != 2 {
 		t.Fatalf("len %d", len(f.Items))
 	}
-	f, err = Update("cursor", "sess-1", f.Items[1].ID, "再改命令和技能")
+	f, err = Update("cursor", "sess-1", f.Items[1].ID, "then change commands and skills")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Items[1].Text != "再改命令和技能" {
+	if f.Items[1].Text != "then change commands and skills" {
 		t.Fatalf("update %#v", f.Items[1])
 	}
 	got, err := List("cursor", "sess-1")

@@ -20,7 +20,7 @@ function shortId(id) {
 async function call(name, ...args) {
   const app = goApp();
   if (!app || typeof app[name] !== "function") {
-    throw new Error("桌面绑定尚未就绪");
+    throw new Error("desktop bindings are not ready");
   }
   return app[name](...args);
 }
@@ -33,7 +33,7 @@ function appendStream(chunk) {
   const text = delta.content || "";
   const tag = [mesh.engine, shortId(mesh.session)].filter(Boolean).join(" ");
   if (!text && !(chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason)) return;
-  const line = (tag ? "[" + tag + "] " : "") + (text || "[完成]");
+  const line = (tag ? "[" + tag + "] " : "") + (text || "[done]");
   el.textContent += line;
   if (!text.endsWith("\n")) el.textContent += "\n";
   el.scrollTop = el.scrollHeight;
@@ -80,7 +80,7 @@ function renderEngines() {
     led.className = "led" + (e.available && e.enabled ? " on" : "");
     const body = document.createElement("div");
     body.innerHTML = '<div class="eng-name">' + (e.title || e.name) + "</div>" +
-      '<div class="eng-sub">' + (e.available ? (e.version || "在线") : "未检测到") + "</div>";
+      '<div class="eng-sub">' + (e.available ? (e.version || "online") : "not found") + "</div>";
     const sw = document.createElement("input");
     sw.type = "checkbox";
     sw.className = "switch";
@@ -110,7 +110,7 @@ function renderSessions() {
   const rows = state.engine ? state.sessions.filter((s) => s.engine === state.engine) : state.sessions;
   if (!rows.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td class="empty" colspan="5">没有会话。打开本机 WorkBuddy / Claude / Cursor / Codex 后再刷新。</td>';
+    tr.innerHTML = '<td class="empty" colspan="5">No sessions. Open local WorkBuddy / Claude / Cursor / Codex, then refresh.</td>';
     tb.appendChild(tr);
     return;
   }
@@ -119,7 +119,7 @@ function renderSessions() {
     if (state.session && state.session.id === s.id && state.session.engine === s.engine) tr.classList.add("sel");
     const cls = s.busy ? "busy" : (s.live ? "live" : "");
     tr.innerHTML =
-      '<td><span class="dot ' + cls + '"></span> ' + (s.status || (s.live ? "在线" : "历史")) + "</td>" +
+      '<td><span class="dot ' + cls + '"></span> ' + (s.status || (s.live ? "online" : "history")) + "</td>" +
       "<td>" + s.engine + "</td>" +
       "<td>" + (s.title || "—") + "</td>" +
       '<td class="sid">' + shortId(s.id) + "</td>" +
@@ -141,12 +141,12 @@ function renderModels() {
   ul.innerHTML = "";
   const rows = state.engine ? state.models.filter((m) => m.engine === state.engine) : state.models;
   if (!rows.length) {
-    ul.innerHTML = '<li class="empty">没有模型列表</li>';
+    ul.innerHTML = '<li class="empty">No models</li>';
     return;
   }
   rows.forEach((m) => {
     const li = document.createElement("li");
-    li.innerHTML = "<span>" + (m.title || m.name) + (m.default ? " · 默认" : "") +
+    li.innerHTML = "<span>" + (m.title || m.name) + (m.default ? " · default" : "") +
       '</span><span class="id">' + m.name + "</span>";
     ul.appendChild(li);
   });
@@ -158,7 +158,7 @@ function renderDirs() {
   ul.innerHTML = "";
   const rows = (state.dirs || []).filter((d) => !state.engine || d.engine === state.engine);
   if (!rows.length) {
-    ul.innerHTML = '<li class="empty">没有开发目录</li>';
+    ul.innerHTML = '<li class="empty">No workspaces</li>';
     return;
   }
   rows.forEach((d) => {
@@ -202,16 +202,16 @@ async function refresh() {
     const st = $("relayState");
     if (st) {
       if (state.status.linked) {
-        st.textContent = "已连接";
+        st.textContent = "connected";
         st.className = "relay-state ok";
       } else if (state.status.link_error) {
-        st.textContent = "失败: " + state.status.link_error;
+        st.textContent = "failed: " + state.status.link_error;
         st.className = "relay-state bad";
       } else if ((state.status.relays || []).length) {
-        st.textContent = "连接中";
+        st.textContent = "connecting";
         st.className = "relay-state";
       } else {
-        st.textContent = "未连接";
+        st.textContent = "offline";
         st.className = "relay-state";
       }
     }
@@ -235,11 +235,11 @@ $("showAll").addEventListener("change", refresh);
 $("relayForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const st = $("relayState");
-  if (st) { st.textContent = "连接中"; st.className = "relay-state"; }
+  if (st) { st.textContent = "connecting"; st.className = "relay-state"; }
   try {
     await call("SetMesh", $("relayInput").value, $("relayPassword").value, $("advertiseInput").value);
   } catch (err) {
-    if (st) { st.textContent = "失败: " + err; st.className = "relay-state bad"; }
+    if (st) { st.textContent = "failed: " + err; st.className = "relay-state bad"; }
   }
   await refresh();
 });
@@ -255,7 +255,7 @@ $("sendBtn").addEventListener("click", async () => {
     }
     $("prompt").value = "";
   } catch (err) {
-    $("stream").textContent += "\n错误: " + err + "\n";
+    $("stream").textContent += "\nerror: " + err + "\n";
   }
 });
 

@@ -1,0 +1,153 @@
+# Agent Mesh
+
+### 本机每一种 coding agent，一张会话网。
+
+**Claude Code、Cursor、Codex、OpenCode、Pi、WorkBuddy、Qoder CN，一个对话入口。**
+节点跑在装引擎的机器上，中继只做路由。网页和桌面客户端走同一套协议，端到端加密，中继解不开会话明文。
+
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
+![Node](https://img.shields.io/badge/Node-20+-339933?logo=nodedotjs&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-111111)
+![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
+![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+
+**[安装](#快速开始)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
+
+## Agent Mesh 适合你吗？
+
+每种 coding agent 都把会话写在自己的文件里，只在装它的那台机器上。开三个窗口去续三个对话，撑不久。Agent Mesh 把它们收进一份目录：
+
+- **任意节点上的任意引擎**，在一张表里选。节点驱动本机真正的 CLI；中继从不解密对话。
+- **一个 OpenAI 兼容地址通吃**：节点和中继都挂 `/v1/models` 和 `/v1/chat/completions`。
+- **工具留在有它们的那台机器上**：git、文件、引擎套接字都在本地。公网中继只转发信封和只读目录。
+- **浏览器或桌面窗口**对着同一批会话聊。
+
+如果你用不止一种 coding agent，或引擎散落在不止一台机器上，它就适合你。如果只用一家厂商自己的应用，就不需要它。
+
+## 快速开始
+
+**1 · 安装。** 从源码：
+
+```sh
+git clone https://github.com/OWNER/REPO.git agent-mesh
+cd agent-mesh
+./scripts/setup.sh
+```
+
+`setup.sh` 会检查 Go 1.25 和 Node 20，编译 `node` / `relay` / `ctl`，写入 `~/.agent-mesh`，并生成身份密钥。
+
+也可以安装 GitHub Release 里的二进制（没有 git remote 时设 `AGENT_MESH_REPO=owner/repo`）：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install.sh | sh
+```
+
+卸载用 `curl -fsSL …/install.sh | sh -s -- --uninstall`。`~/.agent-mesh` 里的密钥会保留，加 `--purge` 才会删掉。
+
+**2 · 启动中继**（网页必须设密码）：
+
+```sh
+MESH_PASSWORD=change-me ./bin/relay -listen 0.0.0.0:8443 -web
+```
+
+**3 · 在装有引擎的机器上启动节点：**
+
+```sh
+./bin/node -listen 127.0.0.1:7700 -relay http://127.0.0.1:8443
+```
+
+打开 `http://127.0.0.1:8443`，用密码登录，选节点、引擎、模型和工作目录。
+
+也可以全程在终端里：
+
+```sh
+./bin/ctl keygen
+./bin/ctl nodes --relay http://127.0.0.1:8443
+./bin/ctl list --direct http://127.0.0.1:7700 --engine claude
+./bin/ctl send "list the files in this repo" --engine cursor --cwd "$PWD" --direct http://127.0.0.1:7700
+```
+
+环境变量：`MESH_RELAY` `MESH_DIRECT` `MESH_NODE` `MESH_PASSWORD` `MESH_ADVERTISE`。引擎二进制可用 `CURSOR_AGENT_BIN`、`QODERCN_BIN` 等覆盖。
+
+## 支持的引擎
+
+Claude Code · Cursor Agent · Codex · OpenCode · Pi · WorkBuddy · Qoder CN
+
+节点只列出这台机器上装了的引擎。任何能填 OpenAI chat completions 的工具也可以打节点或中继：
+
+```sh
+export OPENAI_BASE_URL=http://127.0.0.1:7700/v1
+export OPENAI_API_KEY=mesh
+```
+
+## 整体结构
+
+```
+┌─────────────┐     encrypted RPC      ┌─────────────┐
+│  web / ctl  │ ─────────────────────► │    node     │ ── local CLIs
+│  desktop    │                        │  :7700      │     claude / agent / …
+└──────┬──────┘                        └──────▲──────┘
+       │  HTTPS / WS                          │ reverse tunnel
+       ▼                                      │
+┌─────────────┐     Envelope From/To   catalog snapshot
+│    relay    │ ─────────────────────► (relay cannot decrypt Ciphertext)
+│  :8443 -web │
+└─────────────┘
+```
+
+`:8443` 上的中继提供 Vue 对话界面、节点目录和加密信封。`:7700` 上的节点挂同一套 OpenAI 接口，并驱动本机引擎。
+
+## 功能
+
+### 任意引擎，一个对话
+
+侧栏列出节点、引擎和会话。新对话是 `send`，已有线程是 `reply`。当前轮还在跑时，追加消息会在节点上排队。Ask 卡和权限确认留在输入区。
+
+### 信任边界
+
+中继只路由 `From` / `To`。应用层用 Ed25519 + X25519 封包。直连模式（`--direct`）不走中继，加密相同。密钥在 `~/.agent-mesh/`，权限 0600。
+
+### OpenAI 兼容接口
+
+节点和中继都提供 `/v1/models` 和 `/v1/chat/completions`，以及 `/v1/openai/*`（sessions、history、stream、directories、commands、followups、choice、git）。
+
+### 桌面和无窗口
+
+`make desktop` 用 Wails 给本机节点套一个窗口。`-headless` 只跑节点 HTTP。Linux 上没有 `DISPLAY` / `WAYLAND_DISPLAY` 时会自动改走无窗口。
+
+## 从源码构建
+
+```sh
+make setup         # 工具链 + 编译 + ~/.agent-mesh
+make test          # Go 测试（排除 desktop）+ 网页测试
+make node relay ctl
+make dist          # dist/agent-mesh_<ver>_<os>_<arch>.tar.gz
+make supervisor    # 生成并重启本机 supervisord 单元
+```
+
+Docker：
+
+```sh
+docker build -t agent-mesh-relay .
+docker run --rm -p 8443:8443 -e MESH_PASSWORD=change-me agent-mesh-relay -listen 0.0.0.0:8443 -web
+```
+
+每次推送都会跑构建和测试。打 `v*` 标签会按 `.github/workflows/release.yml` 发布产物。
+
+## 配置
+
+| | |
+| :--- | :--- |
+| `~/.agent-mesh/node.key` | 节点身份 |
+| `~/.agent-mesh/client.key` | 命令行身份 |
+| `~/.agent-mesh/node.env` | `MESH_PASSWORD`、`MESH_RELAY`、监听参数 |
+| `~/.agent-mesh/followups` | 追加消息队列 |
+| `deploy/supervisor` | supervisord 样例；`scripts/setup.sh --supervisor` 会填路径 |
+
+不要把密钥、`.env` 或 supervisor 里的密码提交进仓库。
+
+## 许可证
+
+[MIT](LICENSE)

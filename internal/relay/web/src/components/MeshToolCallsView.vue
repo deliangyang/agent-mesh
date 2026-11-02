@@ -34,7 +34,7 @@ const rows = computed(() => {
       try {
         args = JSON.parse(args);
       } catch {
-        /* 流式参数尚未成 JSON */
+        /* streamed arguments are not JSON yet */
       }
     }
     const result = toolMsg && typeof toolMsg.content === "string" ? toolMsg.content : undefined;

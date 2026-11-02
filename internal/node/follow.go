@@ -146,7 +146,7 @@ func (s *Server) handleFollowups(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		code := http.StatusBadRequest
-		if strings.Contains(err.Error(), "不存在") {
+		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "不存在") {
 			code = http.StatusNotFound
 		}
 		http.Error(w, err.Error(), code)

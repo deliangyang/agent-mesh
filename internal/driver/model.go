@@ -2,7 +2,7 @@ package driver
 
 import "strings"
 
-// CLIModel 取出引擎 CLI 要的模型名，去掉 engine/ 前缀。
+// CLIModel returns the model name the engine CLI wants, without the engine/ prefix.
 func CLIModel(id, engine string) string {
 	id = strings.TrimSpace(id)
 	if id == "" || id == engine {
@@ -17,7 +17,7 @@ func CLIModel(id, engine string) string {
 	return id
 }
 
-// WithModelFlag 在 CLI 参数末尾追加 --model。空则原样返回。
+// WithModelFlag appends --model to CLI args. Empty returns the args unchanged.
 func WithModelFlag(args []string, model string) []string {
 	model = strings.TrimSpace(model)
 	if model == "" {

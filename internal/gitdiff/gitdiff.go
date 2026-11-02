@@ -1,4 +1,4 @@
-// Package gitdiff 在工作目录下发现 git 仓库并读取工作区 diff。
+// Package gitdiff finds git repos under a workspace and reads the working-tree diff.
 package gitdiff
 
 import (
@@ -19,7 +19,7 @@ const (
 	gitTimeout = 8 * time.Second
 )
 
-// Repo 一个 git 工作区。
+// Repo is a git worktree.
 type Repo struct {
 	Path   string `json:"path"`
 	Name   string `json:"name"`
@@ -28,20 +28,20 @@ type Repo struct {
 	Files  int    `json:"files,omitempty"`
 }
 
-// File 一个改动文件。
+// File is a changed file.
 type File struct {
 	Path   string `json:"path"`
 	Status string `json:"status"`
 	Patch  string `json:"patch,omitempty"`
 }
 
-// Bundle 某仓库的完整 diff。
+// Bundle is a full diff for one repo.
 type Bundle struct {
 	Repo  Repo   `json:"repo"`
 	Files []File `json:"files"`
 }
 
-// List 从 root 往下找 git 仓库。root 本身是仓库时也会收录，并继续看子项目。
+// List walks git repos under root. If root itself is a repo it is included, and nested repos are still scanned.
 func List(ctx context.Context, root string) ([]Repo, error) {
 	root, err := cleanRoot(root)
 	if err != nil {
@@ -78,7 +78,7 @@ func List(ctx context.Context, root string) ([]Repo, error) {
 	return out, nil
 }
 
-// Diff 读取仓库相对 HEAD 的工作区改动，含未跟踪文件。
+// Diff reads working-tree changes versus HEAD, including untracked files.
 func Diff(ctx context.Context, repo string) (Bundle, error) {
 	repo, err := cleanRoot(repo)
 	if err != nil {
@@ -118,7 +118,7 @@ func Diff(ctx context.Context, repo string) (Bundle, error) {
 	}
 	if len(b.Files) == 0 {
 		for _, p := range patches {
-			b.Files = append(b.Files, File{Path: patchPath(p), Status: "修改", Patch: p})
+			b.Files = append(b.Files, File{Path: patchPath(p), Status: "modified", Patch: p})
 		}
 	}
 	b.Repo.Files = len(b.Files)
@@ -190,19 +190,19 @@ func firstLine(s string) string {
 func statusLabel(code string) string {
 	switch strings.TrimSpace(code) {
 	case "??":
-		return "未跟踪"
+		return "untracked"
 	case "A", "AM", "AD":
-		return "新增"
+		return "added"
 	case "D", "MD":
-		return "删除"
+		return "deleted"
 	case "R", "RM":
-		return "重命名"
+		return "renamed"
 	case "C":
-		return "复制"
+		return "copied"
 	case "UU", "AA", "DD":
-		return "冲突"
+		return "conflict"
 	default:
-		return "修改"
+		return "modified"
 	}
 }
 
@@ -222,7 +222,7 @@ func splitPatches(raw string) map[string]string {
 			part = "diff --git " + part
 		}
 		if len(part) > maxPatch {
-			part = cutBytes(part, maxPatch) + "\n…(已截断)"
+			part = cutBytes(part, maxPatch) + "\n…(truncated)"
 		}
 		out[patchPath(part)] = part
 	}
@@ -251,14 +251,14 @@ func untrackedPatch(ctx context.Context, repo, rel string) string {
 		return ""
 	}
 	if info.Size() > maxPatch {
-		return "未跟踪文件过大，未展开"
+		return "untracked file too large to expand"
 	}
 	raw, err := os.ReadFile(abs)
 	if err != nil {
 		return ""
 	}
 	if bytes.IndexByte(raw, 0) >= 0 {
-		return "二进制文件"
+		return "binary file"
 	}
 	text := string(raw)
 	if !strings.HasSuffix(text, "\n") {
@@ -278,7 +278,7 @@ func untrackedPatch(ctx context.Context, repo, rel string) string {
 	for _, line := range lines {
 		n += len(line) + 2
 		if n > maxPatch {
-			b.WriteString("…(已截断)\n")
+			b.WriteString("…(truncated)\n")
 			break
 		}
 		b.WriteString("+" + line + "\n")

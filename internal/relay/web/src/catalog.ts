@@ -256,7 +256,7 @@ export function connectCatalog(): void {
     if (ws === sock) ws = null;
     meshLink.state = "down";
     meshLink.attempt += 1;
-    if (wasLive) showToast("节点连接已断开，正在重连", "error");
+    if (wasLive) showToast("Node disconnected; reconnecting", "error");
     const delay = Math.min(1200 * Math.max(1, meshLink.attempt), 8000);
     window.clearTimeout(reconnectTimer);
     reconnectTimer = window.setTimeout(connectCatalog, delay);
@@ -278,7 +278,7 @@ function onBrowserResume(): void {
 if (typeof window !== "undefined") {
   window.addEventListener("online", onBrowserResume);
   window.addEventListener("offline", () => {
-    showToast("网络已断开，请检查网络后重试", "error");
+    showToast("network dropped; check the connection and try again", "error");
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") onBrowserResume();

@@ -12,14 +12,14 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", "0.0.0.0:8443", "中继监听地址")
-	web := flag.Bool("web", false, "启动网页客户端")
-	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "约定密码，网页与客户端接口共用")
+	listen := flag.String("listen", "0.0.0.0:8443", "relay listen address")
+	web := flag.Bool("web", false, "serve the web client")
+	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "shared password for the web UI and client API")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	if *web && *password == "" {
-		log.Error("启用 -web 时必须提供 -password 或 MESH_PASSWORD")
+		log.Error("-web requires -password or MESH_PASSWORD")
 		os.Exit(2)
 	}
 	srv := relay.New(*listen, relay.NewMemory(), log)

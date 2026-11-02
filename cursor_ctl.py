@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""接管本机 Cursor Agent CLI：列出进行中的任务，追加对话，并实时跟踪进度。
+"""Drive the local Cursor Agent CLI: list running tasks, follow up, and stream progress.
 
-Cursor Agent（`agent` / `cursor-agent`）把会话写在
-`~/.cursor/chats/<cwd 的 md5>/<uuid>/`（meta.json + store.db），
-对话 jsonl 在 `~/.cursor/projects/<目录编码>/agent-transcripts/<uuid>/<uuid>.jsonl`。
+Cursor Agent (`agent` / `cursor-agent`) writes sessions under
+`~/.cursor/chats/<md5 of cwd>/<uuid>/` (meta.json + store.db).
+Chat jsonl lives at `~/.cursor/projects/<encoded dir>/agent-transcripts/<uuid>/<uuid>.jsonl`.
 
-正在跑的交互进程能从 /proc 对上打开的 store.db 和终端。
+A live interactive process can be matched from /proc by an open store.db and a tty.
 
-本工具：
+This tool:
 
-- 扫描本机 `agent` 进程，列出在线会话
-- 对已有会话走 `agent --resume -p --output-format stream-json` 追加对话
-- 新开一轮走 `agent -p`
-- 跟踪 jsonl / stream-json，实时打印对话进度
+- scans local `agent` processes and lists online sessions
+- resumes with `agent --resume -p --output-format stream-json`
+- starts a new turn with `agent -p`
+- follows jsonl / stream-json and prints progress
 
 Usage:
     python3 cursor_ctl.py list
     python3 cursor_ctl.py list --all
     python3 cursor_ctl.py status
     python3 cursor_ctl.py watch SESSION_ID
-    python3 cursor_ctl.py reply SESSION_ID "请继续，补上测试"
-    python3 cursor_ctl.py send "帮我看看这个目录" --cwd /path/to/project
+    python3 cursor_ctl.py reply SESSION_ID "please continue and add tests"
+    python3 cursor_ctl.py send "please look at this directory" --cwd /path/to/project
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ class CursorError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# 路径与发现
+# paths and discovery
 # ---------------------------------------------------------------------------
 
 
@@ -101,7 +101,7 @@ def find_agent_bin() -> str:
     ):
         if fallback.is_file():
             return str(fallback)
-    raise CursorError("找不到 agent / cursor-agent，请把它加入 PATH 或设置 CURSOR_AGENT_BIN。")
+    raise CursorError("cannot find agent / cursor-agent; add it to PATH or set CURSOR_AGENT_BIN")
 
 
 def pid_alive(pid: int) -> bool:
@@ -230,7 +230,7 @@ def truncate(text: str, limit: int = 240) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 会话模型
+# session model
 # ---------------------------------------------------------------------------
 
 
@@ -558,7 +558,7 @@ def merge_sessions(
             source="live",
         )
         info.busy = info.running
-        info.status = "进行中" if info.running else "在线"
+        info.status = "In progress" if info.running else "online"
         by_id[sid] = info
 
     for chat_dir in iter_chat_dirs(config_dir):
@@ -590,7 +590,7 @@ def merge_sessions(
             session_id=sid,
             title=title,
             cwd=cwd,
-            status="历史",
+            status="history",
             name=title,
             updated_at=updated,
             store_path=str(store) if store.is_file() else "",
@@ -606,14 +606,14 @@ def merge_sessions(
 def find_session(sessions: List[SessionInfo], session_id: str) -> SessionInfo:
     needle = session_id.strip()
     if not needle:
-        raise CursorError("请提供会话 ID。")
+        raise CursorError("provide a session id")
     if needle.isdigit():
         pid = int(needle)
         hits = [s for s in sessions if s.pid == pid]
         if len(hits) == 1:
             return hits[0]
         if len(hits) > 1:
-            raise CursorError(f"pid {pid} 对应多个会话。")
+            raise CursorError(f"pid {pid} matches more than one session")
     exact = [s for s in sessions if s.session_id == needle]
     if exact:
         return exact[0]
@@ -627,12 +627,12 @@ def find_session(sessions: List[SessionInfo], session_id: str) -> SessionInfo:
     if len(cwds) == 1:
         return cwds[0]
     if len(prefix) > 1 or len(titles) > 1:
-        raise CursorError(f"会话 ID 不唯一: {session_id}")
-    raise CursorError(f"未找到会话: {session_id}")
+        raise CursorError(f"session id is not unique: {session_id}")
+    raise CursorError(f"session not found: {session_id}")
 
 
 # ---------------------------------------------------------------------------
-# 进度格式化
+# progress formatting
 # ---------------------------------------------------------------------------
 
 
@@ -657,14 +657,14 @@ def format_content_blocks(content: Any, verbose: bool = False) -> Optional[str]:
                 )
             else:
                 preview = str(args)
-            lines.append(f"[工具调用] {name} {truncate(str(preview), 200)}")
+            lines.append(f"[tool call] {name} {truncate(str(preview), 200)}")
         elif kind in {"tool-result", "tool_result"}:
             text = str(item.get("result") or item.get("text") or content_to_text(item))
-            lines.append(f"[工具结果] {truncate(text, 200)}")
+            lines.append(f"[tool result] {truncate(text, 200)}")
         elif kind in {"thinking", "reasoning"} and verbose:
             think = item.get("thinking") or item.get("text") or ""
             if think:
-                lines.append(f"[思考] {truncate(str(think), 200)}")
+                lines.append(f"[thinking] {truncate(str(think), 200)}")
         elif kind in {"text", "input_text", "output_text"}:
             text = item.get("text") or ""
             if text:
@@ -680,18 +680,18 @@ def format_jsonl_event(obj: Dict[str, Any], verbose: bool = False) -> Optional[s
         text = extract_user_text(content_to_text(content))
         if not text:
             return None
-        return f"[用户] {truncate(text, 400 if verbose else 240)}"
+        return f"[user] {truncate(text, 400 if verbose else 240)}"
     if role in {"assistant"}:
         formatted = format_content_blocks(content, verbose=verbose)
         if not formatted:
             return None
         if formatted.startswith("["):
             return formatted
-        return f"[助手] {formatted}"
+        return f"[assistant] {formatted}"
     if role in {"tool"}:
-        return f"[工具结果] {truncate(content_to_text(content), 200)}"
+        return f"[tool result] {truncate(content_to_text(content), 200)}"
     if obj.get("type") in {"ai-title", "custom-title"}:
-        return f"[标题] {obj.get('aiTitle') or obj.get('customTitle') or obj.get('title') or ''}"
+        return f"[title] {obj.get('aiTitle') or obj.get('customTitle') or obj.get('title') or ''}"
     return None
 
 
@@ -737,7 +737,7 @@ def format_stream_event(obj: Dict[str, Any], verbose: bool = False) -> Optional[
         sid = obj.get("session_id") or obj.get("sessionId") or ""
         model = obj.get("model") or ""
         cwd = obj.get("cwd") or ""
-        return f"[初始化] session={sid} model={model} cwd={cwd}".strip()
+        return f"[init] session={sid} model={model} cwd={cwd}".strip()
     if kind in {"user", "assistant"}:
         return format_jsonl_event(obj, verbose=verbose)
     if kind == "thinking":
@@ -745,21 +745,21 @@ def format_stream_event(obj: Dict[str, Any], verbose: bool = False) -> Optional[
             text = obj.get("text") or ""
             return text if verbose and text else None
         if verbose:
-            return "[思考结束]"
+            return "[thinking done]"
         return None
     if kind == "tool_call":
         subtype = obj.get("subtype") or ""
-        label = "工具开始" if subtype == "started" else "工具结束"
+        label = "tool start" if subtype == "started" else "tool end"
         detail = format_tool_call(obj.get("tool_call"))
         return f"[{label}] {detail}".strip()
     if kind == "result":
         subtype = obj.get("subtype") or ""
         result = obj.get("result")
         if isinstance(result, str) and result.strip():
-            return f"[结束] {subtype} {truncate(result, 300)}"
-        return f"[结束] {subtype or 'done'}"
+            return f"[done] {subtype} {truncate(result, 300)}"
+        return f"[done] {subtype or 'done'}"
     if kind == "error":
-        return f"[错误] {obj.get('error') or obj.get('message') or obj}"
+        return f"[error] {obj.get('error') or obj.get('message') or obj}"
     return None
 
 
@@ -803,12 +803,12 @@ class JsonlWatcher:
 
 
 # ---------------------------------------------------------------------------
-# 发送：agent -p --resume
+# send: agent -p --resume
 # ---------------------------------------------------------------------------
 
 
 def handle_stream_line(raw: str, verbose: bool, streamed: bool) -> bool:
-    """打印一行 stream-json。返回当前是否仍在输出增量文本。"""
+    """Print one stream-json line. Returns whether incremental text is still flowing."""
     raw = raw.rstrip("\n")
     if not raw.strip():
         return streamed
@@ -833,7 +833,7 @@ def handle_stream_line(raw: str, verbose: bool, streamed: bool) -> bool:
         if streamed:
             print(flush=True)
             return False
-        print(f"[助手] {text}", flush=True)
+        print(f"[assistant] {text}", flush=True)
         return False
     if kind == "thinking" and obj.get("subtype") == "delta":
         if verbose:
@@ -861,8 +861,8 @@ def stream_print_process(
         ready, _, _ = select.select([fd], [], [], first_output_timeout)
         if not ready:
             print(
-                f"等待 {first_output_timeout:.0f} 秒仍无输出，正在结束子进程。"
-                "若提示词是 ls / resume 等，已被当成 agent 子命令；本工具会改走标准输入。",
+                f"no output after {first_output_timeout:.0f}s; stopping the child."
+                "If the prompt was ls / resume, the agent treated it as a subcommand; this tool will send it on stdin instead.",
                 file=sys.stderr,
             )
             proc.terminate()
@@ -886,7 +886,7 @@ def stream_print_process(
             print(flush=True)
     except KeyboardInterrupt:
         proc.terminate()
-        print("\n已中断。")
+        print("\ninterrupted.")
     return proc.wait()
 
 
@@ -928,7 +928,7 @@ def build_print_cmd(
 
 
 def start_print_agent(cmd: List[str], prompt: str, cwd: str) -> subprocess.Popen[str]:
-    """提示词走标准输入，避免 ls/resume 等被 commander 解析成子命令。"""
+    """Send the prompt on stdin so ls/resume is not parsed as a commander subcommand."""
     env = os.environ.copy()
     env.setdefault("CI", "1")
     proc = subprocess.Popen(
@@ -987,7 +987,7 @@ def history_from_store(store_path: Path, tail: int) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# 命令
+# commands
 # ---------------------------------------------------------------------------
 
 
@@ -1036,28 +1036,28 @@ def cmd_list(args: argparse.Namespace) -> int:
         )
         return EXIT_SUCCESS
 
-    print(f"Cursor 配置目录: {config_dir}")
-    print(f"数据目录: {data_dir}")
-    print(f"可执行文件: {bin_path}")
-    print(f"在线会话: {len(live)}")
+    print(f"Cursor config dir: {config_dir}")
+    print(f"data dir: {data_dir}")
+    print(f"binary: {bin_path}")
+    print(f"live sessions: {len(live)}")
     for item in live:
         print(
             f"  [{item.kind:<12}] pid={item.pid} {item.session_id or '-'}  {item.cwd or '-'}"
         )
     print()
     if not sessions:
-        print("当前没有正在进行的任务。用 --all 查看历史会话。")
+        print("no running tasks; pass --all to list history")
         return EXIT_SUCCESS
 
-    print(f"{'状态':<8} {'更新时间':<20} {'会话 ID':<38} 标题 / 目录")
+    print(f"{'Status':<8} {'Updated':<20} {'Session ID':<38} Title / cwd")
     for info in sessions:
         if info.running and info.busy:
-            flag = "进行中"
+            flag = "In progress"
         elif info.live:
-            flag = "在线"
+            flag = "online"
         else:
-            flag = info.status or "历史"
-        title = info.title or info.name or "(无标题)"
+            flag = info.status or "history"
+        title = info.title or info.name or "(untitled)"
         print(f"{flag:<8} {fmt_time(info.updated_at):<20} {info.session_id:<38} {title}")
         extra = []
         if info.cwd:
@@ -1078,18 +1078,18 @@ def cmd_status(args: argparse.Namespace) -> int:
         print_json([session_to_dict(s) for s in sessions])
         return EXIT_SUCCESS
     if not sessions:
-        print("没有发现正在运行的 Cursor Agent 会话。")
+        print("no running Cursor Agent session found")
         return EXIT_NOT_FOUND
     for item in sessions:
         print(f"pid={item.pid}  {item.session_id}")
-        print(f"  名称: {item.title or item.name or '-'}  状态: {item.status or 'idle'}  类型: {item.kind}")
-        print(f"  目录: {item.cwd or '-'}")
-        print(f"  模型: {item.model or '-'}")
-        print(f"  终端: {item.tty or '-'}")
-        print(f"  存储: {item.store_path or '-'}")
+        print(f"  name: {item.title or item.name or '-'}  status: {item.status or 'idle'}  kind: {item.kind}")
+        print(f"  cwd: {item.cwd or '-'}")
+        print(f"  model: {item.model or '-'}")
+        print(f"  tty: {item.tty or '-'}")
+        print(f"  store: {item.store_path or '-'}")
         print(f"  jsonl: {item.jsonl_path or '-'}")
-        print(f"  日志: {item.log_path or '-'}")
-        print(f"  启动: {fmt_time(item.updated_at)}")
+        print(f"  log: {item.log_path or '-'}")
+        print(f"  started: {fmt_time(item.updated_at)}")
     return EXIT_SUCCESS
 
 
@@ -1117,15 +1117,15 @@ def cmd_watch(args: argparse.Namespace) -> int:
             / info.session_id
             / f"{info.session_id}.jsonl"
         )
-        print(f"会话 {info.session_id} 还没有 jsonl，等待生成…")
-        print(f"预期文件 {expected}")
+        print(f"session {info.session_id} has no jsonl yet; waiting for it to appear…")
+        print(f"expected file {expected}")
         path = wait_for_jsonl(expected, timeout=max(args.interval * 10, 8.0))
         if path is None:
-            print("没有 jsonl 记录，无法跟踪进度。", file=sys.stderr)
+            print("no jsonl; cannot follow progress", file=sys.stderr)
             return EXIT_NOT_FOUND
-    print(f"跟踪 {info.session_id}")
-    print(f"文件  {path}")
-    print(f"目录  {info.cwd or '-'}")
+    print(f"following {info.session_id}")
+    print(f"file  {path}")
+    print(f"cwd  {info.cwd or '-'}")
     print("---")
     watcher = JsonlWatcher(path)
     if args.from_start:
@@ -1140,7 +1140,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
                     print(line, flush=True)
             time.sleep(args.interval)
     except KeyboardInterrupt:
-        print("\n已停止跟踪。")
+        print("\nstopped following.")
         return EXIT_SUCCESS
 
 
@@ -1166,17 +1166,17 @@ def cmd_history(args: argparse.Namespace) -> int:
                 print(line)
                 printed += 1
     elif info.store_path:
-        print(f"没有 jsonl，改从 store.db 读取: {info.store_path}")
+        print(f"no jsonl; reading store.db instead: {info.store_path}")
         for obj in history_from_store(Path(info.store_path), args.tail):
             line = format_jsonl_event(obj, verbose=args.verbose)
             if line:
                 print(line)
                 printed += 1
     else:
-        print(f"会话 {info.session_id} 还没有对话记录。")
+        print(f"session {info.session_id} has no chat log yet.")
         return EXIT_SUCCESS
     if printed == 0:
-        print("没有可展示的对话内容。")
+        print("nothing to show")
     return EXIT_SUCCESS
 
 
@@ -1205,16 +1205,16 @@ def follow_jsonl(path: Path, interval: float, timeout: float, verbose: bool) -> 
                 idle_rounds += 1
             time.sleep(interval)
             if timeout > 0 and idle_rounds * interval >= timeout:
-                print("等待超时，停止跟踪（会话可能仍在跑）。")
+                print("timed out waiting; stopped following (the session may still be running)")
                 break
     except KeyboardInterrupt:
-        print("\n已停止跟踪。")
+        print("\nstopped following.")
 
 
 def cmd_reply(args: argparse.Namespace) -> int:
     text = resolve_text(args)
     if not text:
-        print("请提供要追加的对话内容。", file=sys.stderr)
+        print("provide the follow-up text", file=sys.stderr)
         return EXIT_INVALID_ARGS
     config_dir = cursor_config_dir()
     data_dir = cursor_data_dir()
@@ -1222,15 +1222,15 @@ def cmd_reply(args: argparse.Namespace) -> int:
     sessions = merge_sessions(config_dir, data_dir, discover_live())
     info = find_session(sessions, args.session_id)
     if not UUID_DIR_RE.match(info.session_id):
-        print(f"会话 {info.session_id} 还没有稳定的 UUID，无法 --resume。", file=sys.stderr)
+        print(f"session {info.session_id} does not have a stable UUID yet; cannot --resume", file=sys.stderr)
         return EXIT_NOT_FOUND
     jsonl = Path(info.jsonl_path) if info.jsonl_path else find_jsonl(data_dir, info.session_id, info.cwd)
 
-    print(f"目标会话: {info.session_id}")
-    print(f"目录: {info.cwd or '-'}")
-    print(f"状态: {'在线 ' + (info.kind or 'idle') if info.live else '离线'}")
+    print(f"target session: {info.session_id}")
+    print(f"cwd: {info.cwd or '-'}")
+    print(f"status: {'online ' + (info.kind or 'idle') if info.live else 'offline'}")
     if info.live and info.tty:
-        print(f"终端: {info.tty}  (pid={info.pid})，追加会写入同一会话存储。")
+        print(f"tty: {info.tty}  (pid={info.pid}); follow-up writes to the same session store.")
 
     cwd = info.cwd or os.getcwd()
     cmd = build_print_cmd(
@@ -1241,16 +1241,16 @@ def cmd_reply(args: argparse.Namespace) -> int:
         model=args.model,
         skip_permissions=args.yes,
     )
-    print("命令:", " ".join(cmd), "（提示词走标准输入）")
-    print("--- 进度 ---")
+    print("command:", " ".join(cmd), "(prompt on stdin)")
+    print("--- progress ---")
     proc = start_print_agent(cmd, text, cwd)
     code = stream_print_process(proc, verbose=args.verbose)
     if args.watch and code == 0:
         path = jsonl or find_jsonl(data_dir, info.session_id, info.cwd)
         if path is None:
-            print("没有 jsonl，无法继续跟踪。")
+            print("no jsonl; cannot keep following")
         else:
-            print("--- 继续跟踪 jsonl ---")
+            print("--- continue following jsonl ---")
             follow_jsonl(path, args.interval, args.timeout, args.verbose)
     return EXIT_SUCCESS if code == 0 else EXIT_FAILURE
 
@@ -1258,7 +1258,7 @@ def cmd_reply(args: argparse.Namespace) -> int:
 def cmd_send(args: argparse.Namespace) -> int:
     text = resolve_text(args)
     if not text:
-        print("请提供要发送的内容。", file=sys.stderr)
+        print("provide the text to send", file=sys.stderr)
         return EXIT_INVALID_ARGS
     bin_path = find_agent_bin()
     cwd = args.cwd or os.getcwd()
@@ -1271,9 +1271,9 @@ def cmd_send(args: argparse.Namespace) -> int:
         model=args.model,
         skip_permissions=args.yes,
     )
-    print(f"工作目录: {cwd}")
-    print("已启动 agent -p（提示词走标准输入），等待回复…")
-    print("--- 进度 ---")
+    print(f"working directory: {cwd}")
+    print("started agent -p (prompt on stdin); waiting for a reply…")
+    print("--- progress ---")
     proc = start_print_agent(cmd, text, cwd)
     code = stream_print_process(proc, verbose=args.verbose)
     return EXIT_SUCCESS if code == 0 else EXIT_FAILURE
@@ -1281,63 +1281,63 @@ def cmd_send(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="接管本机 Cursor Agent CLI：列出任务、追加对话、实时跟踪进度。",
+        description="Drive the local Cursor Agent CLI: list tasks, follow up, and stream progress.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
+Examples:
   %(prog)s list
   %(prog)s list --all
   %(prog)s status
   %(prog)s watch 3e22a1a4-8293-4ddc-838f-d9ac4e27d50a
-  %(prog)s reply 3e22a1a4 --watch -- 请补上单元测试
-  %(prog)s send --cwd /home/newdisk/work/fx-ai --yes -- 列出当前目录
+  %(prog)s reply 3e22a1a4 --watch -- please add unit tests
+  %(prog)s send --cwd /path/to/project --yes -- list this directory
         """,
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_list = sub.add_parser("list", help="列出正在进行（或全部）的任务")
-    p_list.add_argument("--all", action="store_true", help="包含历史会话")
-    p_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    p_list = sub.add_parser("list", help="List running (or all) tasks")
+    p_list.add_argument("--all", action="store_true", help="include history")
+    p_list.add_argument("--json", action="store_true", help="JSON output")
     p_list.set_defaults(func=cmd_list)
 
-    p_status = sub.add_parser("status", help="查看本机 Cursor Agent 会话")
-    p_status.add_argument("--json", action="store_true", help="以 JSON 输出")
+    p_status = sub.add_parser("status", help="List local Cursor Agent sessions")
+    p_status.add_argument("--json", action="store_true", help="JSON output")
     p_status.set_defaults(func=cmd_status)
 
-    p_watch = sub.add_parser("watch", help="实时跟踪某个会话的 jsonl 进度")
-    p_watch.add_argument("session_id", help="会话 ID、标题或 pid，支持前缀")
-    p_watch.add_argument("--from-start", action="store_true", help="从文件开头开始打印")
-    p_watch.add_argument("--interval", type=float, default=0.3, help="轮询间隔秒数")
-    p_watch.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_watch = sub.add_parser("watch", help="Follow a session's jsonl in real time")
+    p_watch.add_argument("session_id", help="session id, title, or pid; prefixes allowed")
+    p_watch.add_argument("--from-start", action="store_true", help="print from the start of the file")
+    p_watch.add_argument("--interval", type=float, default=0.3, help="poll interval in seconds")
+    p_watch.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_watch.set_defaults(func=cmd_watch)
 
-    p_hist = sub.add_parser("history", help="打印会话最近的对话摘要")
-    p_hist.add_argument("session_id", help="会话 ID、标题或 pid，支持前缀")
-    p_hist.add_argument("--tail", type=int, default=80, help="读取末尾多少条记录")
-    p_hist.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_hist = sub.add_parser("history", help="Print a recent transcript summary")
+    p_hist.add_argument("session_id", help="session id, title, or pid; prefixes allowed")
+    p_hist.add_argument("--tail", type=int, default=80, help="how many trailing records to read")
+    p_hist.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_hist.set_defaults(func=cmd_history)
 
-    p_reply = sub.add_parser("reply", help="向已有会话追加一条用户消息")
-    p_reply.add_argument("session_id", help="会话 ID、标题或 pid，支持前缀")
-    p_reply.add_argument("text", nargs="*", help="要追加的内容，也可从标准输入读入")
-    p_reply.add_argument("--watch", action="store_true", help="发送结束后继续跟踪 jsonl")
-    p_reply.add_argument("--interval", type=float, default=0.3, help="跟踪轮询间隔")
-    p_reply.add_argument("--timeout", type=float, default=0, help="跟踪空闲超时秒数，0 表示不限")
-    p_reply.add_argument("--mode", choices=("ask", "plan"), help="ask 只读问答，plan 只规划")
-    p_reply.add_argument("--model", help="指定模型")
-    p_reply.add_argument("--yes", action="store_true", help="跳过权限确认（--force）")
-    p_reply.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_reply = sub.add_parser("reply", help="Append a user message to an existing session")
+    p_reply.add_argument("session_id", help="session id, title, or pid; prefixes allowed")
+    p_reply.add_argument("text", nargs="*", help="text to append; stdin is also accepted")
+    p_reply.add_argument("--watch", action="store_true", help="keep following jsonl after send")
+    p_reply.add_argument("--interval", type=float, default=0.3, help="follow poll interval")
+    p_reply.add_argument("--timeout", type=float, default=0, help="idle follow timeout in seconds; 0 means no limit")
+    p_reply.add_argument("--mode", choices=("ask", "plan"), help="ask is Q&A only; plan is planning only")
+    p_reply.add_argument("--model", help="model name")
+    p_reply.add_argument("--yes", action="store_true", help="skip permission prompts (--force)")
+    p_reply.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_reply.set_defaults(func=cmd_reply)
 
-    p_send = sub.add_parser("send", help="新开一轮 Cursor Agent 对话（agent -p）")
-    p_send.add_argument("text", nargs="*", help="要发送的内容，也可从标准输入读入")
-    p_send.add_argument("--cwd", help="工作目录，默认当前目录")
-    p_send.add_argument("--session-id", help="指定新会话 UUID（--new-session-id）")
-    p_send.add_argument("--resume", help="按会话 ID 续聊")
-    p_send.add_argument("--mode", choices=("ask", "plan"), help="ask 只读问答，plan 只规划")
-    p_send.add_argument("--model", help="指定模型")
-    p_send.add_argument("--yes", action="store_true", help="跳过权限确认（--force）")
-    p_send.add_argument("-v", "--verbose", action="store_true", help="输出思考过程")
+    p_send = sub.add_parser("send", help="Start a new Cursor Agent turn (agent -p)")
+    p_send.add_argument("text", nargs="*", help="text to send; stdin is also accepted")
+    p_send.add_argument("--cwd", help="working directory; defaults to cwd")
+    p_send.add_argument("--session-id", help="New session UUID (--new-session-id)")
+    p_send.add_argument("--resume", help="Resume by session id")
+    p_send.add_argument("--mode", choices=("ask", "plan"), help="ask is Q&A only; plan is planning only")
+    p_send.add_argument("--model", help="model name")
+    p_send.add_argument("--yes", action="store_true", help="skip permission prompts (--force)")
+    p_send.add_argument("-v", "--verbose", action="store_true", help="print thinking")
     p_send.set_defaults(func=cmd_send)
     return parser
 
@@ -1348,10 +1348,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         return int(args.func(args))
     except CursorError as exc:
-        print(f"错误: {exc}", file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return EXIT_FAILURE
     except KeyboardInterrupt:
-        print("\n已中断。", file=sys.stderr)
+        print("\ninterrupted.", file=sys.stderr)
         return 130
 
 

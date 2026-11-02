@@ -13,7 +13,7 @@ import (
 	"agent-mesh/internal/protocol"
 )
 
-// AdvertiseURL 节点对外可达地址（中继用来回连）。
+// AdvertiseURL is the public node URL the relay uses to call back.
 func (s *Server) AdvertiseURL(advertise string) string {
 	if advertise != "" {
 		return advertise
@@ -21,7 +21,7 @@ func (s *Server) AdvertiseURL(advertise string) string {
 	return "http://" + s.Listen
 }
 
-// GuessAdvertise 用非回环 IPv4 拼对外地址。
+// GuessAdvertise builds a public URL from a non-loopback IPv4.
 func GuessAdvertise(listen string) string {
 	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
@@ -68,7 +68,7 @@ func lanIPv4() string {
 	return ""
 }
 
-// RegisterLoop 周期性向中继登记，实现失效摘除与多中继。
+// RegisterLoop registers with relays on a loop so stale nodes drop and multiple relays work.
 func (s *Server) RegisterLoop(ctx context.Context, relays []string, advertise, password string) {
 	s.Hub.SetRelays(relays)
 	s.Hub.SetPassword(password)
@@ -89,12 +89,12 @@ func (s *Server) RegisterLoop(ctx context.Context, relays []string, advertise, p
 	}
 }
 
-// RegisterOnce 立即向中继登记一次，供桌面「接入」按钮使用。
+// RegisterOnce registers with the relay once, for the desktop Connect button.
 func (s *Server) RegisterOnce(ctx context.Context, relays []string, advertise, password string) error {
 	s.Hub.SetRelays(relays)
 	s.Hub.SetPassword(password)
 	if len(relays) == 0 {
-		return fmt.Errorf("未配置中继")
+		return fmt.Errorf("no relay configured")
 	}
 	return s.registerOnce(ctx, relays, advertise)
 }
@@ -139,7 +139,7 @@ func (s *Server) registerOnce(ctx context.Context, relays []string, advertise st
 	}
 	if !ok {
 		if last == nil {
-			return fmt.Errorf("未配置中继")
+			return fmt.Errorf("no relay configured")
 		}
 		return last
 	}

@@ -26,7 +26,7 @@ const (
 	sessionTTL = 12 * time.Hour
 )
 
-// Envelope 中继只读取 From/To/Kind，密文对中继不可见。
+// Envelope the relay only reads From/To/Kind; ciphertext is invisible to it.
 type Envelope struct {
 	Version    int    `json:"v"`
 	From       string `json:"from"`
@@ -37,7 +37,7 @@ type Envelope struct {
 	Ciphertext []byte `json:"ct"`
 }
 
-// Session 一次握手后的双向会话密钥。
+// Session is the two-way session key after handshake.
 type Session struct {
 	ID      string
 	PeerID  string
@@ -47,7 +47,7 @@ type Session struct {
 	sendN   atomic.Uint64
 	recvN   atomic.Uint64
 	Expiry  time.Time
-	// clientSend 为 true 表示本端是客户端（用 c2s 加密）。
+	// clientSend true means this side is the client (encrypt with c2s).
 	clientSend bool
 }
 
@@ -131,7 +131,7 @@ func (s *Session) recvKey() []byte {
 	return s.c2s
 }
 
-// Seal 加密一条应用消息。
+// Seal seals an application message.
 func (s *Session) Seal(plaintext []byte) (Envelope, error) {
 	nonce, ct, err := s.seal(s.sendKey(), &s.sendN, plaintext)
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *Session) Seal(plaintext []byte) (Envelope, error) {
 	}, nil
 }
 
-// Open 解密一条应用消息。
+// Open opens an application message.
 func (s *Session) Open(env Envelope) ([]byte, error) {
 	if env.Version != version {
 		return nil, fmt.Errorf("unsupported envelope version %d", env.Version)
@@ -155,12 +155,12 @@ func (s *Session) Open(env Envelope) ([]byte, error) {
 	return s.open(s.recvKey(), env.Nonce, env.Ciphertext)
 }
 
-// Expired 会话是否过期。
+// Expired reports whether the session expired.
 func (s *Session) Expired() bool {
 	return time.Now().After(s.Expiry)
 }
 
-// BeginHandshake 客户端发起握手，返回待发送信封和临时私钥（完成握手时用）。
+// BeginHandshake starts the client handshake and returns the envelope to send plus the ephemeral private key used to finish it.
 func BeginHandshake(local *Identity, peer PublicIdentity) (Envelope, *ecdh.PrivateKey, error) {
 	eph, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
@@ -205,7 +205,7 @@ func BeginHandshake(local *Identity, peer PublicIdentity) (Envelope, *ecdh.Priva
 	}, eph, nil
 }
 
-// AcceptHandshake 节点处理握手。
+// AcceptHandshake handles a handshake on the node.
 func AcceptHandshake(local *Identity, env Envelope) (Envelope, *Session, error) {
 	if env.Kind != "handshake" {
 		return Envelope{}, nil, errors.New("not a handshake envelope")
@@ -289,7 +289,7 @@ func AcceptHandshake(local *Identity, env Envelope) (Envelope, *Session, error) 
 	return out, sess, nil
 }
 
-// FinishHandshake 客户端完成握手。
+// FinishHandshake finishes the handshake on the client.
 func FinishHandshake(local *Identity, peer PublicIdentity, clientEph *ecdh.PrivateKey, env Envelope) (*Session, error) {
 	if env.Kind != "handshake" {
 		return nil, errors.New("not a handshake envelope")

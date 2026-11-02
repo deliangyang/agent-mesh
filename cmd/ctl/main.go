@@ -22,16 +22,16 @@ func main() {
 	}
 	cmd := os.Args[1]
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	relay := fs.String("relay", env("MESH_RELAY", ""), "中继 URL")
-	direct := fs.String("direct", env("MESH_DIRECT", ""), "直连节点 URL，设置后不走中继")
-	nodeID := fs.String("node", env("MESH_NODE", ""), "目标节点 ID")
-	key := fs.String("key", filepath.Join(os.Getenv("HOME"), ".agent-mesh", "client.key"), "客户端身份密钥")
-	engine := fs.String("engine", "", "引擎：workbuddy/claude/cursor/codex/opencode/pi/qoder-cn")
-	all := fs.Bool("all", false, "包含历史会话")
-	tail := fs.Int("tail", 80, "history 条数")
-	cwd := fs.String("cwd", "", "send 工作目录")
-	action := fs.String("action", "list", "followups 动作：list/push/update/delete")
-	itemID := fs.String("id", "", "followups 条目 ID")
+	relay := fs.String("relay", env("MESH_RELAY", ""), "relay URL")
+	direct := fs.String("direct", env("MESH_DIRECT", ""), "direct node URL; skips the relay when set")
+	nodeID := fs.String("node", env("MESH_NODE", ""), "target node ID")
+	key := fs.String("key", filepath.Join(os.Getenv("HOME"), ".agent-mesh", "client.key"), "client identity key")
+	engine := fs.String("engine", "", "engine: workbuddy/claude/cursor/codex/opencode/pi/qoder-cn")
+	all := fs.Bool("all", false, "include history")
+	tail := fs.Int("tail", 80, "history line count")
+	cwd := fs.String("cwd", "", "working directory for send")
+	action := fs.String("action", "list", "followups action: list/push/update/delete")
+	itemID := fs.String("id", "", "followups item ID")
 	_ = fs.Parse(os.Args[2:])
 	args := fs.Args()
 
@@ -82,7 +82,7 @@ func main() {
 		fmt.Println(string(resp.Body))
 	case "history":
 		if len(args) < 1 {
-			fatal("history 需要 session id")
+			fatal("history needs a session id")
 		}
 		resp, err := cli.Call(ctx, protocol.Request{
 			ID:     "1",
@@ -93,7 +93,7 @@ func main() {
 		fmt.Println(string(resp.Body))
 	case "watch":
 		if len(args) < 1 {
-			fatal("watch 需要 session id")
+			fatal("watch needs a session id")
 		}
 		stream(ctx, cli, protocol.Request{
 			ID:     "1",
@@ -103,7 +103,7 @@ func main() {
 		})
 	case "reply":
 		if len(args) < 2 {
-			fatal("reply 需要 session id 和文本")
+			fatal("reply needs a session id and text")
 		}
 		stream(ctx, cli, protocol.Request{
 			ID:     "1",
@@ -113,7 +113,7 @@ func main() {
 		})
 	case "send":
 		if len(args) < 1 {
-			fatal("send 需要文本")
+			fatal("send needs text")
 		}
 		stream(ctx, cli, protocol.Request{
 			ID:     "1",
@@ -141,12 +141,12 @@ func main() {
 		}
 		if *action == "push" || *action == "add" || *action == "update" {
 			if len(args) < 2 {
-				fatal("followups " + *action + " 需要 session 和文本")
+				fatal("followups " + *action + " needs a session and text")
 			}
 			p.Text = strings.Join(args[1:], " ")
 		}
 		if p.Session == "" {
-			fatal("followups 需要 session")
+			fatal("followups needs a session")
 		}
 		resp, err := cli.Call(ctx, protocol.Request{
 			ID:     "1",
@@ -157,7 +157,7 @@ func main() {
 		fmt.Println(string(resp.Body))
 	case "choice":
 		if len(args) < 2 {
-			fatal("choice 需要 session 和文本")
+			fatal("choice needs a session and text")
 		}
 		resp, err := cli.Call(ctx, protocol.Request{
 			ID:     "1",
@@ -192,7 +192,7 @@ func stream(ctx context.Context, cli *client.Client, req protocol.Request) {
 
 func needEngine(e string) string {
 	if e == "" {
-		fatal("请用 --engine 指定 workbuddy/claude/cursor/codex/opencode/pi")
+		fatal("pass --engine with workbuddy/claude/cursor/codex/opencode/pi")
 	}
 	return e
 }
@@ -211,12 +211,12 @@ func must(err error) {
 }
 
 func fatal(msg string) {
-	fmt.Fprintln(os.Stderr, "错误:", msg)
+	fmt.Fprintln(os.Stderr, "error:", msg)
 	os.Exit(1)
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `用法:
+	fmt.Fprintf(os.Stderr, `Usage:
   ctl keygen
   ctl nodes --relay http://127.0.0.1:8443
   ctl list|status|engines|models --relay URL [--node ID] [--engine E] [--all]
@@ -227,6 +227,6 @@ func usage() {
   ctl commands --engine E [--cwd DIR]
   ctl followups SESSION --engine E [--action list|push|update|delete] [--id ID] [TEXT]
   ctl choice SESSION TEXT --engine E [--cwd DIR]
-  ctl ... --direct http://127.0.0.1:7700   # 不经过中继，直连节点
+  ctl ... --direct http://127.0.0.1:7700   # skip the relay and talk to the node directly
 `)
 }

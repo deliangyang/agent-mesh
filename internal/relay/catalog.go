@@ -20,7 +20,7 @@ const (
 	turnLimit             = 20
 )
 
-// Catalog 网页目录快照。
+// Catalog is a web catalog snapshot.
 type Catalog struct {
 	Nodes     []protocol.NodeInfo    `json:"nodes"`
 	Engines   []EngineRow            `json:"engines"`
@@ -30,21 +30,21 @@ type Catalog struct {
 	Followups []protocol.FollowQueue `json:"followups"`
 }
 
-// EngineRow 引擎 + 所属节点。
+// EngineRow is an engine plus its node.
 type EngineRow struct {
 	protocol.EngineInfo
 	NodeID   string `json:"node_id"`
 	NodeName string `json:"node_name"`
 }
 
-// DirRow 工作目录 + 所属节点。
+// DirRow is a workspace plus its node.
 type DirRow struct {
 	protocol.WorkDir
 	NodeID   string `json:"node_id"`
 	NodeName string `json:"node_name"`
 }
 
-// BusMsg 发给网页的 WebSocket 消息，按类型分片。
+// BusMsg is a WebSocket message to the web UI, sharded by type.
 type BusMsg struct {
 	Type      string                 `json:"type"`
 	Nodes     []protocol.NodeInfo    `json:"nodes,omitempty"`

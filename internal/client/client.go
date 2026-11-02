@@ -15,7 +15,7 @@ import (
 	"agent-mesh/internal/protocol"
 )
 
-// Client 可直连节点或经中继转发，应用层始终 E2E。
+// Client can talk to a node directly or through the relay; application encryption is always E2E.
 type Client struct {
 	Ident  *e2e.Identity
 	Relay  string
@@ -27,7 +27,7 @@ type Client struct {
 	base string
 }
 
-// New 创建客户端。
+// New creates a client.
 func New(ident *e2e.Identity, relay, direct string) *Client {
 	return &Client{
 		Ident:  ident,
@@ -37,7 +37,7 @@ func New(ident *e2e.Identity, relay, direct string) *Client {
 	}
 }
 
-// Nodes 从中继拉取节点目录。
+// Nodes loads the node directory from the relay.
 func (c *Client) Nodes(ctx context.Context) ([]protocol.NodeInfo, error) {
 	if c.Relay == "" {
 		return nil, fmt.Errorf("relay url required")
@@ -102,7 +102,7 @@ func (c *Client) fetchInfo(ctx context.Context, u string) (protocol.NodeInfo, er
 	return info, nil
 }
 
-// Handshake 与目标节点建立 E2E 会话。
+// Handshake opens an E2E session with the target node.
 func (c *Client) Handshake(ctx context.Context, nodeID string) error {
 	base, peer, err := c.target(nodeID)
 	if err != nil {
@@ -152,7 +152,7 @@ func (c *Client) postEnvelope(ctx context.Context, u string, env e2e.Envelope) (
 	return out, nil
 }
 
-// Call 同步 RPC。
+// Call is a synchronous RPC.
 func (c *Client) Call(ctx context.Context, req protocol.Request) (protocol.Response, error) {
 	var resp protocol.Response
 	if c.sess == nil {
@@ -181,7 +181,7 @@ func (c *Client) Call(ctx context.Context, req protocol.Request) (protocol.Respo
 	return resp, nil
 }
 
-// Stream 加密 SSE。
+// Stream is encrypted SSE.
 func (c *Client) Stream(ctx context.Context, req protocol.Request) (<-chan protocol.Event, error) {
 	if c.sess == nil {
 		return nil, fmt.Errorf("handshake required")

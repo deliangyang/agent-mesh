@@ -63,11 +63,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="meshAsk.prompt" class="mesh-ask" role="group" :aria-label="meshAsk.prompt.title || '需要选择'">
+  <div v-if="meshAsk.prompt" class="mesh-ask" role="group" :aria-label="meshAsk.prompt.title || 'Choose an option'">
     <div class="mesh-ask-head">
-      <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? "等你确认" : "等你选一项" }}</div>
-      <button type="button" class="mesh-ask-close" aria-label="关闭选项" title="关闭" @click="dismissAsk">
-        关闭
+      <div class="mesh-ask-kicker">{{ meshAsk.prompt.kind === "permission" ? "Waiting for confirmation" : "Waiting for a choice" }}</div>
+      <button type="button" class="mesh-ask-close" aria-label="Dismiss" title="Close" @click="dismissAsk">
+        Close
       </button>
     </div>
     <div v-if="meshAsk.prompt.title" class="mesh-ask-title">{{ meshAsk.prompt.title }}</div>
@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
     <div class="mesh-ask-bar">
       <p v-if="meshAsk.error" class="mesh-ask-err">{{ meshAsk.error }}</p>
       <button type="button" class="mesh-ask-go" :disabled="!ready || meshAsk.answering" @click="confirm">
-        {{ meshAsk.answering ? "正在提交" : "就选这个" }}
+        {{ meshAsk.answering ? "Submitting" : "Choose this" }}
       </button>
     </div>
   </div>

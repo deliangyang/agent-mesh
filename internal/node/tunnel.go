@@ -42,7 +42,7 @@ func (s *Server) tunnelLoop(ctx context.Context, relays []string, advertise stri
 		if ctx.Err() != nil {
 			return
 		}
-		s.Log.Warn("tunnel 断开，准备重连", "err", err)
+		s.Log.Warn("tunnel dropped; reconnecting", "err", err)
 		if time.Since(started) > 30*time.Second {
 			backoff = time.Second
 		}
@@ -67,7 +67,7 @@ func (s *Server) dialTunnels(ctx context.Context, relays []string, advertise str
 		return nil
 	}
 	if last == nil {
-		return fmt.Errorf("未配置中继")
+		return fmt.Errorf("no relay configured")
 	}
 	return last
 }

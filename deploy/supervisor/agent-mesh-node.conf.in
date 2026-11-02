@@ -1,0 +1,15 @@
+[program:agent-mesh-node]
+command=/bin/bash -lc 'set -a; [ -f __HOME__/.agent-mesh/node.env ] && . __HOME__/.agent-mesh/node.env; set +a; exec __NODE_BIN__ -listen 0.0.0.0:7700 -relay "${MESH_RELAY:-http://127.0.0.1:8443}"'
+directory=__MESH_ROOT__
+user=__USER__
+autostart=true
+autorestart=true
+startsecs=3
+stopwaitsecs=10
+stopasgroup=true
+killasgroup=true
+environment=HOME="__HOME__",PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+stdout_logfile=__HOME__/.agent-mesh/supervisor.out.log
+stderr_logfile=__HOME__/.agent-mesh/supervisor.err.log
+stdout_logfile_maxbytes=20MB
+stderr_logfile_maxbytes=20MB

@@ -19,13 +19,13 @@ import (
 
 var rolloutSessionRe = regexp.MustCompile(`(?i)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 
-// Driver 接管本机 Codex CLI。
+// Driver drives the local Codex CLI.
 type Driver struct {
 	root string
 	bin  string
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	root := os.Getenv("CODEX_HOME")
 	if root == "" {
@@ -181,7 +181,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 					}
 					cwd, _ := row["cwd"].(string)
 					title, _ := row["title"].(string)
-					seen[id] = protocol.Session{Engine: d.Name(), ID: id, Title: title, CWD: cwd, Live: true, Status: "在线"}
+					seen[id] = protocol.Session{Engine: d.Name(), ID: id, Title: title, CWD: cwd, Live: true, Status: "online"}
 				}
 			}
 		}
@@ -227,7 +227,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 					Engine:    d.Name(),
 					ID:        id,
 					CWD:       cwd,
-					Status:    "历史",
+					Status:    "history",
 					JSONL:     path,
 					UpdatedAt: info.ModTime().Unix(),
 				}

@@ -7,7 +7,7 @@ import (
 	"agent-mesh/internal/protocol"
 )
 
-// AskPrompt 需要用户当场选择的问题或权限请求。
+// AskPrompt is a question or permission prompt the user must answer now.
 type AskPrompt struct {
 	ID        string        `json:"id,omitempty"`
 	Kind      string        `json:"kind"`
@@ -15,7 +15,7 @@ type AskPrompt struct {
 	Questions []AskQuestion `json:"questions"`
 }
 
-// AskQuestion 一道题。
+// AskQuestion is one question.
 type AskQuestion struct {
 	ID      string      `json:"id,omitempty"`
 	Prompt  string      `json:"prompt"`
@@ -24,7 +24,7 @@ type AskQuestion struct {
 	Options []AskOption `json:"options"`
 }
 
-// AskOption 可选项。
+// AskOption is a choice.
 type AskOption struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
@@ -48,7 +48,7 @@ func permissionType(kind string) bool {
 	return k == "control_request" || k == "permission" || k == "permission_request" || k == "can_use_tool"
 }
 
-// AskFromTool 把工具参数转成 ask 事件。
+// AskFromTool turns tool arguments into an ask event.
 func AskFromTool(name string, args any, id string) (protocol.Event, bool) {
 	if !askToolName(name) {
 		return protocol.Event{}, false
@@ -94,21 +94,21 @@ func askFromControl(obj map[string]any) []protocol.Event {
 	if detail == "" {
 		detail = payloadText(req["input"])
 	}
-	prompt := "允许调用 " + tool + "？"
+	prompt := "Allow " + tool + "?"
 	if strings.TrimSpace(detail) != "" {
 		prompt = tool + "\n" + Truncate(detail, 240)
 	}
 	p := AskPrompt{
 		ID:    id,
 		Kind:  "permission",
-		Title: "需要确认：" + tool,
+		Title: "Confirm: " + tool,
 		Questions: []AskQuestion{{
 			ID:     id,
 			Prompt: prompt,
 			Header: tool,
 			Options: []AskOption{
-				{ID: "allow", Label: "允许"},
-				{ID: "deny", Label: "拒绝"},
+				{ID: "allow", Label: "Allow"},
+				{ID: "deny", Label: "Deny"},
 			},
 		}},
 	}
@@ -170,7 +170,7 @@ func parseOneQuestion(v any) (AskQuestion, bool) {
 		prompt = strField(m, "header")
 	}
 	if prompt == "" {
-		prompt = "请选择"
+		prompt = "Please choose"
 	}
 	multi, _ := m["multiSelect"].(bool)
 	if !multi {
@@ -228,7 +228,7 @@ func firstAskTitle(p AskPrompt) string {
 		return p.Title
 	}
 	if len(p.Questions) == 0 {
-		return "需要你选一下"
+		return "Need you to choose"
 	}
 	q := p.Questions[0]
 	if q.Header != "" {
@@ -237,7 +237,7 @@ func firstAskTitle(p AskPrompt) string {
 	return Truncate(q.Prompt, 80)
 }
 
-// FormatAskAnswer 把用户选择编成引擎能读懂的回复。
+// FormatAskAnswer formats the user's choice into a reply the engine can read.
 func FormatAskAnswer(prompt AskPrompt, picks map[string][]string) string {
 	if prompt.Kind == "permission" {
 		for _, q := range prompt.Questions {
@@ -273,7 +273,7 @@ func FormatAskAnswer(prompt AskPrompt, picks map[string][]string) string {
 		if len(sel) == 0 {
 			continue
 		}
-		joined := strings.Join(sel, "、")
+		joined := strings.Join(sel, ", ")
 		answers[q.Prompt] = joined
 		title := q.Header
 		if title == "" {

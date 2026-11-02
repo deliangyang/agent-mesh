@@ -17,13 +17,13 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", "127.0.0.1:7700", "节点监听地址")
-	advertise := flag.String("advertise", "", "中继回连本节点的 URL，默认探测局域网地址")
-	relays := flag.String("relay", "", "中继地址，逗号分隔，可空（仅直连）")
-	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "中继约定密码")
-	key := flag.String("key", defaultKey(), "身份密钥文件")
-	name := flag.String("name", hostname(), "节点名称")
-	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi,qoder-cn", "启用的引擎")
+	listen := flag.String("listen", "127.0.0.1:7700", "node listen address")
+	advertise := flag.String("advertise", "", "URL the relay uses to call back; LAN address is probed by default")
+	relays := flag.String("relay", "", "relay URLs, comma-separated; empty for direct-only")
+	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "relay password")
+	key := flag.String("key", defaultKey(), "identity key file")
+	name := flag.String("name", hostname(), "node name")
+	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi,qoder-cn", "enabled engines")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))

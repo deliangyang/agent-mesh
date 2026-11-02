@@ -17,12 +17,12 @@ import (
 	"agent-mesh/internal/watchfile"
 )
 
-// Driver 接管本机 WorkBuddy CLI 网关。
+// Driver drives the local WorkBuddy CLI gateway.
 type Driver struct {
 	root string
 }
 
-// New 创建驱动。
+// New creates the driver.
 func New() *Driver {
 	root := os.Getenv("WORKBUDDY_CONFIG_DIR")
 	if root == "" {
@@ -206,7 +206,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			Engine: d.Name(),
 			ID:     gw.Session,
 			CWD:    gw.CWD,
-			Status: "在线",
+			Status: "online",
 			Kind:   "gateway",
 			PID:    gw.PID,
 			Live:   true,
@@ -233,7 +233,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			seen[id] = driver.WithJSONLTitle(protocol.Session{
 				Engine:    d.Name(),
 				ID:        id,
-				Status:    "历史",
+				Status:    "history",
 				JSONL:     path,
 				UpdatedAt: info.ModTime().Unix(),
 			})
@@ -292,7 +292,7 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-ch
 	if gw.Password == "" {
 		return nil, fmt.Errorf("gateway password missing")
 	}
-	// 先盯 jsonl，避免 reply 往返期间丢掉实时行。
+	// watch jsonl first so live lines are not lost during the reply round-trip.
 	watchCtx, cancelWatch := context.WithCancel(ctx)
 	ch, watchErr := d.Watch(watchCtx, sessionID)
 	body := map[string]string{"text": text}
@@ -322,7 +322,7 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-ch
 	if watchErr != nil {
 		cancelWatch()
 		out := make(chan protocol.Event, 1)
-		out <- protocol.Event{Type: "log", Text: "已通过 live reply 追加", Session: sessionID, Engine: d.Name(), Done: true}
+		out <- protocol.Event{Type: "log", Text: "appended via live reply", Session: sessionID, Engine: d.Name(), Done: true}
 		close(out)
 		return out, nil
 	}
@@ -346,7 +346,7 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 		cwd = gw.CWD
 	}
 	if cwd == "" {
-		return nil, fmt.Errorf("请选择工作目录")
+		return nil, fmt.Errorf("pick a working directory")
 	}
 	acp, err := newACP(ctx, gw)
 	if err != nil {
@@ -369,7 +369,7 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 	}
 	sid, _ := res["sessionId"].(string)
 	if sid == "" {
-		return nil, fmt.Errorf("session/new 未返回 sessionId")
+		return nil, fmt.Errorf("session/new did not return sessionId")
 	}
 	out := make(chan protocol.Event, 256)
 	go func() {
@@ -394,13 +394,13 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 			}
 			select {
 			case <-wctx.Done():
-				out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "已新建会话", Done: true}
+				out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "created a new session", Done: true}
 				return
 			case <-time.After(200 * time.Millisecond):
 			}
 		}
 		if watch == nil {
-			out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "已新建会话", Done: true}
+			out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "created a new session", Done: true}
 			return
 		}
 		promptDone := false
@@ -439,7 +439,7 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 				idle.Reset(3 * time.Second)
 			case <-idle.C:
 				if promptDone {
-					out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "已新建会话", Done: true}
+					out <- protocol.Event{Type: "log", Engine: d.Name(), Session: sid, Text: "created a new session", Done: true}
 					return
 				}
 			case <-wctx.Done():

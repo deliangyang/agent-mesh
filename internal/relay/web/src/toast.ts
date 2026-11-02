@@ -38,22 +38,22 @@ export function dismissToast(id: number): void {
 
 export function explainError(err: unknown): string {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return "网络已断开，请检查网络后重试";
+    return "network dropped; check the connection and try again";
   }
   if (err instanceof DOMException && err.name === "AbortError") {
     return "";
   }
   const raw = err instanceof Error ? err.message : String(err || "");
   const msg = raw.replace(/\s+/g, " ").trim();
-  if (!msg) return "请求失败";
+  if (!msg) return "Request failed";
   if (/failed to fetch|networkerror|load failed|err_network|err_internet|net::/i.test(msg)) {
-    return "网络连接失败，请检查网络后重试";
+    return "network error; check the connection and try again";
   }
-  if (msg === "未登录") return msg;
+  if (msg === "not signed in") return msg;
   if (msg.startsWith("<") || msg.length > 240) {
     const code = msg.match(/\b(http\s*)?(\d{3})\b/i);
-    if (code) return "请求失败（" + code[2] + "）";
-    return "请求失败";
+    if (code) return "Request failed (" + code[2] + ")";
+    return "Request failed";
   }
   return msg;
 }

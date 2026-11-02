@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText } from "./events.ts";
 
-test("mergeEvents 保留 ask", () => {
+test("mergeEvents keeps ask", () => {
   const rows = mergeEvents([
     { type: "user", role: "user", text: "hi" },
     { type: "ask", tool: "AskUserQuestion", text: "{\"questions\":[]}" },
@@ -14,35 +14,35 @@ test("mergeEvents 保留 ask", () => {
   assert.equal(msgs.some((m) => (m as { content?: string }).content === "ok"), true);
 });
 
-test("相邻助手 Markdown 段落不会黏在一起", () => {
+test("adjacent assistant markdown paragraphs stay apart", () => {
   const rows = mergeEvents([
-    { type: "assistant", text: "## 标题" },
-    { type: "assistant", text: "- **取件码**：02001754" },
+    { type: "assistant", text: "## Heading" },
+    { type: "assistant", text: "- **pickup code**: 02001754" },
   ]);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].text, "## 标题\n\n- **取件码**：02001754");
+  assert.equal(rows[0].text, "## Heading\n\n- **pickup code**: 02001754");
   const msgs = eventsToMessages(rows);
   const asst = msgs.find((m) => m.role === "assistant") as { content?: string };
-  assert.equal(asst?.content, "## 标题\n\n- **取件码**：02001754");
+  assert.equal(asst?.content, "## Heading\n\n- **pickup code**: 02001754");
 });
 
-test("流式 delta 仍直接拼接", () => {
+test("streaming deltas still concatenate", () => {
   const rows = mergeEvents([
-    { type: "delta", text: "显示" },
-    { type: "delta", text: "完整" },
+    { type: "delta", text: "Hel" },
+    { type: "delta", text: "lo" },
   ]);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].text, "显示完整");
+  assert.equal(rows[0].text, "Hello");
 });
 
-test("同一轮工具收成一条，thinking 不进入对话气泡", () => {
+test("tools in one turn collapse; thinking stays out of the bubble", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "ls" },
-    { type: "thinking", text: "先看目录" },
+    { type: "thinking", text: "look at the directory first" },
     { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"**/*.go"}' },
-    { type: "thinking", text: "再读 Makefile" },
+    { type: "thinking", text: "then read the Makefile" },
     { type: "tool_call", tool: "Read", text: '{"path":"/tmp/Makefile"}' },
-    { type: "assistant", text: "好了" },
+    { type: "assistant", text: "done" },
   ]);
   const roles = msgs.map((m) => m.role);
   assert.deepEqual(roles, ["user", "assistant", "assistant"]);
@@ -50,16 +50,16 @@ test("同一轮工具收成一条，thinking 不进入对话气泡", () => {
   assert.equal(tools.toolCalls?.length, 2);
   assert.equal(tools.toolCalls?.[0]?.function.name, "Glob");
   assert.equal(tools.toolCalls?.[1]?.function.name, "Read");
-  assert.equal((msgs[2] as { content?: string }).content, "好了");
+  assert.equal((msgs[2] as { content?: string }).content, "done");
 });
 
-test("本轮思考不再插入 reasoning 消息", () => {
+test("this turn's thinking is not inserted as reasoning", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "ls" },
     { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"*"}' },
-    { type: "assistant", text: "好了" },
+    { type: "assistant", text: "done" },
   ]);
-  const got = ensureTurnThink(msgs, "先看目录");
+  const got = ensureTurnThink(msgs, "look at the directory first");
   assert.deepEqual(
     got.map((m) => m.role),
     ["user", "assistant", "assistant"],
@@ -67,7 +67,7 @@ test("本轮思考不再插入 reasoning 消息", () => {
   assert.equal(got, msgs);
 });
 
-test("相邻两次不同 Glob 不会被合成一条", () => {
+test("two different Globs in a row are not merged", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "find" },
     { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"*.go"}' },
@@ -77,16 +77,16 @@ test("相邻两次不同 Glob 不会被合成一条", () => {
   assert.equal(tools.toolCalls?.length, 2);
 });
 
-test("工具和助手文本按出现顺序交错，不堆在顶部", () => {
+test("tools and assistant text stay in order instead of stacking at the top", () => {
   const msgs = eventsToMessages([
-    { type: "user", role: "user", text: "看一下" },
-    { type: "assistant", text: "先读文件" },
+    { type: "user", role: "user", text: "take a look" },
+    { type: "assistant", text: "read the file first" },
     { type: "tool_call", tool: "Read", text: '{"path":"/tmp/a.ts"}' },
     { type: "tool_result", tool: "Read", text: "export const a = 1" },
-    { type: "assistant", text: "再搜一下" },
+    { type: "assistant", text: "search again" },
     { type: "tool_call", tool: "Grep", text: '{"pattern":"a"}' },
     { type: "tool_result", tool: "Grep", text: "a.ts:1:export" },
-    { type: "assistant", text: "好了" },
+    { type: "assistant", text: "done" },
   ]);
   const kinds = msgs.map((m) => {
     if (m.role === "user") return "user";
@@ -97,17 +97,17 @@ test("工具和助手文本按出现顺序交错，不堆在顶部", () => {
   });
   assert.deepEqual(kinds, [
     "user",
-    "text:先读文件",
+    "text:read the file first",
     "tools:Read",
     "tool",
-    "text:再搜一下",
+    "text:search again",
     "tools:Grep",
     "tool",
-    "text:好了",
+    "text:done",
   ]);
 });
 
-test("连续多次 Read 即使中间夹着 result 也收成一组", () => {
+test("sequential Reads stay grouped even with results in between", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "read" },
     { type: "tool_call", tool: "Read", text: '{"path":"a.go"}' },
@@ -121,14 +121,14 @@ test("连续多次 Read 即使中间夹着 result 也收成一组", () => {
   assert.equal(tools.toolCalls?.length, 3);
 });
 
-test("同一轮里有结果后再来的工具仍收在一组，直到助手文本才切开", () => {
+test("later tools in the same turn stay grouped until assistant text", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "find" },
     { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"*.go"}' },
     { type: "tool_result", tool: "Glob", text: "a.go" },
     { type: "tool_call", tool: "Read", text: '{"path":"a.go"}' },
     { type: "tool_result", tool: "Read", text: "package main" },
-    { type: "assistant", text: "好了" },
+    { type: "assistant", text: "done" },
   ]);
   const kinds = msgs.map((m) => {
     if (m.role === "user") return "user";
@@ -137,10 +137,10 @@ test("同一轮里有结果后再来的工具仍收在一组，直到助手文�
     if (asst.toolCalls?.length) return "tools:" + asst.toolCalls.map((t) => t.function.name).join(",");
     return "text:" + String(asst.content || "");
   });
-  assert.deepEqual(kinds, ["user", "tools:Glob,Read", "tool", "tool", "text:好了"]);
+  assert.deepEqual(kinds, ["user", "tools:Glob,Read", "tool", "tool", "text:done"]);
 });
 
-test("sameEvents 只比类型和正文，相同快照不再重绘", () => {
+test("sameEvents compares type and body; identical snapshots do not rerender", () => {
   const rows = [
     { type: "user", role: "user", text: "hi" },
     { type: "assistant", text: "ok" },
@@ -161,7 +161,7 @@ test("sameEvents 只比类型和正文，相同快照不再重绘", () => {
   );
 });
 
-test("sameMessages 按内容比较，忽略新对象", () => {
+test("sameMessages compares content and ignores new objects", () => {
   const evs = [
     { type: "user", role: "user", text: "hi" },
     { type: "assistant", text: "ok" },
@@ -173,7 +173,7 @@ test("sameMessages 按内容比较，忽略新对象", () => {
   assert.equal(sameMessages(a, eventsToMessages([{ type: "user", role: "user", text: "hi" }])), false);
 });
 
-test("从 stream JSON 提取 session id", () => {
+test("extract session id from stream JSON", () => {
   assert.equal(
     sessionIdFromChunk({
       agent_mesh: { session: "s-mesh" },

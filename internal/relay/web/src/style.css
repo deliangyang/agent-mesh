@@ -1038,16 +1038,17 @@ html.dark #app {
 .mesh-user-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   box-sizing: border-box;
   gap: 8px;
-  max-width: min(80%, 520px);
+  width: 100%;
+  max-width: 100%;
 }
 
 .mesh-user-files {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -1070,14 +1071,15 @@ html.dark #app {
 
 .mesh-user-text {
   box-sizing: border-box;
+  width: 100%;
   max-width: 100%;
-  padding: 8px 14px;
+  padding: 10px 14px;
   color: var(--ink);
-  background: var(--wall);
-  border-radius: 16px;
+  background: color-mix(in srgb, var(--ink) 7%, var(--paper));
+  border-radius: 8px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  line-height: 1.45;
+  line-height: 1.5;
   font-size: 14px;
 }
 
@@ -1133,10 +1135,23 @@ html.dark #app {
   margin-right: 0;
 }
 
+/* 输入浮层盖在滚动区上。不铺底色时，模型和目录会叠在最后几行对话上，看起来像字重了。 */
 .mesh-chat [data-testid="copilot-input-overlay"] {
   box-sizing: border-box;
   padding-left: var(--chat-gutter);
   padding-right: var(--chat-gutter);
+  background: var(--paper);
+}
+
+.mesh-chat [data-testid="copilot-input-overlay"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 28px;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--paper), color-mix(in srgb, var(--paper) 0%, transparent));
 }
 
 .mesh-chat [data-testid="copilot-chat-input-container"] > div {
@@ -1390,8 +1405,9 @@ html.dark #app {
 }
 
 .mesh-chat [data-testid="copilot-user-message"] {
+  align-items: stretch !important;
   padding-top: 0.2rem !important;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.7rem;
 }
 
 .mesh-chat [data-testid="copilot-assistant-message"] {
@@ -1400,7 +1416,7 @@ html.dark #app {
 }
 
 .mesh-chat [data-testid="copilot-assistant-message"]:not(
-    :has(.mesh-act, .copilot-chat-assistant-markdown, [data-streamdown], .mesh-think-line)
+    :has(.mesh-act, .copilot-chat-assistant-markdown, [data-streamdown])
   ) {
   display: none;
 }
@@ -1615,10 +1631,10 @@ html.dark #app {
   align-items: baseline;
   gap: 8px;
   padding: 0;
-  color: var(--mute);
+  color: var(--ink);
   font-size: 13px;
   line-height: 18px;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .mesh-act-badge {
@@ -1632,17 +1648,11 @@ html.dark #app {
 }
 
 .mesh-act-body.tools {
-  max-height: 54px;
-  scroll-behavior: auto;
+  max-height: none;
 }
 
 .mesh-act-tool {
   height: 18px;
-}
-
-.mesh-composer > .mesh-think-line {
-  margin: 0 8px 8px;
-  pointer-events: auto;
 }
 
 .mesh-act-row {
@@ -1670,12 +1680,20 @@ html.dark #app {
   tab-size: 8;
 }
 
-.mesh-act:has(.mesh-act-head) .mesh-act-out {
+.mesh-act-more,
+.mesh-act:has(.mesh-act-head) .mesh-act-out,
+.mesh-act:has(.mesh-act-head) .mesh-act-row {
   padding-left: 16px;
 }
 
-.mesh-act:has(.mesh-act-head) .mesh-act-row {
-  padding-left: 16px;
+.mesh-act-more {
+  color: var(--mute);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.mesh-act-result {
+  color: var(--mute);
 }
 
 .mesh-act-row[data-status="inProgress"],
@@ -1683,14 +1701,23 @@ html.dark #app {
   color: var(--ink);
 }
 
+.mesh-cursor-slot,
+.mesh-chat [data-testid="copilot-loading-cursor"] {
+  display: none !important;
+}
+
 .mesh-think-line {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 6px 0 0;
+  margin: 6px 0 0 4px;
   color: var(--mute);
   font-size: 12.5px;
   line-height: 18px;
+}
+
+.mesh-think-line[data-mode="live"] {
+  min-height: 18px;
 }
 
 .mesh-think-icon {
@@ -1699,7 +1726,7 @@ html.dark #app {
   flex: none;
 }
 
-.mesh-think-line[data-streaming="true"] .mesh-think-icon {
+.mesh-think-line[data-mode="think"] .mesh-think-icon {
   animation: mesh-think-spin 0.85s linear infinite;
 }
 
@@ -2166,6 +2193,10 @@ html.dark #app {
     opacity: 1;
     box-shadow: 0 0 6px 1px color-mix(in srgb, var(--signal) 40%, transparent);
   }
+
+  .mesh-think-line[data-mode="think"] .mesh-think-icon {
+    animation: none;
+  }
 }
 
 @media (min-width: 861px) {
@@ -2219,7 +2250,7 @@ html.dark #app {
   }
 
   .mesh-user-card {
-    max-width: calc(100% - 8px);
+    max-width: 100%;
   }
 }
 

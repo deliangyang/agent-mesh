@@ -4,6 +4,7 @@ import { nextTick, onMounted, ref, watch } from "vue";
 const props = defineProps<{
   title?: string;
   badge?: string;
+  hidden?: number;
   variant?: "tools" | "think";
   revision?: string | number;
 }>();
@@ -31,6 +32,7 @@ onMounted(() => {
       <span>{{ title }}</span>
       <span v-if="badge" class="mesh-act-badge">{{ badge }}</span>
     </div>
+    <div v-if="hidden" class="mesh-act-more">... {{ hidden }} earlier items hidden</div>
     <div ref="bodyEl" class="mesh-act-body" :class="variant || 'tools'">
       <slot />
     </div>

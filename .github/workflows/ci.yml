@@ -24,7 +24,7 @@ jobs:
         run: go test $(go list ./... | grep -v /desktop)
       - name: Web tests
         working-directory: internal/relay/web
-        run: node --experimental-strip-types --test src/events.test.ts src/ask.test.ts src/toolSummary.test.ts src/attachUpload.test.ts src/liveFlags.test.ts src/chatModel.test.ts
+        run: npm ci && npm test
       - name: Build web UI
         run: make web
       - name: Build binaries

@@ -249,9 +249,7 @@ func (s *Server) forward(path string) http.HandlerFunc {
 			return
 		}
 		body, _ := io.ReadAll(r.Body)
-		if err := s.pipeNodeHdr(r.Context(), rec, http.MethodPost, path, body, w, r.Header); err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-		}
+		writePipeErr(w, s.pipeNodeHdr(r.Context(), rec, http.MethodPost, path, body, w, r.Header))
 	}
 }
 
@@ -263,9 +261,7 @@ func (s *Server) forwardStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
-	if err := s.pipeNodeHdr(r.Context(), rec, http.MethodPost, "/v1/stream", body, w, r.Header); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-	}
+	writePipeErr(w, s.pipeNodeHdr(r.Context(), rec, http.MethodPost, "/v1/stream", body, w, r.Header))
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

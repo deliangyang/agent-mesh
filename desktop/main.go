@@ -1,14 +1,10 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 	"os"
-	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 )
 
 func parseBoot() bootArgs {
@@ -44,20 +40,7 @@ func main() {
 		app.runHeadless()
 		return
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	app.startup(ctx)
-	if app.srv == nil || app.listen == "" {
-		log.Fatal("desktop node failed to start")
+	if err := runGUI(app); err != nil {
+		log.Fatal(err)
 	}
-	uiURL := localUIURL(app.listen)
-	waitUI(uiURL)
-	if err := startChromeApp(uiURL); err != nil {
-		log.Printf("chrome app window unavailable: %v", err)
-		if err := exec.Command("xdg-open", uiURL+"/").Start(); err != nil {
-			log.Fatal(err)
-		}
-	}
-	<-ctx.Done()
-	app.shutdown(context.Background())
 }

@@ -34,13 +34,24 @@ make node-windows
 双击 `mesh-node.exe`：
 
 - 进系统托盘（没有黑色控制台窗口）
-- 打开本机界面 `http://127.0.0.1:7700/`
+- 用 Edge/Chrome 的 app 窗口打开本机 Vue 界面 `http://127.0.0.1:7700/`
 - 生成 `%USERPROFILE%\.agent-mesh\node.key`
 - 日志追加到 `%USERPROFILE%\.agent-mesh\node.log`
 
 左键托盘图标会再打开界面。关掉浏览器窗口 **不会** 结束节点。右键「退出」才退出。
 
 不连中继（直连）：浏览器打开 `http://127.0.0.1:7700/` 即可。
+
+### 可选：Wails / WebView2 桌面壳
+
+Release 里的 `mesh-node.exe` 仍是无 CGO 的托盘版。在本机装好 C 工具链（MinGW 或 Zig）后，可以编一个原生 WebView2 壳，界面仍是同一套 Vue：
+
+```powershell
+make desktop-windows
+# → bin/agent-mesh.exe
+```
+
+它会先起本地 node，再把 WebView2 导航到 `http://127.0.0.1:<port>/`（Wails AssetServer 不支持 WebSocket，目录推送仍走 node）。关掉窗口即退出进程。需要托盘常驻时继续用 `mesh-node.exe`。
 
 ## 3 · 挂到中继
 

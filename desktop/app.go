@@ -93,7 +93,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx, a.cancel = context.WithCancel(ctx)
 	cfg := loadConfig()
 	a.cfg = cfg
-	ident, err := e2e.LoadOrCreate(filepath.Join(os.Getenv("HOME"), ".agent-mesh", "node.key"))
+	ident, err := e2e.LoadOrCreate(filepath.Join(driver.MeshHome(), "node.key"))
 	if err != nil {
 		a.log.Error("identity", "err", err)
 		return
@@ -106,7 +106,7 @@ func (a *App) startup(ctx context.Context) {
 	a.set = set
 	listen := cfg.Listen
 	if listen == "" {
-		listen = "0.0.0.0:7700"
+		listen = "127.0.0.1:7700"
 	}
 	if !portFree(listen) {
 		listen = freeListen("0.0.0.0")
@@ -409,18 +409,18 @@ func hostname() string {
 }
 
 func configPath() string {
-	return filepath.Join(os.Getenv("HOME"), ".agent-mesh", "desktop.json")
+	return filepath.Join(driver.MeshHome(), "desktop.json")
 }
 
 func loadConfig() desktopConfig {
 	raw, err := os.ReadFile(configPath())
 	if err != nil {
-		return desktopConfig{Listen: "0.0.0.0:7700", Enabled: map[string]bool{}}
+		return desktopConfig{Listen: "127.0.0.1:7700", Enabled: map[string]bool{}}
 	}
 	var cfg desktopConfig
 	_ = json.Unmarshal(raw, &cfg)
 	if cfg.Listen == "" {
-		cfg.Listen = "0.0.0.0:7700"
+		cfg.Listen = "127.0.0.1:7700"
 	}
 	if cfg.Enabled == nil {
 		cfg.Enabled = map[string]bool{}

@@ -21,10 +21,18 @@ func NewHandler(relayURL, password string) (http.Handler, error) {
 
 // Attach serves the Vue UI and routes node API paths to api.
 func Attach(api http.Handler) (http.Handler, error) {
+	assets, err := fs.Sub(Dist, "dist")
+	if err != nil {
+		return nil, fmt.Errorf("web.Attach: dist: %w", err)
+	}
+	return attach(api, assets)
+}
+
+func attach(api http.Handler, assets fs.FS) (http.Handler, error) {
 	if api == nil {
 		return nil, fmt.Errorf("web.Attach: api is nil")
 	}
-	ui, err := NewHandler("", "")
+	ui, err := newHandler("", "", assets)
 	if err != nil {
 		return nil, err
 	}

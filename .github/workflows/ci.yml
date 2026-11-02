@@ -29,6 +29,8 @@ jobs:
         run: make web
       - name: Build binaries
         run: make node relay ctl
+      - name: Build CGO-free desktop
+        run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o bin/agent-mesh ./desktop
       - name: Cross-compile Windows node
         run: make node-windows
       - name: Cross-compile Darwin smoke

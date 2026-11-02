@@ -11,6 +11,8 @@ export type MeshEvent = {
 export type NodeInfo = {
   id: string;
   name?: string;
+  os?: string;
+  arch?: string;
 };
 
 export type EngineRow = {

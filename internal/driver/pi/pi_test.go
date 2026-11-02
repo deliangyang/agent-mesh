@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -34,6 +35,9 @@ func TestFindBinPrefersEnvAndNpmGlobal(t *testing.T) {
 	t.Setenv("PATH", "/nonexistent")
 	root := t.TempDir()
 	t.Setenv("HOME", root)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", root)
+	}
 	npm := filepath.Join(root, ".npm-global", "bin")
 	if err := os.MkdirAll(npm, 0o755); err != nil {
 		t.Fatal(err)

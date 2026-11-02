@@ -188,6 +188,8 @@ type NodeInfo struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name,omitempty"`
 	Listen   string   `json:"listen,omitempty"`
+	OS       string   `json:"os,omitempty"`
+	Arch     string   `json:"arch,omitempty"`
 	Engines  []string `json:"engines"`
 	SignPub  []byte   `json:"sign_pub"`
 	X25519   []byte   `json:"x25519_pub"`

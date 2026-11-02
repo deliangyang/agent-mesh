@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -77,6 +78,8 @@ func (s *Server) Info() protocol.NodeInfo {
 		ID:      pub.ID,
 		Name:    s.Name,
 		Listen:  s.Listen,
+		OS:      runtime.GOOS,
+		Arch:    runtime.GOARCH,
 		Engines: s.Drivers.Names(),
 		SignPub: pub.SignPub,
 		X25519:  pub.X25519Pub,

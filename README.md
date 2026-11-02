@@ -14,7 +14,7 @@ A node runs next to the engines. A relay only routes. The web UI and the desktop
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![CI](https://github.com/deliangyang/agent-mesh/actions/workflows/ci.yml/badge.svg)
 
-**[Install](#quick-start)** · **[Windows](docs/windows.md)** · **[Docs](AGENTS.md)** · **English** · [简体中文](README.zh-CN.md)
+**[Install](#quick-start)** · **[Windows](docs/windows.md)** · **[macOS](docs/macos.md)** · **[Docs](AGENTS.md)** · **English** · [简体中文](README.zh-CN.md)
 
 <p align="center">
   <img src="docs/screenshots/desktop.png" alt="Desktop chat: node, engine, sessions, and composer" width="920">
@@ -67,6 +67,8 @@ curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts
 Linux installs a systemd unit (`enable --now`). macOS installs a launchd plist (`RunAtLoad` + `KeepAlive`). A graphical session also gets a Linux `.desktop` file or a macOS `Agent Mesh.app`. A character console (SSH with no `DISPLAY` / `WAYLAND_DISPLAY`) installs **headless** and asks for the relay URL (`MESH_RELAY`); press Enter to keep the default, or edit `~/.agent-mesh/node.env` later. Force either mode with `--headless` or `--desktop`. Pass `--no-service` to skip the boot unit.
 
 **Windows node:** there is no `install-node.sh`. Download the Release zip (or `make node-windows`) and follow **[Windows](docs/windows.md)**. Double-click `mesh-node.exe` for a tray app; pass `-relay` in a shortcut to join a relay.
+
+**macOS node:** use `install-node.sh` (launchd + optional `Agent Mesh.app`). Details: **[macOS](docs/macos.md)**.
 
 If GitHub Releases are unreachable (common on some networks in China), set a mirror prefix:
 

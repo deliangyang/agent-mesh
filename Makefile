@@ -41,9 +41,11 @@ desktop: web
 
 # Windows WebView2 shell (Wails). Requires CGO + a C compiler on Windows (e.g. mingw/zig).
 # Vue still talks HTTP/WS to the local node; the webview only hosts that origin.
+# Tags match https://v2.wails.io/docs/guides/manual-builds/ (desktop,production).
+DESKTOP_WIN_LDFLAGS ?= -s -w -H windowsgui
 desktop-windows: web
 	mkdir -p bin
-	CGO_ENABLED=1 go build $(GOFLAGS) -o bin/agent-mesh.exe ./desktop
+	CGO_ENABLED=1 go build -trimpath -tags desktop,production -ldflags "$(DESKTOP_WIN_LDFLAGS)" -o bin/agent-mesh.exe ./desktop
 
 setup:
 	./scripts/setup.sh

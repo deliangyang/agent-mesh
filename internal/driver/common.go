@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -23,15 +22,6 @@ import (
 var userQueryRe = regexp.MustCompile(`(?s)<user_query>(.*?)</user_query>`)
 var envelopeOpenRe = regexp.MustCompile(`(?i)<([a-z][a-z0-9_]*)\b[^>]*>`)
 var leftoverEnvelopeTagRe = regexp.MustCompile(`(?i)</?(?:[a-z][a-z0-9]*_[a-z0-9_]*|timestamp|communication)\b[^>]*>`)
-
-// PIDAlive reports whether a process is still running.
-func PIDAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil
-}
 
 // Truncate collapses whitespace and truncates on rune boundaries so CJK is not split.
 func Truncate(s string, n int) string {

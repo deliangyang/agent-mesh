@@ -119,3 +119,13 @@ $env:MESH_PASSWORD = "change-me"
 | `AGENT_MESH_HOME` | 覆盖上述目录 |
 
 卸载：删掉程序目录和开机快捷方式。密钥会保留，除非你再删 `%USERPROFILE%\.agent-mesh`。
+
+## 8 · 发布签名清单
+
+GitHub Release 的 zip 默认未签名。公开 Windows 版本前：
+
+1. 用 `make node-windows`（或发布脚本）构建，并冒烟 `mesh-node.exe -no-tray` 与 `mesh-ctl.exe info --direct …`。
+2. 可选 Authenticode：用组织证书签名 `mesh-node.exe` 与 `mesh-ctl.exe`（`signtool sign /fd SHA256 …`）。
+3. 未建立信誉前，SmartScreen 可能拦截首次下载；未签名构建请写明 **更多信息 → 仍要运行**。
+4. 未签名用户优先托盘版 `mesh-node.exe`，而不是 `make desktop-windows`（WebView2 壳需要 C 工具链，且仍像新发布者）。
+5. 在 Release 页为 zip 附上 `SHA256` 校验和。

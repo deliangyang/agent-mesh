@@ -42,9 +42,25 @@ func TestParseEnvironUTF16(t *testing.T) {
 	}
 }
 
+func TestParseProcArgs2Env(t *testing.T) {
+	// argc=1, exe="/bin/x", argv=["/bin/x"], env FOO=bar + CODEBUDDY_GATEWAY_PASSWORD=secret
+	var b []byte
+	b = binary.LittleEndian.AppendUint32(b, 1)
+	b = append(b, "/bin/x\x00"...)
+	b = append(b, 0, 0, 0) // padding
+	b = append(b, "/bin/x\x00"...)
+	b = append(b, "FOO=bar\x00CODEBUDDY_GATEWAY_PASSWORD=secret\x00\x00"...)
+	got := parseProcArgs2Env(b)
+	if got["FOO"] != "bar" || got["CODEBUDDY_GATEWAY_PASSWORD"] != "secret" {
+		t.Fatalf("%#v", got)
+	}
+}
+
 func TestProcessEnvironSelf(t *testing.T) {
-	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		t.Skip("process environ only on windows/linux")
+	switch runtime.GOOS {
+	case "windows", "linux", "darwin":
+	default:
+		t.Skip("process environ unsupported on " + runtime.GOOS)
 	}
 	got := processEnviron(os.Getpid())
 	if len(got) == 0 {

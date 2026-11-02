@@ -83,4 +83,14 @@ Client key: `~/.agent-mesh/client.key`.
 
 Uninstall: remove the LaunchAgent, the app bundle, and binaries under the install prefix. Keys remain until you delete `~/.agent-mesh`.
 
+## 7 · Release signing checklist
+
+Release `darwin_*` archives are unsigned unless you notarize them. Before a public macOS cut:
+
+1. Cross-build or CI-build `mesh-node` / `mesh-ctl` for `darwin/amd64` and `darwin/arm64`; smoke `install-node.sh --no-service` on a test Mac.
+2. Optional: codesign with a Developer ID Application certificate, then `notarytool submit` + staple the binary (or the `.app` from a GUI install).
+3. Gatekeeper will block unsigned downloads; users can right-click → **Open** once, or prefer the install script over a raw binary drop.
+4. launchd plists stay user-level (`~/Library/LaunchAgents`); do not require root for the node.
+5. Publish `SHA256` checksums beside each tarball on the Release page.
+
 See also: [Windows](windows.md) for the tray zip on PCs.

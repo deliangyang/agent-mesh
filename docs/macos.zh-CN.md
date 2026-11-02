@@ -77,4 +77,14 @@ mesh-ctl list --direct http://127.0.0.1:7700 --engine claude --all
 
 卸载：移除 LaunchAgent、App 与安装前缀下的二进制；删除 `~/.agent-mesh` 才会清密钥。
 
+## 7 · 发布签名清单
+
+`darwin_*` 发布包默认未公证。公开 macOS 版本前：
+
+1. 为 `darwin/amd64` 与 `darwin/arm64` 构建 `mesh-node` / `mesh-ctl`；在测试机上对 `install-node.sh --no-service` 做冒烟。
+2. 可选：用 Developer ID Application 证书 codesign，再 `notarytool submit` 并 staple 二进制（或 GUI 安装生成的 `.app`）。
+3. 未签名下载会被 Gatekeeper 拦截；可右键 → **打开** 一次，或优先用安装脚本而不是直接丢二进制。
+4. launchd plist 保持用户级（`~/Library/LaunchAgents`），节点无需 root。
+5. 在 Release 页为每个 tarball 附上 `SHA256`。
+
 Windows 托盘 zip 见 [Windows](windows.zh-CN.md)。

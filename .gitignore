@@ -25,7 +25,10 @@ __pycache__/
 
 # desktop / wails
 desktop/build/
-desktop/frontend/wailsjs/go/bindings.js
+desktop/frontend/wailsjs/
+
+# local toolchain downloads (go / zig / mingw)
+.tools/
 
 # env and secrets
 .env

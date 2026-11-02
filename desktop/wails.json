@@ -10,5 +10,12 @@
   "wailsjsdir": "frontend",
   "author": {
     "name": "agent-mesh"
+  },
+  "info": {
+    "companyName": "agent-mesh",
+    "productName": "Agent Mesh",
+    "productVersion": "0.0.0",
+    "copyright": "",
+    "comments": "Local node shell: WebView2 hosts the shared Vue UI over the node HTTP API"
   }
 }

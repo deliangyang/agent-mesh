@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -39,6 +41,27 @@ func waitUI(uiURL string) {
 }
 
 func findChrome() string {
+	if runtime.GOOS == "windows" {
+		for _, root := range []string{
+			os.Getenv("ProgramFiles"),
+			os.Getenv("ProgramFiles(x86)"),
+			os.Getenv("LOCALAPPDATA"),
+		} {
+			if root == "" {
+				continue
+			}
+			for _, rel := range []string{
+				filepath.Join("Google", "Chrome", "Application", "chrome.exe"),
+				filepath.Join("Microsoft", "Edge", "Application", "msedge.exe"),
+			} {
+				p := filepath.Join(root, rel)
+				if st, err := os.Stat(p); err == nil && !st.IsDir() {
+					return p
+				}
+			}
+		}
+		return ""
+	}
 	for _, name := range []string{
 		"google-chrome",
 		"google-chrome-stable",
@@ -59,12 +82,16 @@ func startChromeApp(uiURL string) error {
 	if bin == "" {
 		return fmt.Errorf("desktop ui: chrome not found")
 	}
-	cmd := exec.Command(bin,
-		"--app="+strings.TrimRight(uiURL, "/")+"/",
+	url := strings.TrimRight(uiURL, "/") + "/"
+	args := []string{
+		"--app=" + url,
 		"--new-window",
 		"--window-size=1360,860",
-		"--class=AgentMesh",
-	)
+	}
+	if runtime.GOOS != "windows" {
+		args = append(args, "--class=AgentMesh")
+	}
+	cmd := exec.Command(bin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

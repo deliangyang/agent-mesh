@@ -34,13 +34,24 @@ SmartScreen may warn on an unsigned exe. Use **More info → Run anyway**.
 Double-click `mesh-node.exe`. It:
 
 - stays in the system tray (no console window)
-- opens the local Vue UI (`http://127.0.0.1:7700/`)
+- opens the local Vue UI (`http://127.0.0.1:7700/`) in an Edge/Chrome app window
 - creates `%USERPROFILE%\.agent-mesh\node.key`
 - appends logs to `%USERPROFILE%\.agent-mesh\node.log`
 
 Left-click the tray icon to open the UI again. Closing the browser window does **not** stop the node. Right-click **退出** to quit.
 
 Direct mode (no relay): open `http://127.0.0.1:7700/` and use the node UI.
+
+### Optional: Wails / WebView2 desktop shell
+
+Release zips stay CGO-free (`mesh-node.exe`). On a Windows machine with a C toolchain (MinGW or Zig) you can build a native WebView2 shell that hosts the same Vue UI:
+
+```powershell
+make desktop-windows
+# → bin/agent-mesh.exe
+```
+
+That binary starts the local node, then navigates WebView2 to `http://127.0.0.1:<port>/` (Wails AssetServer has no WebSockets; the catalog WS stays on the node). Closing the window stops the process. Prefer `mesh-node.exe` when you want a tray-resident node.
 
 ## 3 · Join a relay
 

@@ -1,4 +1,4 @@
-.PHONY: all binaries web node relay ctl desktop test supervisor setup dist node-windows winres
+.PHONY: all binaries web node relay ctl desktop desktop-windows test supervisor setup dist node-windows winres
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOFLAGS ?= -trimpath -ldflags "-s -w"
@@ -38,6 +38,12 @@ node-windows:
 desktop: web
 	mkdir -p bin
 	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/agent-mesh ./desktop
+
+# Windows WebView2 shell (Wails). Requires CGO + a C compiler on Windows (e.g. mingw/zig).
+# Vue still talks HTTP/WS to the local node; the webview only hosts that origin.
+desktop-windows: web
+	mkdir -p bin
+	CGO_ENABLED=1 go build $(GOFLAGS) -o bin/agent-mesh.exe ./desktop
 
 setup:
 	./scripts/setup.sh

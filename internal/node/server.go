@@ -34,6 +34,13 @@ type Server struct {
 	tunConn  tunnelConn
 	follow   *followRuns
 	bus      *busHub
+
+	relays    []string
+	password  string
+	advertise string
+	meshOK    bool
+	meshErr   string
+	regCancel context.CancelFunc
 }
 
 type tunnelConn struct {

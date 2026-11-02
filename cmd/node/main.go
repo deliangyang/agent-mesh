@@ -18,8 +18,8 @@ import (
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:7700", "node listen address")
-	advertise := flag.String("advertise", "", "URL the relay uses to call back; LAN address is probed by default")
-	relays := flag.String("relay", "", "relay URLs, comma-separated; empty for direct-only")
+	advertise := flag.String("advertise", os.Getenv("MESH_ADVERTISE"), "URL the relay uses to call back; LAN address is probed by default")
+	relays := flag.String("relay", os.Getenv("MESH_RELAY"), "relay URLs, comma-separated; empty for direct-only")
 	password := flag.String("password", os.Getenv("MESH_PASSWORD"), "relay password")
 	key := flag.String("key", defaultKey(), "identity key file")
 	name := flag.String("name", hostname(), "node name")
@@ -41,18 +41,25 @@ func main() {
 	srv := node.New(ident, *listen, *name, set, log)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	var relayList []string
-	for _, r := range strings.Split(*relays, ",") {
-		r = strings.TrimRight(strings.TrimSpace(r), "/")
-		if r != "" {
-			relayList = append(relayList, r)
-		}
+
+	saved := node.LoadMeshFile()
+	relayList := splitRelays(*relays)
+	if len(relayList) == 0 {
+		relayList = saved.Relays
+	}
+	pw := *password
+	if strings.TrimSpace(pw) == "" {
+		pw = saved.Password
 	}
 	adv := strings.TrimSpace(*advertise)
 	if adv == "" {
+		adv = saved.Advertise
+	}
+	if adv == "" {
 		adv = node.GuessAdvertise(*listen)
 	}
-	go srv.RegisterLoop(ctx, relayList, adv, *password)
+	srv.StartMesh(ctx, relayList, adv, pw)
+
 	errCh := make(chan error, 1)
 	go func() {
 		err := srv.ListenAndServe(ctx)
@@ -68,6 +75,17 @@ func main() {
 		log.Error("serve", "err", err)
 		os.Exit(1)
 	}
+}
+
+func splitRelays(raw string) []string {
+	var out []string
+	for _, r := range strings.Split(raw, ",") {
+		r = strings.TrimRight(strings.TrimSpace(r), "/")
+		if r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func hostname() string {

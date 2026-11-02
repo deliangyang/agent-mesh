@@ -13,6 +13,7 @@ import (
 	"agent-mesh/internal/e2e"
 	"agent-mesh/internal/hub"
 	"agent-mesh/internal/protocol"
+	meshweb "agent-mesh/internal/relay/web"
 
 	"github.com/gorilla/websocket"
 )
@@ -32,6 +33,7 @@ type Server struct {
 	snapRaw  []byte
 	tunConn  tunnelConn
 	follow   *followRuns
+	bus      *busHub
 }
 
 type tunnelConn struct {
@@ -53,6 +55,7 @@ func New(ident *e2e.Identity, listen, name string, drivers *driver.Set, log *slo
 		sessions: make(map[string]*e2e.Session),
 		follow:   newFollowRuns(),
 		snap:     protocol.NodeSnapshot{Followups: []protocol.FollowQueue{}},
+		bus:      newBusHub(),
 	}
 	s.Hub = hub.New(drivers, ident.ID, name, log)
 	s.Hub.SetPushIngest(s.pushIngestChunk)
@@ -83,8 +86,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/handshake", s.handleHandshake)
 	mux.HandleFunc("POST /v1/rpc", s.handleRPC)
 	mux.HandleFunc("POST /v1/stream", s.handleStream)
+	mux.HandleFunc("POST /login", s.handleLocalLogin)
+	mux.HandleFunc("POST /logout", s.handleLocalLogin)
 	s.mountOpenAI(mux)
-	return withCORS(withLog(s.Log, mux))
+	h := http.Handler(mux)
+	if ui, err := meshweb.Attach(mux); err == nil {
+		h = ui
+	}
+	return withCORS(withLog(s.Log, h))
+}
+
+func (s *Server) handleLocalLogin(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func withCORS(next http.Handler) http.Handler {

@@ -320,6 +320,7 @@ func (s *Server) refreshSnapshot(ctx context.Context) {
 	s.mu.Unlock()
 	if !same {
 		s.pushSnapshot(snap)
+		s.publishCatalog()
 	}
 	s.drainIdle(prev.Sessions, snap.Sessions)
 }

@@ -306,6 +306,7 @@ func (s *Server) publishFollow(f followup.File) {
 	s.snapRaw = raw
 	s.mu.Unlock()
 	s.pushSnapshot(snap)
+	s.publishCatalog()
 }
 
 func sessionBusyKey(engine, id string) string { return engine + "\x00" + id }

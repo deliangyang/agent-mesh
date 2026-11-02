@@ -2,12 +2,12 @@
 
 One session mesh for local coding agents (workbuddy / claude / cursor / codex / opencode / pi / qoder-cn): nodes run on machines that have the engines, the relay only routes, and the web and desktop clients share the same protocol.
 
-Go module: `agent-mesh`. Go 1.25. The web UI is Vue 3 + TypeScript, embedded in the relay binary.
+Go module: `agent-mesh`. Go 1.25. The web UI is Vue 3 + TypeScript, embedded in the relay and the node.
 
 ## Layout
 
 ```
-cmd/node          node process: encrypted RPC, OpenAI-compatible API, reverse tunnel
+cmd/node          node process: encrypted RPC, OpenAI-compatible API, reverse tunnel, Vue UI
 cmd/relay         relay: node directory, web UI, Envelope forwarding
 cmd/ctl           CLI client
 internal/protocol plaintext RPC / events / snapshots (the relay must not decrypt Ciphertext)
@@ -20,7 +20,7 @@ internal/hub      local sessions → OpenAI chunks, pushed to subscribers and th
 internal/followup follow-up queue (default ~/.agent-mesh/followups)
 internal/gitdiff  workspace git diff
 internal/relay/web  web source (build output is embedded in relay)
-desktop           Wails desktop shell: local node + web UI
+desktop           local node + the same Vue UI as the relay (web ops talk to the node)
 deploy/supervisor sample supervisord unit for a local node
 deploy/systemd    systemd units for relay / node (written by install-*.sh)
 deploy/launchd    macOS launchd plists for relay / node
@@ -42,7 +42,7 @@ make node          # bin/node
 make relay         # build the web UI, then bin/relay
 make ctl           # bin/ctl
 make web           # internal/relay/web: npm ci && npm run build
-make desktop       # Wails build → bin/agent-mesh
+make desktop       # embed the Vue UI, then bin/agent-mesh
 make dist          # cross-compile release archives into dist/
 make setup         # one-shot toolchain, build, and ~/.agent-mesh config
 make supervisor    # restart the local node with deploy/supervisor

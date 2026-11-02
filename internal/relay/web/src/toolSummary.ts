@@ -141,6 +141,44 @@ export function kindOfCall(name: string, args?: unknown): ToolKind {
   return kindOf(name);
 }
 
+function parseJsonObject(s: string): Record<string, unknown> | null {
+  const tryParse = (raw: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* 半截 JSON 再往下抽字段 */
+    }
+    return null;
+  };
+  const direct = tryParse(s);
+  if (direct) return direct;
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  if (start >= 0 && end > start) return tryParse(s.slice(start, end + 1));
+  return null;
+}
+
+function fieldsFromText(s: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const keys = [...PATH_KEYS, ...GREP_PATH_KEYS, ...PATTERN_KEYS, ...COMMAND_KEYS, ...URL_KEYS];
+  for (const k of keys) {
+    const re = new RegExp('"' + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + '"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"');
+    const m = s.match(re);
+    if (m && !out[k]) out[k] = m[1].replace(/\\"/g, '"');
+  }
+  return out;
+}
+
+function stripJsonJunk(s: string): string {
+  return s
+    .replace(/^[^/A-Za-z]*?(?=\/|[A-Za-z]:[\\/]|\.{1,2}[\\/])/, "")
+    .replace(/["'}]+$/, "")
+    .trim();
+}
+
 function asObject(args: unknown): Record<string, unknown> {
   if (args && typeof args === "object" && !Array.isArray(args)) {
     return args as Record<string, unknown>;
@@ -148,17 +186,14 @@ function asObject(args: unknown): Record<string, unknown> {
   if (typeof args === "string") {
     const s = args.trim();
     if (!s) return {};
-    try {
-      const parsed = JSON.parse(s) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      if (/^(\/|\.\/|\.\.\/|[A-Za-z]:[\\/])/.test(s) || s.includes("/") || s.includes("\\")) {
-        return { path: s };
-      }
-      return { command: s };
+    const fromJson = parseJsonObject(s);
+    if (fromJson) return fromJson;
+    const fromFields = fieldsFromText(s);
+    if (Object.keys(fromFields).length) return fromFields;
+    if (/^(\/|\.\/|\.\.\/|[A-Za-z]:[\\/])/.test(s) || s.includes("/") || s.includes("\\")) {
+      return { path: stripJsonJunk(s) || s };
     }
+    return { command: s };
   }
   return {};
 }

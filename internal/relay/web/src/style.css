@@ -389,7 +389,8 @@ html.dark #app {
   font-weight: 500;
 }
 
-.mesh-card-node {
+.mesh-card-node,
+.mesh-card-engine {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -398,6 +399,21 @@ html.dark #app {
 
 .mesh-card-title {
   display: block;
+}
+
+.mesh-card-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mesh-cap {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  color: var(--mute);
+  line-height: 1.2;
 }
 
 .mesh-card-meta {

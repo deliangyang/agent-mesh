@@ -54,6 +54,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Title:  driver.TitleOf(d.Name()),
 		Binary: d.bin,
 		Detail: d.root,
+		Caps:   driver.DefaultCaps(d.Name()),
 	}
 	info.Available = driver.BinExists(d.bin)
 	if info.Available {

@@ -1454,12 +1454,17 @@ func TitleOf(name string) string {
 }
 
 // DefaultCaps returns baseline mesh UI capabilities for a known engine.
+// Ask is for engines that surface interactive AskUserQuestion-style tools in JSONL.
 func DefaultCaps(name string) protocol.EngineCaps {
+	base := protocol.EngineCaps{Tools: true, Diff: true, Followups: true}
 	switch strings.TrimSpace(strings.ToLower(name)) {
-	case "workbuddy", "claude", "cursor", "codex", "opencode", "pi", "qoder-cn", "qodercn":
-		return protocol.EngineCaps{Ask: true, Tools: true, Diff: true, Followups: true}
+	case "workbuddy", "claude", "cursor", "qoder-cn", "qodercn":
+		base.Ask = true
+		return base
+	case "codex", "opencode", "pi":
+		return base
 	default:
-		return protocol.EngineCaps{Tools: true, Diff: true, Followups: true}
+		return base
 	}
 }
 

@@ -41,6 +41,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Name:   d.Name(),
 		Title:  driver.TitleOf(d.Name()),
 		Detail: d.root,
+		Caps:   driver.DefaultCaps(d.Name()),
 	}
 	gws := d.discover()
 	info.Available = len(gws) > 0 ||

@@ -21,3 +21,14 @@ export function capsAllowDiff(caps: EngineCaps): boolean {
 export function capsAllowFollowups(caps: EngineCaps): boolean {
   return caps.followups !== false;
 }
+
+/** Compact labels for engine picker / health surfaces. */
+export function capsBadges(caps: EngineCaps | undefined): string[] {
+  const c = caps || { ask: true, tools: true, diff: true, followups: true };
+  const out: string[] = [];
+  if (c.tools !== false) out.push("tools");
+  if (c.ask) out.push("ask");
+  if (c.diff !== false) out.push("diff");
+  if (c.followups !== false) out.push("followups");
+  return out;
+}

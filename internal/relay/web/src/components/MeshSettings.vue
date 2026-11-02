@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { catalog } from "../catalog";
+import { buildHealthMatrix } from "../healthMatrix";
 import { fetchJSON } from "../http";
 import { t } from "../locale";
 import { showToast, toastError } from "../toast";
@@ -25,20 +27,32 @@ const linkError = ref("");
 const loading = ref(false);
 const testing = ref(false);
 const saving = ref(false);
+const local = ref(false);
+
+const matrix = computed(() => buildHealthMatrix(catalog.nodes, catalog.engines));
+
+function cellLabel(cell: string): string {
+  if (cell === "ok") return t("settings.healthOk");
+  if (cell === "miss") return t("settings.healthMiss");
+  return t("settings.healthNone");
+}
 
 async function load(): Promise<void> {
   loading.value = true;
+  local.value = false;
   try {
     const resp = await fetchJSON("/v1/openai/mesh", { credentials: "same-origin" }, 8000);
-    if (!resp.ok) throw new Error(t("settings.unavailable"));
+    if (!resp.ok) return;
     const st = (await resp.json()) as MeshSettingsState;
+    if (!st.local) return;
+    local.value = true;
     form.relay = (st.relays || []).join(", ");
     form.password = st.password || "";
     form.advertise = st.advertise || "";
     linked.value = !!st.linked;
     linkError.value = st.link_error || "";
-  } catch (err) {
-    toastError(err);
+  } catch {
+    /* relay / non-node: health matrix only */
   } finally {
     loading.value = false;
   }
@@ -128,54 +142,87 @@ onMounted(() => {
     <section class="mesh-settings" role="dialog" aria-modal="true" :aria-label="t('settings.title')">
       <header class="mesh-settings-head">
         <div>
-          <h2>{{ t("settings.title") }}</h2>
-          <p class="mesh-settings-sub">{{ t("settings.sub") }}</p>
+          <h2>{{ local ? t("settings.title") : t("settings.health") }}</h2>
+          <p class="mesh-settings-sub">{{ local ? t("settings.sub") : t("settings.healthSub") }}</p>
         </div>
         <button type="button" class="ghost" :aria-label="t('settings.close')" @click="open = false">{{ t("settings.close") }}</button>
       </header>
 
-      <div v-if="loading" class="mesh-settings-status">{{ t("settings.loading") }}</div>
-      <form v-else class="mesh-settings-form" @submit.prevent="save">
-        <label>
-          <span>{{ t("settings.relayUrl") }}</span>
-          <input
-            v-model="form.relay"
-            type="url"
-            placeholder="https://mesh.example.com"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </label>
-        <label>
-          <span>{{ t("settings.relayPassword") }}</span>
-          <input v-model="form.password" type="password" :placeholder="t('settings.passwordPlaceholder')" autocomplete="off" />
-        </label>
-        <label>
-          <span>{{ t("settings.advertise") }}</span>
-          <input
-            v-model="form.advertise"
-            type="url"
-            placeholder="http://LAN-IP:7700 (optional)"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </label>
+      <div v-if="loading" class="mesh-settings-status mesh-settings-pad">{{ t("settings.loading") }}</div>
+      <template v-else>
+        <form v-if="local" class="mesh-settings-form" @submit.prevent="save">
+          <label>
+            <span>{{ t("settings.relayUrl") }}</span>
+            <input
+              v-model="form.relay"
+              type="url"
+              placeholder="https://mesh.example.com"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label>
+            <span>{{ t("settings.relayPassword") }}</span>
+            <input v-model="form.password" type="password" :placeholder="t('settings.passwordPlaceholder')" autocomplete="off" />
+          </label>
+          <label>
+            <span>{{ t("settings.advertise") }}</span>
+            <input
+              v-model="form.advertise"
+              type="url"
+              placeholder="http://LAN-IP:7700 (optional)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
 
-        <div class="mesh-settings-status" :class="{ ok: linked, bad: !linked && !!linkError }">
-          <span v-if="linked">{{ t("settings.linked") }}</span>
-          <span v-else-if="linkError">{{ linkError }}</span>
-          <span v-else>{{ t("settings.direct") }}</span>
-        </div>
+          <div class="mesh-settings-status" :class="{ ok: linked, bad: !linked && !!linkError }">
+            <span v-if="linked">{{ t("settings.linked") }}</span>
+            <span v-else-if="linkError">{{ linkError }}</span>
+            <span v-else>{{ t("settings.direct") }}</span>
+          </div>
 
-        <div class="mesh-settings-actions">
-          <button type="button" class="ghost" :disabled="testing || saving" @click="testLink">
-            {{ testing ? t("settings.testing") : t("settings.test") }}
-          </button>
-          <button type="submit" class="mesh-settings-save" :disabled="saving || testing">
-            {{ saving ? t("settings.saving") : t("settings.save") }}
-          </button>
-        </div>
-      </form>
+          <div class="mesh-settings-actions">
+            <button type="button" class="ghost" :disabled="testing || saving" @click="testLink">
+              {{ testing ? t("settings.testing") : t("settings.test") }}
+            </button>
+            <button type="submit" class="mesh-settings-save" :disabled="saving || testing">
+              {{ saving ? t("settings.saving") : t("settings.save") }}
+            </button>
+          </div>
+        </form>
+
+        <section class="mesh-health" :aria-label="t('settings.health')">
+          <div v-if="local" class="mesh-health-head">
+            <h3>{{ t("settings.health") }}</h3>
+            <p>{{ t("settings.healthSub") }}</p>
+          </div>
+          <div v-if="!matrix.rows.length" class="mesh-settings-status">{{ t("settings.healthEmpty") }}</div>
+          <div v-else class="mesh-health-scroll">
+            <table class="mesh-health-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ t("settings.healthNode") }}</th>
+                  <th v-for="(title, i) in matrix.titles" :key="matrix.engineNames[i]" scope="col" :title="matrix.engineNames[i]">
+                    {{ title }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in matrix.rows" :key="row.nodeId">
+                  <th scope="row">
+                    <span class="mesh-health-name">{{ row.nodeName }}</span>
+                    <span v-if="row.platform" class="mesh-health-plat">{{ row.platform }}</span>
+                  </th>
+                  <td v-for="(cell, i) in row.cells" :key="row.nodeId + matrix.engineNames[i]">
+                    <span class="mesh-health-cell" :class="cell" :title="cellLabel(cell)">{{ cell === "ok" ? "●" : cell === "miss" ? "○" : "–" }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </template>
     </section>
   </div>
 </template>

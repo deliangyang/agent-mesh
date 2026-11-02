@@ -2499,10 +2499,95 @@ html.dark #app {
 }
 
 .mesh-settings {
-  width: min(440px, 100%);
+  width: min(640px, 100%);
+  max-height: min(88vh, 720px);
+  overflow: auto;
   background: var(--paper);
   color: var(--ink);
   box-shadow: inset 0 0 0 1px var(--rule), 0 18px 48px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.mesh-settings-pad {
+  padding: 8px 18px 18px;
+}
+
+.mesh-health {
+  padding: 4px 18px 18px;
+}
+
+.mesh-health-head h3 {
+  margin: 12px 0 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink) 58%, transparent);
+  font-weight: 600;
+}
+
+.mesh-health-head p {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.mesh-health-scroll {
+  overflow: auto;
+  max-width: 100%;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.mesh-health-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.mesh-health-table th,
+.mesh-health-table td {
+  padding: 8px 10px;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 80%, transparent);
+}
+
+.mesh-health-table thead th {
+  font-weight: 500;
+  color: color-mix(in srgb, var(--ink) 70%, transparent);
+  background: color-mix(in srgb, var(--wall) 70%, transparent);
+}
+
+.mesh-health-table tbody th {
+  text-align: left;
+  font-weight: 500;
+}
+
+.mesh-health-name {
+  display: block;
+  color: var(--ink);
+}
+
+.mesh-health-plat {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--mute);
+}
+
+.mesh-health-cell {
+  display: inline-block;
+  min-width: 1.2em;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--mute);
+}
+
+.mesh-health-cell.ok {
+  color: var(--signal);
+}
+
+.mesh-health-cell.miss {
+  color: color-mix(in srgb, var(--destructive) 75%, var(--mute));
 }
 
 .mesh-settings-head {

@@ -23,7 +23,7 @@ export const en: Record<string, string> = {
   "nav.closeSidebar": "Close sidebar",
   "nav.hideSidebar": "Hide sidebar",
   "nav.showSidebar": "Show sidebar",
-  "nav.nodeSettings": "Node settings",
+  "nav.nodeSettings": "Node settings / engine health",
   "nav.themeLight": "Switch to light theme",
   "nav.themeDark": "Switch to dark theme",
 
@@ -83,6 +83,13 @@ export const en: Record<string, string> = {
   "settings.savedLinked": "Relay saved and linked",
   "settings.saved": "Relay settings saved",
   "settings.unavailable": "settings unavailable",
+  "settings.health": "Engine health",
+  "settings.healthSub": "Availability across connected nodes",
+  "settings.healthEmpty": "No nodes in the catalog yet.",
+  "settings.healthNode": "Node",
+  "settings.healthOk": "Installed",
+  "settings.healthMiss": "Missing",
+  "settings.healthNone": "Not registered",
 
   "toast.requestFailed": "Request failed",
   "toast.requestFailedStatus": "Request failed ({status})",

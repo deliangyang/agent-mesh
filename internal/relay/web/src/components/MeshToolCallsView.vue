@@ -67,15 +67,18 @@ const todoPending = computed(() =>
   todoRows.value.some((row) => row.status === "inProgress" || row.status === "executing"),
 );
 
-const title = computed(() => summarizeToolGroup(toolRows.value));
-const hidden = computed(() => Math.max(0, toolRows.value.length - TOOL_TAIL));
 const resultLine = computed(() => {
   if (toolRows.value.length !== 1) return "";
   return formatToolResult(toolRows.value[0].name, toolRows.value[0].result);
 });
+const title = computed(() => {
+  if (toolRows.value.length <= 1 && !resultLine.value) return "";
+  return summarizeToolGroup(toolRows.value);
+});
+const hidden = computed(() => Math.max(0, toolRows.value.length - TOOL_TAIL));
 const visibleRows = computed(() => {
   if (toolRows.value.length === 1 && resultLine.value) return [];
-  if (toolRows.value.length === 1) return [];
+  if (toolRows.value.length === 1) return toolRows.value;
   return toolRows.value.slice(-TOOL_TAIL);
 });
 const revision = computed(

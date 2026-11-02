@@ -1658,15 +1658,31 @@ html.dark #app {
   box-shadow: none;
 }
 
+.mesh-act-head,
+.mesh-act-more,
+.mesh-act-row {
+  height: 18px;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mesh-act-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 0;
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 18px;
   font-weight: 600;
+}
+
+.mesh-act-head > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mesh-act-badge {
@@ -1687,17 +1703,6 @@ html.dark #app {
   height: 18px;
 }
 
-.mesh-act-row {
-  height: 18px;
-  padding: 0;
-  font-size: 12.5px;
-  line-height: 18px;
-  color: var(--mute);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mesh-act-out {
   margin: 0 0 8px;
   padding: 4px 0 2px;
@@ -1716,12 +1721,6 @@ html.dark #app {
 .mesh-act:has(.mesh-act-head) .mesh-act-out,
 .mesh-act:has(.mesh-act-head) .mesh-act-row {
   padding-left: 16px;
-}
-
-.mesh-act-more {
-  color: var(--mute);
-  font-size: 12.5px;
-  line-height: 18px;
 }
 
 .mesh-act-result {

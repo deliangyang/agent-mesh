@@ -12,6 +12,7 @@ import MeshThinkWindow from "../components/MeshThinkWindow.vue";
 import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
+import { engineEmptyHint, nodeEngines } from "../engineCards";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
@@ -108,15 +109,9 @@ const filters = reactive({
   dir: String(route.query.dir || savedPick?.dir || ""),
 });
 
-const engineCards = computed(() => {
-  const seen: Record<string, boolean> = {};
-  return catalog.engines.filter((e) => {
-    if (filters.node && e.node_id && e.node_id !== filters.node) return false;
-    if (seen[e.name]) return false;
-    seen[e.name] = true;
-    return true;
-  });
-});
+const engineCards = computed(() => nodeEngines(catalog.engines, filters.node));
+
+const engineHint = computed(() => (engineCards.value.length ? "" : engineEmptyHint(filters.node)));
 
 const nodePickLabel = computed(() => {
   const n = catalog.nodes.find((row) => row.id === filters.node);
@@ -222,6 +217,9 @@ const welcomeHint = computed(() => {
   const nodeLabel = nodeName(filters.node, node?.name);
   const engineLabel = engine?.title || engine?.name || "";
   if (engineLabel && filters.node) return `Will send to ${engineLabel} on ${nodeLabel}`;
+  if (filters.node && !engineCards.value.length) {
+    return `No engines on ${nodeLabel}. Install an agent CLI on the machine, then refresh.`;
+  }
   if (filters.node) return `Node ${nodeLabel}`;
   return "Pick a node and engine on the left";
 });
@@ -588,6 +586,16 @@ watch(
 );
 
 watch(
+  () => [filters.node, catalog.engines] as const,
+  () => {
+    if (!filters.engine) return;
+    if (engineCards.value.some((e) => e.name === filters.engine)) return;
+    filters.engine = engineCards.value[0]?.name || "";
+    syncModelToEngine();
+  },
+);
+
+watch(
   modelOptions,
   () => {
     syncModelToEngine();
@@ -843,7 +851,7 @@ onBeforeUnmount(() => {
           >
             {{ e.title || e.name }}
           </button>
-          <div v-if="!engineCards.length" class="mesh-pick-empty">Pick a node first</div>
+          <div v-if="engineHint" class="mesh-pick-empty">{{ engineHint }}</div>
         </div>
       </div>
       <button class="mesh-new" type="button" @click="newSession">

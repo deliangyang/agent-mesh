@@ -35,6 +35,41 @@ func TestDiffRowsUnchanged(t *testing.T) {
 	}
 }
 
+func TestCatalogOmitsUnavailableEngines(t *testing.T) {
+	s := New("unused", NewMemory(), nil)
+	s.Dir.Upsert(Record{
+		Info: protocol.NodeInfo{ID: "n1", Name: "box"},
+		Seen: time.Now(),
+		Snapshot: protocol.NodeSnapshot{
+			Engines: []protocol.EngineInfo{
+				{Name: "claude", Title: "Claude", Available: true},
+				{Name: "cursor", Title: "Cursor", Available: false},
+			},
+		},
+	})
+	cat := s.catalog()
+	if len(cat.Engines) != 1 || cat.Engines[0].Name != "claude" {
+		t.Fatalf("engines %#v", cat.Engines)
+	}
+}
+
+func TestCatalogEmptyWhenNodeHasNoEngines(t *testing.T) {
+	s := New("unused", NewMemory(), nil)
+	s.Dir.Upsert(Record{
+		Info: protocol.NodeInfo{ID: "n1", Name: "box"},
+		Seen: time.Now(),
+		Snapshot: protocol.NodeSnapshot{
+			Engines: []protocol.EngineInfo{
+				{Name: "pi", Available: false},
+			},
+		},
+	})
+	cat := s.catalog()
+	if cat.Engines == nil || len(cat.Engines) != 0 {
+		t.Fatalf("engines %#v", cat.Engines)
+	}
+}
+
 func TestCatalogStripsLastSeen(t *testing.T) {
 	s := New("unused", NewMemory(), nil)
 	s.Dir.Upsert(Record{

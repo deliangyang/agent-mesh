@@ -353,7 +353,6 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
     if (ev.type === "thinking") continue;
     if (ev.type === "tool_call") {
       flushText();
-      if (turn.results.length) flushTools();
       const asst = ensureTools();
       asst.toolCalls = asst.toolCalls || [];
       const name = ev.tool || "tool";

@@ -107,7 +107,21 @@ test("工具和助手文本按出现顺序交错，不堆在顶部", () => {
   ]);
 });
 
-test("有结果后再来的工具另起一条，不和前面的工具堆在一起", () => {
+test("连续多次 Read 即使中间夹着 result 也收成一组", () => {
+  const msgs = eventsToMessages([
+    { type: "user", role: "user", text: "read" },
+    { type: "tool_call", tool: "Read", text: '{"path":"a.go"}' },
+    { type: "tool_result", tool: "Read", text: "a" },
+    { type: "tool_call", tool: "Read", text: '{"path":"b.go"}' },
+    { type: "tool_result", tool: "Read", text: "b" },
+    { type: "tool_call", tool: "Read", text: '{"path":"c.go"}' },
+    { type: "tool_result", tool: "Read", text: "c" },
+  ]);
+  const tools = msgs.find((m) => m.role === "assistant") as { toolCalls?: unknown[] };
+  assert.equal(tools.toolCalls?.length, 3);
+});
+
+test("同一轮里有结果后再来的工具仍收在一组，直到助手文本才切开", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "find" },
     { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"*.go"}' },
@@ -123,7 +137,7 @@ test("有结果后再来的工具另起一条，不和前面的工具堆在一�
     if (asst.toolCalls?.length) return "tools:" + asst.toolCalls.map((t) => t.function.name).join(",");
     return "text:" + String(asst.content || "");
   });
-  assert.deepEqual(kinds, ["user", "tools:Glob", "tool", "tools:Read", "tool", "text:好了"]);
+  assert.deepEqual(kinds, ["user", "tools:Glob,Read", "tool", "tool", "text:好了"]);
 });
 
 test("sameEvents 只比类型和正文，相同快照不再重绘", () => {

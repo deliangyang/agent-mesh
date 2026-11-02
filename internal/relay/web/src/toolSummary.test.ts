@@ -15,6 +15,14 @@ test("Read 把裸路径当文件", () => {
   assert.equal(formatToolLine("Read", { path: "/tmp/go.mod" }), "Read /tmp/go.mod");
 });
 
+test("Read 参数是半截 JSON 时仍只显示路径", () => {
+  assert.equal(
+    formatToolLine("Read", '{"path":"/tmp/Chat.vue"} extra'),
+    "Read /tmp/Chat.vue",
+  );
+  assert.equal(formatToolLine("Read", '/tmp/Chat.vue"}'), "Read /tmp/Chat.vue");
+});
+
 test("单条 Read 作为标题", () => {
   assert.equal(
     summarizeToolGroup([{ name: "Read", args: { path: "/tmp/a.ts" } }]),

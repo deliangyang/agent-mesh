@@ -7,6 +7,7 @@ import { keepMediaContent, lastUserPayload } from "./attach";
 import { fetchJSON } from "./http";
 import { showToast, toastError } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
+import { chatModelOf } from "./chatModel";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
 import { meshTarget, parseThreadId } from "./target";
 import type { MeshEvent } from "./types";
@@ -211,21 +212,6 @@ function redirectIfUnauthorized(resp: Response): void {
   }
 }
 
-function modelFitsEngine(model: string, engine: string, node: string): boolean {
-  if (!engine) return true;
-  if (!model) return false;
-  const parts = model.split("/");
-  if (parts[0] === engine) return true;
-  if (node && parts[0] === node && parts[1] === engine) return true;
-  return false;
-}
-
-function chatModelOf(model: string, node: string, engine: string): string {
-  if (modelFitsEngine(model, engine, node)) return model;
-  if (node && engine) return node + "/" + engine;
-  return engine || model;
-}
-
 function nextPiece(prev: string, incoming: string): string {
   if (!incoming) return "";
   if (prev && incoming.startsWith(prev)) return incoming.slice(prev.length);
@@ -385,7 +371,6 @@ export class MeshAgent extends AbstractAgent {
         let toolName = "";
         let toolAcc = "";
         let toolParentId = "";
-        let toolGroupHasResult = false;
         let lastClosedToolId = "";
         let lastClosedToolName = "";
         let thinkAcc = "";
@@ -407,7 +392,6 @@ export class MeshAgent extends AbstractAgent {
         };
         const resetToolGroup = () => {
           toolParentId = "";
-          toolGroupHasResult = false;
         };
         const ensureToolParent = (): string => {
           if (!toolParentId) toolParentId = crypto.randomUUID();
@@ -501,7 +485,6 @@ export class MeshAgent extends AbstractAgent {
               content,
               role: "tool",
             });
-            toolGroupHasResult = true;
             noteAskEvent({ type: "tool_result", tool: name, text: content });
             return false;
           }
@@ -513,7 +496,6 @@ export class MeshAgent extends AbstractAgent {
             const args = delta || mesh.preview || "";
             if (toolId && toolName !== name) closeTool();
             if (!toolId) {
-              if (toolGroupHasResult) resetToolGroup();
               toolId = crypto.randomUUID();
               toolName = name;
               toolAcc = "";

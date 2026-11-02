@@ -285,6 +285,10 @@ function liveHintAfter(message: { id?: string }): boolean {
   return message.id === rows[rows.length - 1]?.id;
 }
 
+function thinkHintAfter(message: { id?: string }): boolean {
+  return liveHint.value === "think" && liveHintAfter(message);
+}
+
 function nodeName(id: string, name?: string): string {
   return name || id || "节点";
 }
@@ -952,10 +956,7 @@ onBeforeUnmount(() => {
             <div class="mesh-reason-skip" hidden></div>
           </template>
           <template #message-after="{ message }">
-            <MeshThinkWindow
-              v-if="liveHintAfter(message)"
-              :mode="liveHint === 'think' ? 'think' : 'live'"
-            />
+            <MeshThinkWindow v-if="thinkHintAfter(message)" mode="think" />
           </template>
           <template #cursor>
             <span class="mesh-cursor-slot" hidden></span>

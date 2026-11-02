@@ -14,7 +14,7 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![CI](https://github.com/deliangyang/agent-mesh/actions/workflows/ci.yml/badge.svg)
 
-**[安装](#快速开始)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
+**[安装](#快速开始)** · **[Windows](docs/windows.zh-CN.md)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
 
 <p align="center">
   <img src="docs/screenshots/desktop.png" alt="电脑端：选择节点、引擎、会话后对话" width="920">
@@ -66,6 +66,8 @@ curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts
 
 Linux 会安装 systemd 单元并 `enable --now`。macOS 会安装 launchd 配置（`RunAtLoad` + `KeepAlive`）。图形界面会再写 Linux 的 `.desktop` 或 macOS 的 `Agent Mesh.app`。字符界面（SSH 且没有 `DISPLAY` / `WAYLAND_DISPLAY`）自动按 **headless** 装，并提示填写或修改中继地址（`MESH_RELAY`）；直接回车保留当前值，以后也可改 `~/.agent-mesh/node.env`。可用 `--headless` / `--desktop` 强制模式。不需要开机服务时加 `--no-service`。
 
+**Windows 节点：** 没有 `install-node.sh`。下 Release zip（或 `make node-windows`），按 **[Windows 部署](docs/windows.zh-CN.md)** 做。双击 `mesh-node.exe` 进托盘；要挂中继就在快捷方式里加 `-relay`。
+
 如果 GitHub Release 下载不了（国内部分网络常见），加镜像前缀：
 
 ```sh
@@ -105,7 +107,7 @@ MESH_PASSWORD=change-me ./bin/relay -listen 0.0.0.0:8443 -web
 
 Claude Code · Cursor Agent · Codex · OpenCode · Pi · WorkBuddy · Qoder CN
 
-节点只列出这台机器上装了的引擎。Windows 上会从 `PATH`、`%USERPROFILE%\.local\bin` 和 `%APPDATA%\npm` 查找（含 `.exe` / `.cmd`）。双击 `mesh-node-windows-amd64.exe` 会进托盘：左键打开界面且不退出，右键「退出」才结束节点。任何能填 OpenAI chat completions 的工具也可以打节点或中继：
+节点只列出这台机器上装了的引擎。Windows 上会从 `PATH`、`%USERPROFILE%\.local\bin` 和 `%APPDATA%\npm` 查找（含 `.exe` / `.cmd`）。zip 安装、托盘和开机自启见 **[Windows 部署](docs/windows.zh-CN.md)**。任何能填 OpenAI chat completions 的工具也可以打节点或中继：
 
 ```sh
 export OPENAI_BASE_URL=http://127.0.0.1:7700/v1
@@ -176,6 +178,7 @@ docker run --rm -p 8443:8443 -e MESH_PASSWORD=change-me agent-mesh-relay -listen
 | `~/.agent-mesh/node.env` | 节点服务：`MESH_PASSWORD`、`MESH_RELAY`、监听参数 |
 | `~/.agent-mesh/relay.env` | 中继服务：`MESH_PASSWORD`、`MESH_LISTEN` |
 | `~/.agent-mesh/followups` | 追加消息队列 |
+| `%USERPROFILE%\.agent-mesh` | Windows 上同一套文件（`node.key`、`node.log`） |
 | `deploy/systemd` | `install-relay.sh` / `install-node.sh` 写入的 systemd 单元 |
 | `deploy/launchd` | 同样服务的 macOS launchd 配置 |
 | `deploy/desktop` | 节点的 Linux `.desktop` 启动器 |

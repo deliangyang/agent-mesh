@@ -92,6 +92,15 @@ export const zhCN: Record<string, string> = {
 
   "engine.pickNode": "请先选择节点",
   "engine.empty": "此节点没有可用引擎。请在该机器安装 agent CLI 后刷新。",
+  "engine.missing": "未安装",
+  "engine.installLine": "安装 {title}（`{bin}`）。可用 `{env}` 覆盖路径。",
+  "engine.installLineNoEnv": "安装 {title}（`{bin}`）。",
+  "engine.installWhere.windows": "已查找 PATH、%USERPROFILE%\\.local\\bin 与 %APPDATA%\\npm。",
+  "engine.installWhere.darwin": "已查找 PATH、~/.local/bin 与 ~/.npm-global/bin。",
+  "engine.installWhere.linux": "已查找 PATH 与 ~/.local/bin。",
+  "engine.installWhere.default": "已查找 PATH 与常见本地 bin 目录。",
+  "nav.filterAll": "全部平台",
+  "nav.filterOs": "平台",
 
   "agent.pickEngine": "请先选择引擎或模型",
   "agent.pickDir": "请先选择工作目录",

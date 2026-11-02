@@ -48,12 +48,19 @@ func TestCatalogOmitsUnavailableEngines(t *testing.T) {
 		},
 	})
 	cat := s.catalog()
-	if len(cat.Engines) != 1 || cat.Engines[0].Name != "claude" {
+	if len(cat.Engines) != 2 {
 		t.Fatalf("engines %#v", cat.Engines)
+	}
+	byName := map[string]bool{}
+	for _, e := range cat.Engines {
+		byName[e.Name] = e.Available
+	}
+	if !byName["claude"] || byName["cursor"] {
+		t.Fatalf("availability %#v", byName)
 	}
 }
 
-func TestCatalogEmptyWhenNodeHasNoEngines(t *testing.T) {
+func TestCatalogKeepsUnavailableEngines(t *testing.T) {
 	s := New("unused", NewMemory(), nil)
 	s.Dir.Upsert(Record{
 		Info: protocol.NodeInfo{ID: "n1", Name: "box"},
@@ -65,7 +72,7 @@ func TestCatalogEmptyWhenNodeHasNoEngines(t *testing.T) {
 		},
 	})
 	cat := s.catalog()
-	if cat.Engines == nil || len(cat.Engines) != 0 {
+	if len(cat.Engines) != 1 || cat.Engines[0].Name != "pi" || cat.Engines[0].Available {
 		t.Fatalf("engines %#v", cat.Engines)
 	}
 }

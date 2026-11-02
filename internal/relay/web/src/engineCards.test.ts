@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { engineEmptyHint, nodeEngines } from "./engineCards.ts";
+import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "./engineCards.ts";
 import { applyLocalePref } from "./locale.ts";
 import type { EngineRow } from "./types.ts";
 
@@ -33,6 +33,15 @@ test("nodeEngines does not leak another node's engines", () => {
 
 test("nodeEngines stays empty when the node has nothing installed", () => {
   assert.deepEqual(nodeEngines([{ name: "pi", node_id: "n1", available: false }], "n1"), []);
+});
+
+test("nodeMissingEngines lists unavailable engines for the node", () => {
+  const got = nodeMissingEngines(rows, "n1");
+  assert.deepEqual(
+    got.map((e) => e.name),
+    ["cursor"],
+  );
+  assert.deepEqual(nodeMissingEngines(rows, "n2"), []);
 });
 
 test("engineEmptyHint tells the user to pick a node or install", () => {

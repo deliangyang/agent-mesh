@@ -36,7 +36,7 @@ Root `*_ctl.py` files are early single-engine prototypes. The real path is the G
 ## Build and test
 
 ```bash
-make test          # Go tests (except desktop) + web node:test
+make test          # Go tests (except desktop) + web npm test (npm ci if vue is missing)
 make node          # bin/node
 make relay         # build the web UI, then bin/relay
 make ctl           # bin/ctl
@@ -47,11 +47,11 @@ make setup         # one-shot toolchain, build, and ~/.agent-mesh config
 make supervisor    # restart the local node with deploy/supervisor
 ```
 
-Web unit tests:
+Web unit tests import Vue, so `node_modules` must exist first:
 
 ```bash
 cd internal/relay/web
-node --experimental-strip-types --test src/events.test.ts src/ask.test.ts src/toolSummary.test.ts
+npm ci && npm test
 ```
 
 After changing `internal/relay/web/src`, run `make web` or the embedded `dist` stays stale. Do not hand-edit `dist/`, and do not commit it.
@@ -88,6 +88,7 @@ See: `internal/driver/claude` (jsonl + socket inject), `internal/driver/cursor` 
 - Prefix web components with `Mesh`. Style with CSS variables in `style.css` (`--paper` `--ink` `--signal`); do not start another theme.
 - After user-visible web changes, cover the path in a browser or `node --test`. Do not stop at a screenshot.
 - Keep diffs small: no unrelated refactors, no mass formatting outside `dist` assets.
+- After finishing a change, commit before ending the conversation. Do not leave the session's edits uncommitted.
 
 ## Run locally
 

@@ -39,4 +39,4 @@ supervisor: node
 
 test:
 	go test $$(go list ./... | grep -v /desktop)
-	cd internal/relay/web && node --experimental-strip-types --test src/events.test.ts src/ask.test.ts src/toolSummary.test.ts src/attachUpload.test.ts src/liveFlags.test.ts src/chatModel.test.ts
+	cd internal/relay/web && (test -d node_modules/vue || npm ci) && npm test

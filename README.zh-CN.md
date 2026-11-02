@@ -12,6 +12,7 @@
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![CI](https://github.com/deliangyang/agent-mesh/actions/workflows/ci.yml/badge.svg)
 
 **[安装](#快速开始)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
 
@@ -31,17 +32,17 @@
 **1 · 安装。** 从源码：
 
 ```sh
-git clone https://github.com/OWNER/REPO.git agent-mesh
+git clone https://github.com/deliangyang/agent-mesh.git
 cd agent-mesh
 ./scripts/setup.sh
 ```
 
 `setup.sh` 会检查 Go 1.25 和 Node 20，编译 `node` / `relay` / `ctl`，写入 `~/.agent-mesh`，并生成身份密钥。
 
-也可以安装 GitHub Release 里的二进制（没有 git remote 时设 `AGENT_MESH_REPO=owner/repo`）：
+也可以安装 GitHub Release 里的二进制：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install.sh | sh
 ```
 
 卸载用 `curl -fsSL …/install.sh | sh -s -- --uninstall`。`~/.agent-mesh` 里的密钥会保留，加 `--purge` 才会删掉。

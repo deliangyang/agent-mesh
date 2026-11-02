@@ -12,6 +12,7 @@ A node runs next to the engines. A relay only routes. The web UI and the desktop
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![CI](https://github.com/deliangyang/agent-mesh/actions/workflows/ci.yml/badge.svg)
 
 **[Install](#quick-start)** · **[Docs](AGENTS.md)** · **English** · [简体中文](README.zh-CN.md)
 
@@ -31,17 +32,17 @@ It is for you if you run more than one coding agent, or agents on more than one 
 **1 · Install.** From a clone:
 
 ```sh
-git clone https://github.com/OWNER/REPO.git agent-mesh
+git clone https://github.com/deliangyang/agent-mesh.git
 cd agent-mesh
 ./scripts/setup.sh
 ```
 
 `setup.sh` checks Go 1.25 and Node 20, builds `node` / `relay` / `ctl`, writes `~/.agent-mesh`, and generates identity keys.
 
-Or install a GitHub Release binary (set `AGENT_MESH_REPO=owner/repo` if the default remote is empty):
+Or install a GitHub Release binary:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install.sh | sh
 ```
 
 Remove what the script installed with `curl -fsSL …/install.sh | sh -s -- --uninstall`. Keys in `~/.agent-mesh` stay unless you add `--purge`.

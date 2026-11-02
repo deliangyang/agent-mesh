@@ -1,6 +1,6 @@
 #!/bin/sh
 # One-line install for Agent Mesh release binaries.
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/deliangyang/agent-mesh/main/scripts/install.sh | sh
 #   curl -fsSL …/install.sh | sh -s -- --uninstall
 #   curl -fsSL …/install.sh | sh -s -- --purge
 set -eu
@@ -8,6 +8,7 @@ set -eu
 PREFIX="${AGENT_MESH_PREFIX:-${HOME}/.local}"
 BIN_DIR="${PREFIX}/bin"
 STATE_DIR="${AGENT_MESH_HOME:-${HOME}/.agent-mesh}"
+DEFAULT_REPO="deliangyang/agent-mesh"
 REPO="${AGENT_MESH_REPO:-}"
 VERSION="${AGENT_MESH_VERSION:-latest}"
 UNINSTALL=0
@@ -53,7 +54,7 @@ detect_repo() {
       return
     fi
   fi
-  echo ""
+  echo "$DEFAULT_REPO"
 }
 
 os_arch() {

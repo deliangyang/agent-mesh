@@ -16,6 +16,17 @@
 
 **[安装](#快速开始)** · **[文档](AGENTS.md)** · [English](README.md) · **简体中文**
 
+<p align="center">
+  <img src="docs/screenshots/desktop.png" alt="电脑端：选择节点、引擎、会话后对话" width="920">
+</p>
+<p align="center">
+  <img src="docs/screenshots/mobile.png" alt="手机端对话" width="260">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-nav.png" alt="手机端会话列表" width="260">
+</p>
+
+<p align="center"><sub>电脑端和手机端。节点名和工作目录已打码。</sub></p>
+
 ## Agent Mesh 适合你吗？
 
 每种 coding agent 都把会话写在自己的文件里，只在装它的那台机器上。开三个窗口去续三个对话，撑不久。Agent Mesh 把它们收进一份目录：

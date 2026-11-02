@@ -16,6 +16,17 @@ A node runs next to the engines. A relay only routes. The web UI and the desktop
 
 **[Install](#quick-start)** · **[Docs](AGENTS.md)** · **English** · [简体中文](README.zh-CN.md)
 
+<p align="center">
+  <img src="docs/screenshots/desktop.png" alt="Desktop chat: node, engine, sessions, and composer" width="920">
+</p>
+<p align="center">
+  <img src="docs/screenshots/mobile.png" alt="Phone chat" width="260">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-nav.png" alt="Phone session list" width="260">
+</p>
+
+<p align="center"><sub>Desktop and phone. Node names and working directories are redacted.</sub></p>
+
 ## Is Agent Mesh for you?
 
 Each coding agent keeps its own sessions, in its own files, on the machine where it runs. Opening three windows to resume three chats does not scale. Agent Mesh puts them behind one catalog:

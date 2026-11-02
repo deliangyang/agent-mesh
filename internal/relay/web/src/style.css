@@ -27,6 +27,11 @@
   --font-ui: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
     "Microsoft YaHei", sans-serif;
   --font-display: Syne, "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --rail: 11px;
+  --rail-inset: 3px;
+  --rail-thumb: color-mix(in srgb, var(--mute) 62%, transparent);
+  --rail-hover: color-mix(in srgb, var(--mute) 88%, transparent);
+  --rail-active: color-mix(in srgb, var(--signal) 82%, var(--mute));
   --background: var(--paper);
   --foreground: var(--ink);
   --card: var(--lamp);
@@ -147,6 +152,50 @@ html.dark #app {
 :focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 2px;
+}
+
+/* 石墨铅芯轨：闲置是淡墨，悬停加实，拖动点亮苔绿。
+   Chrome 121+ 的叠加滚动条只认 scrollbar-width/color，会忽略 webkit 伪元素；
+   Safari 仍走 ::-webkit-scrollbar，所以两套一起写。选择器覆盖到 body，
+   以免 CopilotKit 传送到根节点外的菜单掉回系统滚动条。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rail-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: var(--rail);
+  height: var(--rail);
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--rail-thumb);
+  background-clip: padding-box;
+  border: var(--rail-inset) solid transparent;
+  border-radius: 1px;
+  transition: background-color 0.12s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--rail-hover);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--rail-active);
 }
 
 .mesh-root {
@@ -629,11 +678,20 @@ html.dark #app {
 }
 
 .mesh-composer {
+  position: relative;
   width: 100%;
   display: grid;
   gap: 4px;
   padding: 0 0 2px;
   pointer-events: auto;
+}
+
+.mesh-composer-guard {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: auto;
+  touch-action: none;
 }
 
 .mesh-composer-meta {
@@ -747,6 +805,10 @@ html.dark #app {
   width: 100%;
 }
 
+.mesh-slash-host textarea[readonly] {
+  caret-color: transparent;
+}
+
 .mesh-slash-host [data-testid="copilot-slash-menu"] {
   display: none;
 }
@@ -814,15 +876,156 @@ html.dark #app {
   filter: brightness(1.06);
 }
 
-.mesh-chat [data-testid="copilot-chat-attachment-queue"] {
-  padding: 0 8px 8px;
-  gap: 8px;
+.mesh-send-btn.is-stop {
+  background: var(--ink);
+  color: var(--paper);
 }
 
-.mesh-chat [data-testid="copilot-chat-attachment-item"] {
+.mesh-chat [data-testid="copilot-input-overlay"] > [class*="max-w-3xl"]:has([data-testid="copilot-chat-attachment-queue"]),
+.mesh-chat [data-testid="copilot-chat-attachment-queue"] {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mesh-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 8px 6px;
+}
+
+.mesh-attach-card {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  overflow: hidden;
+  border-radius: 10px;
   background: var(--lamp);
-  border-color: var(--rule) !important;
-  border-radius: 10px !important;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.mesh-attach-card.is-file {
+  width: min(220px, 100%);
+  height: auto;
+  min-height: 52px;
+}
+
+.mesh-attach-card.is-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(240px, 100%);
+  height: auto;
+  min-height: 52px;
+  padding: 6px 28px 6px 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 55%, var(--rule));
+}
+
+.mesh-attach-err-thumb {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.mesh-attach-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mesh-attach-fallback {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 52px;
+  padding: 10px 28px 10px 10px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.mesh-attach-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px;
+  color: var(--on-signal);
+  background: color-mix(in srgb, var(--ink) 48%, transparent);
+}
+
+.mesh-attach-pct {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.mesh-attach-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--on-signal) 28%, transparent);
+}
+
+.mesh-attach-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+}
+
+.mesh-attach-bar.indet .mesh-attach-bar-fill {
+  animation: mesh-attach-indet 0.9s ease-in-out infinite;
+}
+
+@keyframes mesh-attach-indet {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(280%);
+  }
+}
+
+.mesh-attach-err {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mesh-attach-x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  color: var(--paper);
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.mesh-attach-x:hover {
+  background: var(--ink);
 }
 
 .mesh-user-card {
@@ -1186,6 +1389,30 @@ html.dark #app {
   display: none;
 }
 
+/* CopilotKit 思考气泡没有 testid；空槽若未覆盖，展开的 1fr 网格会把对话撑出大块空白 */
+.mesh-chat [data-copilotkit][data-message-id]:not([data-testid]),
+.mesh-reason-skip {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.mesh-chat [data-testid="copilot-chat-view-scroll"] > div > *,
+.mesh-chat [data-testid="copilot-scroll-content"] > div > [data-copilotkit],
+.mesh-chat [data-testid="copilot-user-message"],
+.mesh-chat [data-testid="copilot-assistant-message"] {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.mesh-chat .copilot-chat-assistant-markdown p:empty {
+  display: none;
+  margin: 0;
+}
+
 .mesh-chat [data-testid="copilot-assistant-message"] > div:has(.mesh-copy),
 .mesh-chat [data-testid="copilot-user-message"] > div:has(.mesh-copy) {
   position: absolute;
@@ -1386,7 +1613,6 @@ html.dark #app {
 .mesh-act-body {
   overflow: auto;
   padding: 0;
-  scrollbar-width: thin;
 }
 
 .mesh-act-body.tools {
@@ -1907,6 +2133,10 @@ html.dark #app {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  ::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+
   .mesh-act-body {
     scroll-behavior: auto;
   }

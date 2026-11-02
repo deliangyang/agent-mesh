@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CopilotChatInput } from "@copilotkit/vue/v2";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { SlashItem } from "../types";
 
 type InputMode = "input" | "transcribe" | "processing";
@@ -23,6 +23,7 @@ const props = defineProps<{
   onFinishTranscribe: () => void;
   onFinishTranscribeWithAudio: (audioBlob: Blob) => void | Promise<void>;
   onPullFollowup?: () => boolean | Promise<boolean>;
+  autoFocus?: boolean;
 }>();
 
 const host = ref<HTMLElement | null>(null);
@@ -163,23 +164,129 @@ function onInput(value: string): void {
   props.onUpdateModelValue(value);
 }
 
+const allowKeyboard = ref(!!props.autoFocus);
+let suppressUntil = 0;
+let blurTimer = 0;
+let lockObserver: MutationObserver | null = null;
+
+function inputBox(): HTMLElement | null {
+  const el = host.value?.querySelector("textarea, [contenteditable]");
+  return el instanceof HTMLElement ? el : null;
+}
+
+function blurComposer(): void {
+  const root = host.value;
+  if (!root) return;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && root.contains(active)) active.blur();
+  inputBox()?.blur();
+}
+
+function lockKeyboard(): void {
+  const box = inputBox();
+  if (!box) return;
+  box.setAttribute("readonly", "readonly");
+  box.setAttribute("inputmode", "none");
+}
+
+function unlockKeyboard(): void {
+  const box = inputBox();
+  if (!box) return;
+  box.removeAttribute("readonly");
+  box.removeAttribute("inputmode");
+}
+
+function keepLocked(): void {
+  if (allowKeyboard.value) return;
+  lockKeyboard();
+  blurComposer();
+}
+
+function rejectAutoFocus(): void {
+  if (allowKeyboard.value) return;
+  keepLocked();
+  requestAnimationFrame(() => {
+    keepLocked();
+    requestAnimationFrame(keepLocked);
+  });
+  window.clearTimeout(blurTimer);
+  blurTimer = window.setTimeout(keepLocked, 0);
+  window.setTimeout(keepLocked, 80);
+  window.setTimeout(keepLocked, 320);
+}
+
+function isComposerButton(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest("button");
+}
+
+function onComposerPointer(ev: PointerEvent): void {
+  if (allowKeyboard.value) return;
+  if (Date.now() < suppressUntil) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    keepLocked();
+    return;
+  }
+  if (isComposerButton(ev.target)) return;
+  allowKeyboard.value = true;
+  unlockKeyboard();
+}
+
+function onComposerClick(ev: MouseEvent): void {
+  if (allowKeyboard.value) return;
+  if (isComposerButton(ev.target)) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  keepLocked();
+}
+
+function onFocusIn(): void {
+  if (allowKeyboard.value) return;
+  keepLocked();
+  rejectAutoFocus();
+}
+
 function dismissKeyboard(): void {
-  const hide = () => {
-    const root = host.value;
-    if (!root) return;
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && root.contains(active)) active.blur();
-    const box = root.querySelector("textarea, [contenteditable]");
-    if (box instanceof HTMLElement) box.blur();
-  };
-  hide();
+  blurComposer();
   // CopilotKit 发送后会立刻 focus 输入框，延后失焦才能收起手机键盘。
   requestAnimationFrame(() => {
-    hide();
-    requestAnimationFrame(hide);
+    blurComposer();
+    requestAnimationFrame(blurComposer);
   });
-  window.setTimeout(hide, 0);
+  window.setTimeout(blurComposer, 0);
 }
+
+function startLockObserver(): void {
+  lockObserver?.disconnect();
+  if (allowKeyboard.value || !host.value) return;
+  lockObserver = new MutationObserver(() => {
+    if (!allowKeyboard.value) lockKeyboard();
+  });
+  lockObserver.observe(host.value, { childList: true, subtree: true });
+  lockKeyboard();
+}
+
+onMounted(() => {
+  if (props.autoFocus) {
+    allowKeyboard.value = true;
+    return;
+  }
+  allowKeyboard.value = false;
+  suppressUntil = Date.now() + 800;
+  void nextTick(() => {
+    startLockObserver();
+    rejectAutoFocus();
+    void nextTick(rejectAutoFocus);
+  });
+});
+
+onBeforeUnmount(() => {
+  lockObserver?.disconnect();
+  window.clearTimeout(blurTimer);
+});
+
+const emptyDraft = computed(() => !(props.modelValue || "").trim() && !hasFiles.value);
+const showStop = computed(() => emptyDraft.value && props.isRunning);
 
 let lastSubmitAt = 0;
 function submit(value: string): void {
@@ -191,6 +298,10 @@ function submit(value: string): void {
 }
 
 function onSend(orig: () => void): void {
+  if (showStop.value) {
+    props.onStop();
+    return;
+  }
   if (!(props.modelValue || "").trim() && hasFiles.value) {
     props.onUpdateModelValue("请查看附件。");
     void nextTick(() => orig());
@@ -201,7 +312,14 @@ function onSend(orig: () => void): void {
 </script>
 
 <template>
-  <div ref="host" class="mesh-slash-host" @keydown.capture="onKey">
+  <div
+    ref="host"
+    class="mesh-slash-host"
+    @keydown.capture="onKey"
+    @pointerdown.capture="onComposerPointer"
+    @click.capture="onComposerClick"
+    @focusin.capture="onFocusIn"
+  >
     <CopilotChatInput
       :model-value="modelValue"
       :is-running="false"
@@ -218,6 +336,7 @@ function onSend(orig: () => void): void {
       positioning="static"
       :show-disclaimer="true"
       :bottom-anchored="true"
+      :auto-focus="!!autoFocus"
       @update:model-value="onInput"
     >
       <template #add-menu-button="{ disabled, labels }">
@@ -240,12 +359,17 @@ function onSend(orig: () => void): void {
           <button
             type="button"
             class="mesh-send-btn"
-            data-testid="copilot-chat-input-send"
-            :disabled="disabled && !hasFiles"
-            aria-label="发送"
+            :class="{ 'is-stop': showStop }"
+            :data-testid="showStop ? 'copilot-chat-input-stop' : 'copilot-chat-input-send'"
+            :disabled="showStop ? false : disabled && !hasFiles"
+            :aria-label="showStop ? '停止' : '发送'"
+            :title="showStop ? '停止' : '发送'"
             @click="onSend(onClick)"
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <svg v-if="showStop" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1.3" fill="currentColor" />
+            </svg>
+            <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
                 d="M8 12.2V3.8M4.4 7.2 8 3.8l3.6 3.4"
                 stroke="currentColor"

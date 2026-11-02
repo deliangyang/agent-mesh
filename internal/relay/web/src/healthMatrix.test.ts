@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildHealthMatrix } from "./healthMatrix.ts";
+import { buildHealthMatrix, resolveHealthPick } from "./healthMatrix.ts";
 
 describe("buildHealthMatrix", () => {
   it("marks ok / miss / none per node", () => {
@@ -25,5 +25,22 @@ describe("buildHealthMatrix", () => {
     const got = buildHealthMatrix([], []);
     assert.deepEqual(got.engineNames, []);
     assert.deepEqual(got.rows, []);
+  });
+});
+
+describe("resolveHealthPick", () => {
+  const engines = [
+    { name: "claude", node_id: "n1", available: true },
+    { name: "cursor", node_id: "n1", available: false },
+    { name: "pi", node_id: "n1", available: true },
+  ];
+
+  it("keeps an available engine click", () => {
+    assert.deepEqual(resolveHealthPick(engines, "n1", "pi"), { node: "n1", engine: "pi" });
+  });
+
+  it("falls back when engine is missing or unavailable", () => {
+    assert.deepEqual(resolveHealthPick(engines, "n1", "cursor"), { node: "n1", engine: "claude" });
+    assert.deepEqual(resolveHealthPick(engines, "n1"), { node: "n1", engine: "claude" });
   });
 });

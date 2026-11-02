@@ -1,3 +1,4 @@
+import { nodeEngines } from "./engineCards.ts";
 import { platformLabel } from "./platform.ts";
 import type { EngineRow, NodeInfo } from "./types";
 
@@ -60,4 +61,17 @@ export function buildHealthMatrix(nodes: NodeInfo[], engines: EngineRow[]): Heal
     engineNames: nameOrder,
     rows,
   };
+}
+
+/** Resolve a health-matrix click into concrete node/engine filters. */
+export function resolveHealthPick(
+  engines: EngineRow[],
+  nodeId: string,
+  engine?: string,
+): { node: string; engine: string } {
+  const available = nodeEngines(engines, nodeId);
+  if (engine && available.some((e) => e.name === engine)) {
+    return { node: nodeId, engine };
+  }
+  return { node: nodeId, engine: available[0]?.name || "" };
 }

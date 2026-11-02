@@ -17,6 +17,10 @@ export type MeshSettingsState = {
 
 const open = defineModel<boolean>("open", { default: false });
 
+const emit = defineEmits<{
+  pick: [payload: { nodeId: string; engine?: string }];
+}>();
+
 const form = reactive({
   relay: "",
   password: "",
@@ -35,6 +39,20 @@ function cellLabel(cell: string): string {
   if (cell === "ok") return t("settings.healthOk");
   if (cell === "miss") return t("settings.healthMiss");
   return t("settings.healthNone");
+}
+
+function pickNodeRow(nodeId: string): void {
+  emit("pick", { nodeId });
+  open.value = false;
+}
+
+function pickCell(nodeId: string, engine: string, cell: string): void {
+  if (cell === "none") {
+    pickNodeRow(nodeId);
+    return;
+  }
+  emit("pick", { nodeId, engine: cell === "ok" ? engine : undefined });
+  open.value = false;
 }
 
 async function load(): Promise<void> {
@@ -197,6 +215,7 @@ onMounted(() => {
             <h3>{{ t("settings.health") }}</h3>
             <p>{{ t("settings.healthSub") }}</p>
           </div>
+          <p class="mesh-health-hint">{{ t("settings.healthHint") }}</p>
           <div v-if="!matrix.rows.length" class="mesh-settings-status">{{ t("settings.healthEmpty") }}</div>
           <div v-else class="mesh-health-scroll">
             <table class="mesh-health-table">
@@ -211,11 +230,22 @@ onMounted(() => {
               <tbody>
                 <tr v-for="row in matrix.rows" :key="row.nodeId">
                   <th scope="row">
-                    <span class="mesh-health-name">{{ row.nodeName }}</span>
-                    <span v-if="row.platform" class="mesh-health-plat">{{ row.platform }}</span>
+                    <button type="button" class="mesh-health-node" @click="pickNodeRow(row.nodeId)">
+                      <span class="mesh-health-name">{{ row.nodeName }}</span>
+                      <span v-if="row.platform" class="mesh-health-plat">{{ row.platform }}</span>
+                    </button>
                   </th>
                   <td v-for="(cell, i) in row.cells" :key="row.nodeId + matrix.engineNames[i]">
-                    <span class="mesh-health-cell" :class="cell" :title="cellLabel(cell)">{{ cell === "ok" ? "●" : cell === "miss" ? "○" : "–" }}</span>
+                    <button
+                      type="button"
+                      class="mesh-health-cell"
+                      :class="cell"
+                      :title="cellLabel(cell)"
+                      :aria-label="cellLabel(cell)"
+                      @click="pickCell(row.nodeId, matrix.engineNames[i], cell)"
+                    >
+                      {{ cell === "ok" ? "●" : cell === "miss" ? "○" : "–" }}
+                    </button>
                   </td>
                 </tr>
               </tbody>

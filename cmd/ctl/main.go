@@ -58,6 +58,13 @@ func main() {
 		return
 	}
 
+	if cmd == "info" {
+		info, err := cli.Info(ctx, *nodeID)
+		must(err)
+		printNodeInfo(info)
+		return
+	}
+
 	must(cli.Handshake(ctx, *nodeID))
 	switch cmd {
 	case "engines":
@@ -223,10 +230,46 @@ func fatal(msg string) {
 	os.Exit(1)
 }
 
+func formatPlatform(osName, arch string) string {
+	osName = strings.TrimSpace(osName)
+	arch = strings.TrimSpace(arch)
+	switch {
+	case osName != "" && arch != "":
+		return osName + "/" + arch
+	case osName != "":
+		return osName
+	case arch != "":
+		return arch
+	default:
+		return "-"
+	}
+}
+
+func printNodeInfo(info protocol.NodeInfo) {
+	name := info.Name
+	if name == "" {
+		name = "-"
+	}
+	fmt.Printf("id\t%s\n", info.ID)
+	fmt.Printf("name\t%s\n", name)
+	fmt.Printf("platform\t%s\n", formatPlatform(info.OS, info.Arch))
+	if info.Listen != "" {
+		fmt.Printf("listen\t%s\n", info.Listen)
+	}
+	if len(info.Engines) > 0 {
+		fmt.Printf("engines\t%s\n", strings.Join(info.Engines, ","))
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(info)
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage:
   ctl keygen
   ctl nodes --relay http://127.0.0.1:8443
+  ctl info --direct http://127.0.0.1:7700
+  ctl info --relay URL [--node ID]
   ctl list|status|engines|models --relay URL [--node ID] [--engine E] [--all]
   ctl history SESSION --engine E
   ctl watch SESSION --engine E

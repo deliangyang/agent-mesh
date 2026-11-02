@@ -2431,6 +2431,7 @@ html.dark #app {
     transform: translateX(-105%);
     transition: transform 0.2s ease;
     box-shadow: 8px 0 28px color-mix(in srgb, var(--ink) 16%, transparent);
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
   .mesh-app.nav-open .mesh-drawer {
@@ -2449,12 +2450,60 @@ html.dark #app {
     width: 100vw;
   }
 
+  .mesh-chat {
+    --chat-gutter: max(12px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  }
+
+  .mesh-chat-top {
+    padding-top: max(6px, env(safe-area-inset-top, 0px));
+    min-height: calc(52px + env(safe-area-inset-top, 0px));
+  }
+
   .mesh-chat-title {
     max-width: calc(100% - 148px);
+    font-size: 14px;
+  }
+
+  .mesh-composer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .mesh-composer-meta {
+    gap: 10px 12px;
+    justify-content: flex-start;
+    padding-left: 2px;
+  }
+
+  .mesh-chip-btn {
+    max-width: min(46vw, 200px);
+    font-size: 12px;
+  }
+
+  .mesh-chat [data-testid="copilot-input-overlay"] {
+    padding-left: var(--chat-gutter);
+    padding-right: var(--chat-gutter);
   }
 
   .mesh-user-card {
-    max-width: min(88%, 42rem);
+    max-width: min(92%, 42rem);
+  }
+
+  .mesh-settings-mask {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .mesh-settings {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .mesh-toasts {
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    width: min(360px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
   }
 }
 

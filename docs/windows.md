@@ -119,3 +119,13 @@ The client key is `%USERPROFILE%\.agent-mesh\client.key`.
 | `AGENT_MESH_HOME` | override for that directory |
 
 Uninstall: delete the program folder and the Startup shortcut. Keys stay until you delete `%USERPROFILE%\.agent-mesh`.
+
+## 8 · Release signing checklist
+
+GitHub Release zips are unsigned by default. Before a public Windows cut:
+
+1. Build with `make node-windows` (or the release script) and smoke `mesh-node.exe -no-tray` + `mesh-ctl.exe info --direct …`.
+2. Optional Authenticode: sign both `mesh-node.exe` and `mesh-ctl.exe` with your org certificate (`signtool sign /fd SHA256 …`).
+3. Expect SmartScreen on first download until reputation builds; document **More info → Run anyway** for unsigned builds.
+4. Prefer tray `mesh-node.exe` over `make desktop-windows` for unsigned users (WebView2 shell needs a C toolchain and still looks like a new publisher).
+5. Attach checksums (`SHA256`) next to the zip on the Release page.

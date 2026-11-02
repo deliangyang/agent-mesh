@@ -15,6 +15,47 @@ func readProcEnviron(pid int) map[string]string {
 	return processEnviron(pid)
 }
 
+// parseProcArgs2Env extracts KEY=VAL pairs from a macOS kern.procargs2 buffer.
+// Layout: int32 argc, exe path, padding, argv[argc], then environ.
+func parseProcArgs2Env(raw []byte) map[string]string {
+	if len(raw) < 4 {
+		return nil
+	}
+	argc := int(binary.LittleEndian.Uint32(raw[:4]))
+	if argc < 0 || argc > 4096 {
+		return nil
+	}
+	i := 4
+	// executable path
+	for i < len(raw) && raw[i] != 0 {
+		i++
+	}
+	if i >= len(raw) {
+		return nil
+	}
+	i++ // NUL after exe
+	for i < len(raw) && raw[i] == 0 {
+		i++ // alignment padding
+	}
+	// argv
+	for n := 0; n < argc && i < len(raw); n++ {
+		for i < len(raw) && raw[i] != 0 {
+			i++
+		}
+		if i >= len(raw) {
+			return nil
+		}
+		i++
+	}
+	for i < len(raw) && raw[i] == 0 {
+		i++
+	}
+	if i >= len(raw) {
+		return nil
+	}
+	return parseEnvironNUL(raw[i:])
+}
+
 // parseEnvironNUL parses a NUL-separated KEY=VAL block (Linux /proc/*/environ).
 func parseEnvironNUL(raw []byte) map[string]string {
 	if len(raw) == 0 {

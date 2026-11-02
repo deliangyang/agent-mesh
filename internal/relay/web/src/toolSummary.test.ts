@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { applyLocalePref } from "./locale.ts";
 import { formatToolLine, formatToolResult, summarizeToolGroup, thinkPreview } from "./toolSummary.ts";
+
+applyLocalePref("en");
 
 test("Glob uses glob_pattern", () => {
   assert.equal(formatToolLine("Glob", { glob_pattern: "**/*.go" }), 'Globbed "**/*.go"');

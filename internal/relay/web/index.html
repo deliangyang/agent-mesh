@@ -13,6 +13,20 @@
         }
       } catch (e) {}
       (function () {
+        var pref = "";
+        try { pref = localStorage.getItem("mesh.locale") || ""; } catch (e) {}
+        var lang = (pref === "en" || pref === "zh-CN")
+          ? pref
+          : ((navigator.language || "").toLowerCase().indexOf("zh") === 0 ? "zh-CN" : "en");
+        document.documentElement.lang = lang === "zh-CN" ? "zh-CN" : "en";
+        if (lang === "zh-CN") {
+          try { document.title = "聊天 · Agent Mesh"; } catch (e) {}
+          document.documentElement.style.setProperty("--mesh-boot", '"正在打开聊天…"');
+        } else {
+          document.documentElement.style.setProperty("--mesh-boot", '"Opening chat…"');
+        }
+      })();
+      (function () {
         var opt = { capture: true, passive: false };
         function pinch(e) {
           if (e.touches && e.touches.length > 1) e.preventDefault();
@@ -31,7 +45,7 @@
       html.dark, html.dark body, html.dark #app { background: #121816; color: #E3EBE6; }
       #app:empty { display: flex; align-items: flex-end; justify-content: flex-start; padding: 12vh 10vw; color: #5E6D67; font: 14px/1.4 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
       html.dark #app:empty { color: #8A9A93; }
-      #app:empty::after { content: "Opening chat…"; }
+      #app:empty::after { content: var(--mesh-boot, "Opening chat…"); }
     </style>
   </head>
   <body>

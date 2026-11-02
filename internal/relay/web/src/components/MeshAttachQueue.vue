@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { attachJobs, dropAttachJob, jobOf, syncAttachJobs } from "../attachUpload";
+import { t } from "../locale";
 
 type AttachRow = {
   id: string;
@@ -43,7 +44,7 @@ const cards = computed((): Card[] => {
   const out: Card[] = [];
   const seen = new Set<string>();
   for (const row of props.items || []) {
-    const name = row.filename || "file";
+    const name = row.filename || t("attach.file");
     const size = row.size || 0;
     const job = jobOf(name, size);
     const key = job?.key || name + "\0" + size;
@@ -97,13 +98,13 @@ function dismiss(card: Card): void {
 function labelOf(card: Card): string {
   if (card.status === "error") return card.error;
   if (card.status === "ready") return card.name;
-  if (card.indeterminate) return "Reading…";
+  if (card.indeterminate) return t("attach.readingEllipsis");
   return card.progress + "%";
 }
 </script>
 
 <template>
-  <div v-if="cards.length" class="mesh-attach" role="list" aria-label="Attachments to send">
+  <div v-if="cards.length" class="mesh-attach" role="list" :aria-label="t('attach.list')">
     <div
       v-for="card in cards"
       :key="card.id || card.jobKey"
@@ -134,7 +135,7 @@ function labelOf(card: Card): string {
         />
         <div v-else class="mesh-attach-fallback">{{ card.name }}</div>
         <div v-if="card.status === 'uploading'" class="mesh-attach-veil">
-          <span class="mesh-attach-pct">{{ card.indeterminate ? "Reading" : card.progress + "%" }}</span>
+          <span class="mesh-attach-pct">{{ card.indeterminate ? t("attach.reading") : card.progress + "%" }}</span>
           <span class="mesh-attach-bar" :class="{ indet: card.indeterminate }">
             <span
               class="mesh-attach-bar-fill"
@@ -146,7 +147,7 @@ function labelOf(card: Card): string {
       <button
         type="button"
         class="mesh-attach-x"
-        :aria-label="card.status === 'error' ? 'Dismiss error' : 'Remove attachment'"
+        :aria-label="card.status === 'error' ? t('attach.dismiss') : t('attach.remove')"
         @click="dismiss(card)"
       >
         ×

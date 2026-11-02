@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { t } from "../locale";
 import { meshTarget } from "../target";
 import { toastError } from "../toast";
 import type { GitBundle, GitFile, GitRepo } from "../types";
@@ -33,7 +34,7 @@ async function loadRepos(): Promise<void> {
   if (!cwd.value) {
     repos.value = [];
     bundle.value = null;
-    error.value = "Pick a working directory first";
+    error.value = t("diff.pickDir");
     return;
   }
   loading.value = true;
@@ -118,22 +119,22 @@ function toggleFile(path: string): void {
 
 const emptyHint = computed(() => {
   if (error.value) return "";
-  if (!cwd.value) return "Pick a working directory to see the diff.";
-  if (!repos.value.length) return "No git repo under this directory.";
-  if (bundle.value && !(bundle.value.files || []).length) return "The working tree is clean.";
+  if (!cwd.value) return t("diff.pickDirHint");
+  if (!repos.value.length) return t("diff.noRepo");
+  if (bundle.value && !(bundle.value.files || []).length) return t("diff.clean");
   return "";
 });
 </script>
 
 <template>
   <div v-if="open" class="mesh-diff-mask" @click="emit('close')"></div>
-  <aside v-if="open" class="mesh-diff" role="dialog" aria-label="Project diff">
+  <aside v-if="open" class="mesh-diff" role="dialog" :aria-label="t('diff.title')">
     <header class="mesh-diff-head">
       <div>
-        <div class="mesh-diff-name">Diff</div>
-        <div class="mesh-diff-cwd">{{ cwd || "no working directory selected" }}</div>
+        <div class="mesh-diff-name">{{ t("diff.name") }}</div>
+        <div class="mesh-diff-cwd">{{ cwd || t("diff.noCwd") }}</div>
       </div>
-      <button type="button" class="ghost" aria-label="CloseDiff" @click="emit('close')">Close</button>
+      <button type="button" class="ghost" :aria-label="t('diff.close')" @click="emit('close')">{{ t("diff.close") }}</button>
     </header>
     <div class="mesh-diff-repos">
       <button
@@ -145,11 +146,11 @@ const emptyHint = computed(() => {
         @click="loadDiff(r.path)"
       >
         <span class="mesh-diff-repo-name">{{ r.name }}</span>
-        <span class="mesh-diff-repo-meta">{{ r.branch || "—" }}{{ r.dirty ? " · dirty" : "" }}</span>
+        <span class="mesh-diff-repo-meta">{{ r.branch || "—" }}{{ r.dirty ? t("diff.dirty") : "" }}</span>
       </button>
     </div>
     <div class="mesh-diff-body">
-      <div v-if="loading" class="mesh-diff-empty">Reading git diff…</div>
+      <div v-if="loading" class="mesh-diff-empty">{{ t("diff.reading") }}</div>
       <div v-else-if="emptyHint" class="mesh-diff-empty">{{ emptyHint }}</div>
       <div v-else>
         <button
@@ -165,7 +166,7 @@ const emptyHint = computed(() => {
             <span class="mesh-diff-file-st">{{ f.status }}</span>
           </span>
           <div v-if="openFile === f.path" class="mesh-diff-hunks" @click.stop>
-            <pre v-if="!f.patch" class="mesh-diff-empty">No expandable diff</pre>
+            <pre v-if="!f.patch" class="mesh-diff-empty">{{ t("diff.none") }}</pre>
             <div v-else class="mesh-diff-code">
               <div v-for="(ln, i) in linesOf(f)" :key="i" class="mesh-diff-ln" :data-k="ln.kind">
                 {{ ln.text }}

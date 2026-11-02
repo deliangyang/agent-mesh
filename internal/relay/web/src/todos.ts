@@ -1,3 +1,5 @@
+import { t } from "./locale.ts";
+
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 
 export type TodoItem = {
@@ -179,8 +181,8 @@ export function todoProgress(items: TodoItem[]): { done: number; total: number }
 
 export function formatTodoTitle(items: TodoItem[]): string {
   const { done, total } = todoProgress(items);
-  if (!total) return "Todos";
-  return "Todos " + done + "/" + total;
+  if (!total) return t("todo.title");
+  return t("todo.titleProgress", { done, total });
 }
 
 export function todoLabel(item: TodoItem): string {

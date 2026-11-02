@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { applyLocalePref } from "./locale.ts";
 import {
   formatTodoTitle,
   isTodoTool,
@@ -8,6 +9,8 @@ import {
   todoLabel,
   todosFromMessages,
 } from "./todos.ts";
+
+applyLocalePref("en");
 
 test("detect TodoWrite and calls nested in CallDynamicTool", () => {
   assert.equal(isTodoTool("TodoWrite"), true);

@@ -1,5 +1,6 @@
 import { reactive } from "vue";
 import { fetchJSON } from "./http.ts";
+import { t } from "./locale.ts";
 import { meshTarget } from "./target.ts";
 import { toastError } from "./toast.ts";
 import type { AskOption, AskPrompt, AskQuestion, MeshEvent } from "./types.ts";
@@ -68,7 +69,7 @@ function parseQuestion(v: unknown): AskQuestion | null {
   if (!prompt && !options.length) return null;
   return {
     id: str(m.id) || str(m.header) || prompt || "q",
-    prompt: prompt || str(m.header) || "Please choose",
+    prompt: prompt || str(m.header) || t("ask.pleaseChoose"),
     header: str(m.header),
     multi: Boolean(m.multiSelect || m.multi),
     options,
@@ -228,7 +229,7 @@ export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[
 export async function submitAsk(prompt: AskPrompt, picks: Record<string, string[]>): Promise<boolean> {
   const text = formatAskAnswer(prompt, picks).trim();
   if (!text) {
-    meshAsk.error = "Pick an option first";
+    meshAsk.error = t("ask.pickFirst");
     return false;
   }
   meshAsk.answering = true;

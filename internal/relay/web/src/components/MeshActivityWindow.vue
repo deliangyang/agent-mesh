@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue";
+import { t } from "../locale";
 
 const props = defineProps<{
   title?: string;
@@ -32,7 +33,7 @@ onMounted(() => {
       <span>{{ title }}</span>
       <span v-if="badge" class="mesh-act-badge">{{ badge }}</span>
     </div>
-    <div v-if="hidden" class="mesh-act-more">... {{ hidden }} earlier items hidden</div>
+    <div v-if="hidden" class="mesh-act-more">{{ t("activity.hidden", { n: hidden }) }}</div>
     <div ref="bodyEl" class="mesh-act-body" :class="variant || 'tools'">
       <slot />
     </div>

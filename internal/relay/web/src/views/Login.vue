@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { loadLastPick, pickToQuery } from "../lastPick";
+import { t } from "../locale";
 import { toastError } from "../toast";
 
 const password = ref("");
@@ -20,13 +21,13 @@ async function submit(): Promise<void> {
       body: JSON.stringify({ password: password.value }),
     });
     if (!resp.ok) {
-      err.value = "wrong password; try again";
+      err.value = t("login.wrongPassword");
       return;
     }
     const pick = loadLastPick();
     await router.replace(pick ? { path: "/", query: pickToQuery(pick) } : "/");
   } catch (e) {
-    err.value = "network error; check the connection and try again";
+    err.value = t("login.networkError");
     toastError(e);
   } finally {
     busy.value = false;
@@ -51,11 +52,11 @@ async function submit(): Promise<void> {
         </svg>
         <span class="mesh-brand-word">Mesh</span>
       </div>
-      <h1>Enter chat</h1>
-      <p class="hint">Enter the shared password</p>
-      <input v-model="password" type="password" autofocus required placeholder="Password" />
+      <h1>{{ t("login.title") }}</h1>
+      <p class="hint">{{ t("login.hint") }}</p>
+      <input v-model="password" type="password" autofocus required :placeholder="t('login.password')" />
       <p v-if="err" class="mesh-err">{{ err }}</p>
-      <button type="submit" :disabled="busy">Enter</button>
+      <button type="submit" :disabled="busy">{{ t("login.enter") }}</button>
     </form>
   </div>
 </template>

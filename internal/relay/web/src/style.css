@@ -281,6 +281,12 @@ html.dark #app {
   height: 16px;
 }
 
+.mesh-locale-btn span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .mesh-nav-mask,
 .mesh-nav-close {
   display: none;

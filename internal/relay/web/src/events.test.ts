@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ensureTurnThink, eventsToMessages, mergeEvents, sessionIdFromChunk, sessionIdFromText } from "./events.ts";
+import { ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText } from "./events.ts";
 
 test("mergeEvents 保留 ask", () => {
   const rows = mergeEvents([
@@ -124,6 +124,39 @@ test("有结果后再来的工具另起一条，不和前面的工具堆在一�
     return "text:" + String(asst.content || "");
   });
   assert.deepEqual(kinds, ["user", "tools:Glob", "tool", "tools:Read", "tool", "text:好了"]);
+});
+
+test("sameEvents 只比类型和正文，相同快照不再重绘", () => {
+  const rows = [
+    { type: "user", role: "user", text: "hi" },
+    { type: "assistant", text: "ok" },
+  ];
+  assert.equal(
+    sameEvents(rows, [
+      { type: "user", role: "user", text: "hi" },
+      { type: "assistant", text: "ok" },
+    ]),
+    true,
+  );
+  assert.equal(
+    sameEvents(rows, [
+      { type: "user", role: "user", text: "hi" },
+      { type: "assistant", text: "no" },
+    ]),
+    false,
+  );
+});
+
+test("sameMessages 按内容比较，忽略新对象", () => {
+  const evs = [
+    { type: "user", role: "user", text: "hi" },
+    { type: "assistant", text: "ok" },
+  ];
+  const a = eventsToMessages(evs);
+  const b = eventsToMessages(evs);
+  assert.equal(a === b, false);
+  assert.equal(sameMessages(a, b), true);
+  assert.equal(sameMessages(a, eventsToMessages([{ type: "user", role: "user", text: "hi" }])), false);
 });
 
 test("从 stream JSON 提取 session id", () => {

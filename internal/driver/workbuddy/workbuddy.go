@@ -41,7 +41,10 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Detail: d.root,
 	}
 	gws := d.discover()
-	info.Available = len(gws) > 0 || driver.FileExists(filepath.Join(d.root, "models.json"))
+	info.Available = len(gws) > 0 ||
+		len(d.modelsFromFile()) > 0 ||
+		len(d.modelsFromProductConfig()) > 0 ||
+		driver.FileExists(filepath.Join(d.root, "cache", "acc-product-config-v3.json"))
 	if len(gws) > 0 {
 		info.Binary = gws[0].URL
 		info.Version = fmt.Sprintf("gateway pid %d", gws[0].PID)
@@ -50,76 +53,239 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 }
 
 func (d *Driver) Models(ctx context.Context) ([]protocol.Model, error) {
-	raw, err := os.ReadFile(filepath.Join(d.root, "models.json"))
+	if rows := d.modelsFromFile(); len(rows) > 0 {
+		return rows, nil
+	}
+	if rows := d.modelsFromProductConfig(); len(rows) > 0 {
+		return rows, nil
+	}
+	rows, err := d.modelsFromGateway(ctx)
+	if len(rows) > 0 {
+		return rows, nil
+	}
 	if err != nil {
-		return d.modelsFromGateway(ctx)
-	}
-	var items []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(raw, &items); err != nil {
 		return nil, err
 	}
-	var rows []protocol.Model
-	for i, m := range items {
-		if m.ID == "" {
+	return nil, fmt.Errorf("no workbuddy models.json, product config, or live gateway")
+}
+
+func (d *Driver) modelsFromFile() []protocol.Model {
+	raw, err := os.ReadFile(filepath.Join(d.root, "models.json"))
+	if err != nil {
+		return nil
+	}
+	return parseWorkBuddyModels(d.Name(), raw)
+}
+
+func (d *Driver) modelsFromProductConfig() []protocol.Model {
+	for _, name := range []string{
+		filepath.Join("cache", "acc-product-config-v3.json"),
+		filepath.Join("cache", "acc-product-config.json"),
+	} {
+		raw, err := os.ReadFile(filepath.Join(d.root, name))
+		if err != nil {
 			continue
 		}
-		title := m.Name
+		if rows := parseWorkBuddyProductModels(d.Name(), raw); len(rows) > 0 {
+			return rows
+		}
+	}
+	return nil
+}
+
+func parseWorkBuddyProductModels(engine string, raw []byte) []protocol.Model {
+	var wrap struct {
+		Models []map[string]any `json:"models"`
+		Agents []struct {
+			Models json.RawMessage `json:"models"`
+		} `json:"agents"`
+	}
+	if json.Unmarshal(raw, &wrap) != nil || len(wrap.Models) == 0 {
+		return nil
+	}
+	byID := map[string]map[string]any{}
+	for _, obj := range wrap.Models {
+		id, _ := obj["id"].(string)
+		if id != "" {
+			byID[id] = obj
+		}
+	}
+	src := wrap.Models
+	for _, ag := range wrap.Agents {
+		ids := workBuddyModelIDs(ag.Models)
+		if len(ids) == 0 {
+			continue
+		}
+		var filtered []map[string]any
+		for _, id := range ids {
+			if obj, ok := byID[id]; ok {
+				filtered = append(filtered, obj)
+			}
+		}
+		if len(filtered) > 0 {
+			src = filtered
+			break
+		}
+	}
+	var rows []protocol.Model
+	for _, obj := range src {
+		id, _ := obj["id"].(string)
+		if id == "" {
+			continue
+		}
+		title, _ := obj["name"].(string)
+		if title == "" {
+			title, _ = obj["title"].(string)
+		}
+		if title == "" {
+			title, _ = obj["displayName"].(string)
+		}
+		if title == "" {
+			title = id
+		}
+		def, _ := obj["isDefault"].(bool)
+		rows = append(rows, protocol.Model{
+			ID:      engine + "/" + id,
+			Engine:  engine,
+			Name:    id,
+			Title:   title,
+			Default: def,
+		})
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	hasDef := false
+	for _, r := range rows {
+		if r.Default {
+			hasDef = true
+			break
+		}
+	}
+	if !hasDef {
+		rows[0].Default = true
+	}
+	return rows
+}
+
+func workBuddyModelIDs(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var ids []string
+	if json.Unmarshal(raw, &ids) == nil {
+		return ids
+	}
+	var objs []map[string]any
+	if json.Unmarshal(raw, &objs) != nil {
+		return nil
+	}
+	for _, obj := range objs {
+		if id, _ := obj["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func parseWorkBuddyModels(engine string, raw []byte) []protocol.Model {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" || string(raw) == "[]" || string(raw) == "{}" {
+		return nil
+	}
+	type item struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Title string `json:"title"`
+		Owned string `json:"owned_by"`
+	}
+	add := func(rows *[]protocol.Model, m item, i int) {
+		if m.ID == "" {
+			return
+		}
+		title := m.Title
+		if title == "" {
+			title = m.Name
+		}
 		if title == "" {
 			title = m.ID
 		}
-		rows = append(rows, protocol.Model{
-			ID:      d.Name() + "/" + m.ID,
-			Engine:  d.Name(),
+		*rows = append(*rows, protocol.Model{
+			ID:      engine + "/" + m.ID,
+			Engine:  engine,
 			Name:    m.ID,
 			Title:   title,
-			Default: i == 0,
+			Default: i == 0 && len(*rows) == 0,
 		})
 	}
-	return rows, nil
+	var rows []protocol.Model
+	var items []item
+	if json.Unmarshal(raw, &items) == nil {
+		for i, m := range items {
+			add(&rows, m, i)
+		}
+		return rows
+	}
+	var wrap struct {
+		Data    []item `json:"data"`
+		Models  []item `json:"models"`
+		Default string `json:"default"`
+	}
+	if json.Unmarshal(raw, &wrap) != nil {
+		return nil
+	}
+	src := wrap.Data
+	if len(src) == 0 {
+		src = wrap.Models
+	}
+	for i, m := range src {
+		add(&rows, m, i)
+		if wrap.Default != "" && m.ID == wrap.Default && len(rows) > 0 {
+			for j := range rows {
+				rows[j].Default = rows[j].Name == wrap.Default
+			}
+		}
+	}
+	return rows
 }
 
 func (d *Driver) modelsFromGateway(ctx context.Context) ([]protocol.Model, error) {
 	gws := d.discover()
 	if len(gws) == 0 {
-		return nil, fmt.Errorf("no workbuddy models.json or live gateway")
+		return nil, fmt.Errorf("no workbuddy models.json, product config, or live gateway")
 	}
-	gw := gws[0]
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, gw.URL+"/api/v1/models", nil)
-	if err != nil {
-		return nil, err
-	}
-	if gw.Password != "" {
-		req.Header.Set("Authorization", "Bearer "+gw.Password)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("models http %d: %s", resp.StatusCode, b)
-	}
-	var wrap struct {
-		Data []struct {
-			ID    string `json:"id"`
-			Owned string `json:"owned_by"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(b, &wrap); err != nil {
-		return nil, err
-	}
-	var rows []protocol.Model
-	for _, m := range wrap.Data {
-		if m.ID == "" {
+	var last error
+	cli := &http.Client{Timeout: 5 * time.Second}
+	for _, gw := range gws {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, gw.URL+"/api/v1/models", nil)
+		if err != nil {
+			last = err
 			continue
 		}
-		rows = append(rows, protocol.Model{ID: d.Name() + "/" + m.ID, Engine: d.Name(), Name: m.ID, Title: m.ID})
+		if gw.Password != "" {
+			req.Header.Set("Authorization", "Bearer "+gw.Password)
+		}
+		resp, err := cli.Do(req)
+		if err != nil {
+			last = err
+			continue
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			last = fmt.Errorf("models http %d: %s", resp.StatusCode, b)
+			continue
+		}
+		rows := parseWorkBuddyModels(d.Name(), b)
+		if len(rows) > 0 {
+			return rows, nil
+		}
+		last = fmt.Errorf("gateway returned no models")
 	}
-	return rows, nil
+	if last == nil {
+		last = fmt.Errorf("no workbuddy models.json, product config, or live gateway")
+	}
+	return nil, last
 }
 
 type gateway struct {
@@ -145,6 +311,10 @@ func (d *Driver) discover() []gateway {
 		if err != nil {
 			continue
 		}
+		kind, _ := obj["kind"].(string)
+		if kind == "prewarm" {
+			continue
+		}
 		pid := int(driver.Epoch(obj["pid"]))
 		url, _ := obj["url"].(string)
 		if url == "" {
@@ -155,12 +325,20 @@ func (d *Driver) discover() []gateway {
 		}
 		sid, _ := obj["sessionId"].(string)
 		cwd, _ := obj["cwd"].(string)
-		pass := os.Getenv("CODEBUDDY_GATEWAY_PASSWORD")
+		pass, _ := obj["password"].(string)
+		if pass == "" {
+			pass, _ = obj["token"].(string)
+		}
+		if pass == "" {
+			pass = os.Getenv("CODEBUDDY_GATEWAY_PASSWORD")
+		}
 		if pass == "" {
 			pass = os.Getenv("WORKBUDDY_GATEWAY_PASSWORD")
 		}
 		if env := readProcEnviron(pid); env["CODEBUDDY_GATEWAY_PASSWORD"] != "" {
 			pass = env["CODEBUDDY_GATEWAY_PASSWORD"]
+		} else if env["WORKBUDDY_GATEWAY_PASSWORD"] != "" {
+			pass = env["WORKBUDDY_GATEWAY_PASSWORD"]
 		}
 		out = append(out, gateway{PID: pid, URL: strings.TrimRight(url, "/"), Password: pass, Session: sid, CWD: cwd})
 	}

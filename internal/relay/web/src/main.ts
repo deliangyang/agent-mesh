@@ -3,6 +3,7 @@ import App from "./App.vue";
 import { router } from "./router";
 import { applyLocale } from "./locale";
 import { applyTheme, loadTheme } from "./theme";
+import { registerMeshServiceWorker } from "./swRegister";
 import "@copilotkit/vue/styles.css";
 import "./style.css";
 
@@ -35,3 +36,4 @@ lockPageZoom();
 applyTheme(loadTheme());
 applyLocale();
 createApp(App).use(router).mount("#app");
+registerMeshServiceWorker();

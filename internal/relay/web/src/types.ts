@@ -15,12 +15,20 @@ export type NodeInfo = {
   arch?: string;
 };
 
+export type EngineCaps = {
+  ask?: boolean;
+  tools?: boolean;
+  diff?: boolean;
+  followups?: boolean;
+};
+
 export type EngineRow = {
   name: string;
   title?: string;
   node_id?: string;
   available?: boolean;
   enabled?: boolean;
+  caps?: EngineCaps;
 };
 
 export type ModelCard = {

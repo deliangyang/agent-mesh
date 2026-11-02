@@ -115,6 +115,7 @@ func (s *Set) Engines(ctx context.Context) []protocol.EngineInfo {
 			if info.Title == "" {
 				info.Title = TitleOf(d.Name())
 			}
+			info.Caps = CapsOrDefault(d.Name(), info.Caps)
 			out[i] = info
 		}(i, d)
 	}

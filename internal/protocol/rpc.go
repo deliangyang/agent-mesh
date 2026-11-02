@@ -77,15 +77,24 @@ type Session struct {
 	NodeName  string `json:"node_name,omitempty"`
 }
 
+// EngineCaps describes mesh UI features an engine can participate in.
+type EngineCaps struct {
+	Ask       bool `json:"ask,omitempty"`
+	Tools     bool `json:"tools,omitempty"`
+	Diff      bool `json:"diff,omitempty"`
+	Followups bool `json:"followups,omitempty"`
+}
+
 // EngineInfo is the status of one local coding-agent engine.
 type EngineInfo struct {
-	Name      string `json:"name"`
-	Title     string `json:"title,omitempty"`
-	Enabled   bool   `json:"enabled"`
-	Available bool   `json:"available"`
-	Binary    string `json:"binary,omitempty"`
-	Version   string `json:"version,omitempty"`
-	Detail    string `json:"detail,omitempty"`
+	Name      string     `json:"name"`
+	Title     string     `json:"title,omitempty"`
+	Enabled   bool       `json:"enabled"`
+	Available bool       `json:"available"`
+	Binary    string     `json:"binary,omitempty"`
+	Version   string     `json:"version,omitempty"`
+	Detail    string     `json:"detail,omitempty"`
+	Caps      EngineCaps `json:"caps,omitempty"`
 }
 
 // Model is a model the engine can use.

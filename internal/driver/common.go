@@ -1453,6 +1453,24 @@ func TitleOf(name string) string {
 	}
 }
 
+// DefaultCaps returns baseline mesh UI capabilities for a known engine.
+func DefaultCaps(name string) protocol.EngineCaps {
+	switch strings.TrimSpace(strings.ToLower(name)) {
+	case "workbuddy", "claude", "cursor", "codex", "opencode", "pi", "qoder-cn", "qodercn":
+		return protocol.EngineCaps{Ask: true, Tools: true, Diff: true, Followups: true}
+	default:
+		return protocol.EngineCaps{Tools: true, Diff: true, Followups: true}
+	}
+}
+
+// CapsOrDefault keeps probe-provided caps when any flag is set; otherwise fills defaults.
+func CapsOrDefault(name string, caps protocol.EngineCaps) protocol.EngineCaps {
+	if caps.Ask || caps.Tools || caps.Diff || caps.Followups {
+		return caps
+	}
+	return DefaultCaps(name)
+}
+
 // StreamJSONL turns JSONL on stdout into events.
 func StreamJSONL(r io.Reader, engine, session string, emit func(protocol.Event)) {
 	sc := bufio.NewScanner(r)

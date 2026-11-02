@@ -43,7 +43,9 @@ make relay         # build the web UI, then bin/relay
 make ctl           # bin/ctl
 make web           # internal/relay/web: npm ci && npm run build
 make desktop       # embed the Vue UI, then bin/agent-mesh
-make dist          # cross-compile release archives into dist/
+make dist          # cross-compile release archives into dist/ (Windows zips included)
+make node-windows  # Windows tray node (icon + GUI subsystem) + ctl
+make winres        # regenerate cmd/node Windows icon/.syso
 make setup         # one-shot toolchain, build, and ~/.agent-mesh config
 make supervisor    # restart the local node with deploy/supervisor
 ```

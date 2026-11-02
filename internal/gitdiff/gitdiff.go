@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"agent-mesh/internal/driver"
 )
 
 const (
@@ -170,7 +171,7 @@ func cleanRoot(root string) (string, error) {
 }
 
 func gitOut(ctx context.Context, dir string, args ...string) string {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := driver.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	var buf bytes.Buffer
 	cmd.Stdout = &buf

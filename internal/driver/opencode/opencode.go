@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,18 +26,8 @@ func New() *Driver {
 	if root == "" {
 		root = filepath.Join(driver.DataHome(), "opencode")
 	}
-	bin := os.Getenv("OPENCODE_BIN")
-	if bin == "" {
-		bin, _ = exec.LookPath("opencode")
-	}
-	if bin == "" {
-		bin = filepath.Join(driver.Home(), ".opencode", "bin", "opencode")
-	}
-	if !driver.FileExists(bin) {
-		if p, err := exec.LookPath("opencode"); err == nil {
-			bin = p
-		}
-	}
+	extra := []string{filepath.Join(driver.Home(), ".opencode", "bin", "opencode")}
+	bin := driver.LookCLI([]string{"OPENCODE_BIN"}, []string{"opencode"}, extra)
 	return &Driver{root: root, bin: bin}
 }
 
@@ -51,7 +40,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Binary: d.bin,
 		Detail: d.root,
 	}
-	info.Available = driver.FileExists(d.bin)
+	info.Available = driver.BinExists(d.bin)
 	if info.Available {
 		info.Version = driver.BinVersion(ctx, d.bin)
 	}
@@ -111,6 +100,13 @@ func (d *Driver) findJSONL(sessionID string) string {
 	}
 	if h := driver.Home(); h != "" {
 		roots = append(roots, filepath.Join(h, ".local", "share", "opencode"))
+		roots = append(roots, filepath.Join(h, ".opencode"))
+	}
+	if d := os.Getenv("LOCALAPPDATA"); d != "" {
+		roots = append(roots, filepath.Join(d, "opencode"))
+	}
+	if d := os.Getenv("APPDATA"); d != "" {
+		roots = append(roots, filepath.Join(d, "opencode"))
 	}
 	names := []string{sessionID + ".jsonl", sessionID + ".json"}
 	subs := []string{"", "session", "sessions", filepath.Join("storage", "sessions")}
@@ -236,7 +232,7 @@ func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-ch
 	}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, text)
-	cmd := exec.CommandContext(ctx, d.bin, args...)
+	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -167,6 +168,9 @@ func (d *Driver) discover() []gateway {
 }
 
 func readProcEnviron(pid int) map[string]string {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
 	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
 	if err != nil {
 		return nil

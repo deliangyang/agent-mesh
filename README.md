@@ -105,7 +105,7 @@ Environment: `MESH_RELAY` `MESH_DIRECT` `MESH_NODE` `MESH_PASSWORD` `MESH_ADVERT
 
 Claude Code · Cursor Agent · Codex · OpenCode · Pi · WorkBuddy · Qoder CN
 
-The node only lists engines installed on that machine. Anything that speaks OpenAI chat completions can also call the node or relay:
+The node only lists engines installed on that machine. On Windows it looks in `PATH`, `%USERPROFILE%\.local\bin`, and `%APPDATA%\npm` (plus `.exe` / `.cmd`). Double-click `mesh-node-windows-amd64.exe` to run it with a tray icon: left-click opens the UI and does not quit; right-click **退出** stops the node. Anything that speaks OpenAI chat completions can also call the node or relay:
 
 ```sh
 export OPENAI_BASE_URL=http://127.0.0.1:7700/v1
@@ -153,7 +153,8 @@ Both node and relay expose `/v1/models` and `/v1/chat/completions`, plus `/v1/op
 make setup         # toolchain + build + ~/.agent-mesh
 make test          # Go tests (except desktop) + web tests
 make node relay ctl
-make dist          # dist/agent-mesh-{relay,node}_<os>_<arch>.tar.gz
+make dist          # dist/agent-mesh-{relay,node}_<os>_<arch>.tar.gz (Windows: .zip)
+make node-windows  # bin/mesh-node-windows-{amd64,arm64}.exe + mesh-ctl-windows-*.exe
 make supervisor    # generate and restart a local supervisord unit
 ```
 

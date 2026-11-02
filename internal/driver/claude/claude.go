@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,13 +30,7 @@ func New() *Driver {
 	if root == "" {
 		root = filepath.Join(driver.Home(), ".claude")
 	}
-	bin := os.Getenv("CLAUDE_BIN")
-	if bin == "" {
-		bin, _ = exec.LookPath("claude")
-	}
-	if bin == "" {
-		bin = filepath.Join(driver.Home(), ".local", "bin", "claude")
-	}
+	bin := driver.LookCLI([]string{"CLAUDE_BIN"}, []string{"claude"}, nil)
 	return &Driver{root: root, bin: bin}
 }
 
@@ -50,7 +43,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Binary: d.bin,
 		Detail: d.root,
 	}
-	info.Available = driver.FileExists(d.bin)
+	info.Available = driver.BinExists(d.bin)
 	if info.Available {
 		info.Version = driver.BinVersion(ctx, d.bin)
 	}
@@ -96,7 +89,7 @@ func (d *Driver) Models(ctx context.Context) ([]protocol.Model, error) {
 }
 
 func encodeProject(cwd string) string {
-	return strings.ReplaceAll(cwd, "/", "-")
+	return driver.EncodeProject(cwd)
 }
 
 func (d *Driver) findJSONL(id, cwd string) string {
@@ -111,7 +104,7 @@ func (d *Driver) findJSONL(id, cwd string) string {
 		if err != nil || info.IsDir() {
 			return nil
 		}
-		if info.Name() == id+".jsonl" && !strings.Contains(path, "/subagents/") {
+		if info.Name() == id+".jsonl" && !driver.PathHasDir(path, "subagents") {
 			best = path
 		}
 		return nil
@@ -122,7 +115,7 @@ func (d *Driver) findJSONL(id, cwd string) string {
 func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error) {
 	var rows []map[string]any
 	if d.bin != "" {
-		cmd := exec.CommandContext(ctx, d.bin, "agents", "--json")
+		cmd := driver.CommandContext(ctx, d.bin, "agents", "--json")
 		out, err := cmd.Output()
 		if err == nil {
 			_ = json.Unmarshal(out, &rows)
@@ -160,7 +153,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 			if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".jsonl") {
 				return nil
 			}
-			if strings.Contains(path, "/subagents/") {
+			if driver.PathHasDir(path, "subagents") {
 				return nil
 			}
 			id := strings.TrimSuffix(info.Name(), ".jsonl")
@@ -308,7 +301,7 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) 
 	}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, text)
-	cmd := exec.CommandContext(ctx, d.bin, args...)
+	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}

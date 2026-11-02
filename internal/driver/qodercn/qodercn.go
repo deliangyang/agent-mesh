@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -25,25 +24,7 @@ type Driver struct {
 }
 
 func findBin() string {
-	if bin := os.Getenv("QODERCN_BIN"); bin != "" {
-		return bin
-	}
-	if bin := os.Getenv("QODERCN_PATH"); bin != "" {
-		return bin
-	}
-	for _, name := range []string{"qodercn", "qoderclicn"} {
-		if bin, err := exec.LookPath(name); err == nil {
-			return bin
-		}
-	}
-	home := driver.Home()
-	for _, name := range []string{"qodercn", "qoderclicn"} {
-		p := filepath.Join(home, ".local", "bin", name)
-		if driver.FileExists(p) {
-			return p
-		}
-	}
-	return filepath.Join(home, ".local", "bin", "qodercn")
+	return driver.LookCLI([]string{"QODERCN_BIN", "QODERCN_PATH"}, []string{"qodercn", "qoderclicn"}, nil)
 }
 
 // New creates the driver.
@@ -64,7 +45,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Binary: d.bin,
 		Detail: d.root,
 	}
-	info.Available = driver.FileExists(d.bin)
+	info.Available = driver.BinExists(d.bin)
 	if info.Available {
 		info.Version = driver.BinVersion(ctx, d.bin)
 	}
@@ -94,7 +75,7 @@ func (d *Driver) configModel() string {
 }
 
 func encodeProject(cwd string) string {
-	return strings.ReplaceAll(cwd, "/", "-")
+	return driver.EncodeProject(cwd)
 }
 
 func (d *Driver) findJSONL(id, cwd string) string {
@@ -112,7 +93,7 @@ func (d *Driver) findJSONL(id, cwd string) string {
 		if err != nil || info.IsDir() {
 			return nil
 		}
-		if info.Name() == id+".jsonl" && !strings.Contains(path, "/subagents/") {
+		if info.Name() == id+".jsonl" && !driver.PathHasDir(path, "subagents") {
 			best = path
 		}
 		return nil
@@ -126,7 +107,7 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".jsonl") {
 			return nil
 		}
-		if strings.Contains(path, "/subagents/") {
+		if driver.PathHasDir(path, "subagents") {
 			return nil
 		}
 		id := strings.TrimSuffix(info.Name(), ".jsonl")
@@ -233,7 +214,7 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) 
 	}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, text)
-	cmd := exec.CommandContext(ctx, d.bin, args...)
+	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}

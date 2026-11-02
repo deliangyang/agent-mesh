@@ -140,6 +140,7 @@ type ReplyParams struct {
 	Engine    string `json:"engine"`
 	SessionID string `json:"session_id"`
 	Text      string `json:"text"`
+	Model     string `json:"model,omitempty"`
 	Watch     bool   `json:"watch,omitempty"`
 }
 
@@ -149,6 +150,7 @@ type SendParams struct {
 	CWD    string `json:"cwd,omitempty"`
 	Text   string `json:"text"`
 	Resume string `json:"resume,omitempty"`
+	Model  string `json:"model,omitempty"`
 }
 
 // WatchParams 跟踪进度。

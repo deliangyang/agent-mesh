@@ -25,7 +25,7 @@ func (d *drainDriver) List(ctx context.Context, all bool) ([]protocol.Session, e
 	return []protocol.Session{{Engine: "cursor", ID: "s1", Busy: d.busy.Load()}}, nil
 }
 
-func (d *drainDriver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *drainDriver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	d.replies.Add(1)
 	ch := make(chan protocol.Event, 1)
 	ch <- protocol.Event{Type: "assistant", Text: "ok", Session: sessionID, Engine: "cursor", Done: true}

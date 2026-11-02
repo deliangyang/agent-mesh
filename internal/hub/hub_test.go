@@ -36,11 +36,11 @@ func (d *fakeDriver) Watch(ctx context.Context, sessionID string) (<-chan protoc
 	return ch, nil
 }
 
-func (d *fakeDriver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *fakeDriver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	return d.Watch(ctx, sessionID)
 }
 
-func (d *fakeDriver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *fakeDriver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	return d.Watch(ctx, resume)
 }
 

@@ -212,15 +212,15 @@ func (d *Driver) pollExport(ctx context.Context, sessionID string, out chan prot
 	}
 }
 
-func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
-	return d.run(ctx, "", text, sessionID)
+func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
+	return d.run(ctx, "", text, sessionID, model)
 }
 
-func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
-	return d.run(ctx, cwd, text, resume)
+func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
+	return d.run(ctx, cwd, text, resume, model)
 }
 
-func (d *Driver) run(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	args := []string{"run", "--format", "json", "--auto"}
 	title := ""
 	if resume != "" {
@@ -234,6 +234,7 @@ func (d *Driver) run(ctx context.Context, cwd, text, resume string) (<-chan prot
 	if cwd != "" {
 		args = append(args, "--dir", cwd)
 	}
+	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, text)
 	cmd := exec.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {

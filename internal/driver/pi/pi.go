@@ -217,19 +217,19 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 	return out, nil
 }
 
-func (d *Driver) Reply(ctx context.Context, sessionID, text string) (<-chan protocol.Event, error) {
+func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
 	cwd := ""
 	if p := d.findJSONL(sessionID); p != "" {
 		_, cwd, _ = sessionHeader(p)
 	}
-	return d.run(ctx, cwd, text, sessionID)
+	return d.run(ctx, cwd, text, sessionID, model)
 }
 
-func (d *Driver) Send(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
-	return d.run(ctx, cwd, text, resume)
+func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
+	return d.run(ctx, cwd, text, resume, model)
 }
 
-func (d *Driver) run(ctx context.Context, cwd, text, resume string) (<-chan protocol.Event, error) {
+func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	if !driver.FileExists(d.bin) {
 		return nil, fmt.Errorf("找不到 pi 可执行文件（已试 PATH 与 ~/.npm-global/bin/pi）")
 	}
@@ -239,6 +239,7 @@ func (d *Driver) run(ctx context.Context, cwd, text, resume string) (<-chan prot
 	} else if title := driver.Truncate(text, 80); title != "" {
 		args = append(args, "--name", title)
 	}
+	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, "--", text)
 	cmd := exec.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {

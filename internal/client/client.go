@@ -102,6 +102,27 @@ func (c *Client) fetchInfo(ctx context.Context, u string) (protocol.NodeInfo, er
 	return info, nil
 }
 
+// Info returns public node info (including OS/Arch when the node advertises them).
+// Prefers --direct /v1/info; otherwise looks up the node in the relay directory.
+func (c *Client) Info(ctx context.Context, nodeID string) (protocol.NodeInfo, error) {
+	if c.Direct != "" {
+		return c.fetchInfo(ctx, c.Direct+"/v1/info")
+	}
+	rows, err := c.Nodes(ctx)
+	if err != nil {
+		return protocol.NodeInfo{}, err
+	}
+	for _, n := range rows {
+		if nodeID == "" || n.ID == nodeID {
+			return n, nil
+		}
+	}
+	if nodeID == "" {
+		return protocol.NodeInfo{}, fmt.Errorf("no nodes registered")
+	}
+	return protocol.NodeInfo{}, fmt.Errorf("node %s not found", nodeID)
+}
+
 // Handshake opens an E2E session with the target node.
 func (c *Client) Handshake(ctx context.Context, nodeID string) error {
 	base, peer, err := c.target(nodeID)

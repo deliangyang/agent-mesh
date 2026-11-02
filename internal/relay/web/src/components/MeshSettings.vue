@@ -18,7 +18,7 @@ export type MeshSettingsState = {
 const open = defineModel<boolean>("open", { default: false });
 
 const emit = defineEmits<{
-  pick: [payload: { nodeId: string; engine?: string }];
+  pick: [payload: { nodeId: string; engine?: string; focusMissing?: boolean }];
 }>();
 
 const form = reactive({
@@ -51,7 +51,12 @@ function pickCell(nodeId: string, engine: string, cell: string): void {
     pickNodeRow(nodeId);
     return;
   }
-  emit("pick", { nodeId, engine: cell === "ok" ? engine : undefined });
+  if (cell === "miss") {
+    emit("pick", { nodeId, focusMissing: true });
+    open.value = false;
+    return;
+  }
+  emit("pick", { nodeId, engine });
   open.value = false;
 }
 

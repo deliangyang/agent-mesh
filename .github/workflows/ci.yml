@@ -31,6 +31,11 @@ jobs:
         run: make node relay ctl
       - name: Cross-compile Windows node
         run: make node-windows
+      - name: Cross-compile Darwin smoke
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /tmp/mesh-node-darwin-arm64 ./cmd/node
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o /tmp/mesh-ctl-darwin-amd64 ./cmd/ctl
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go test -c -o /tmp/wb_darwin.test ./internal/driver/workbuddy
       - name: Smoke CLI
         run: |
           ./bin/ctl >/dev/null || true

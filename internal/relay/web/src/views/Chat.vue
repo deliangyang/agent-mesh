@@ -421,14 +421,22 @@ function pickEngine(name: string): void {
   picksOpen.engine = false;
 }
 
-function onHealthPick(p: { nodeId: string; engine?: string }): void {
+function onHealthPick(p: { nodeId: string; engine?: string; focusMissing?: boolean }): void {
   const next = resolveHealthPick(catalog.engines, p.nodeId, p.engine);
   filters.node = next.node;
-  filters.engine = next.engine;
+  filters.engine = p.focusMissing ? "" : next.engine;
   syncModelToEngine();
   ensureWorkDir();
-  if (filters.engine) openLatestSessionOrNew();
-  else syncQuery(selected.value);
+  if (p.focusMissing) {
+    picksOpen.node = false;
+    picksOpen.engine = true;
+    navOpen.value = true;
+    syncQuery(selected.value);
+  } else if (filters.engine) {
+    openLatestSessionOrNew();
+  } else {
+    syncQuery(selected.value);
+  }
   settingsOpen.value = false;
 }
 

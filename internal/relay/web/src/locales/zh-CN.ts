@@ -90,7 +90,7 @@ export const zhCN: Record<string, string> = {
   "settings.healthOk": "已安装",
   "settings.healthMiss": "缺失",
   "settings.healthNone": "未注册",
-  "settings.healthHint": "点击节点或 ● 单元格，即可在侧栏选中。",
+  "settings.healthHint": "点击 ● 选中引擎；○ 打开该节点的安装提示。",
 
   "toast.requestFailed": "请求失败",
   "toast.requestFailedStatus": "请求失败（{status}）",

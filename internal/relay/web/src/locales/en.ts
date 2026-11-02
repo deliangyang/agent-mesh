@@ -90,7 +90,7 @@ export const en: Record<string, string> = {
   "settings.healthOk": "Installed",
   "settings.healthMiss": "Missing",
   "settings.healthNone": "Not registered",
-  "settings.healthHint": "Click a node or ● cell to select it in the sidebar.",
+  "settings.healthHint": "Click ● to select; ○ opens install hints for that node.",
 
   "toast.requestFailed": "Request failed",
   "toast.requestFailedStatus": "Request failed ({status})",

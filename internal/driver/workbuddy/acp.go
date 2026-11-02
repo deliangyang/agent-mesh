@@ -79,7 +79,7 @@ func (c *acpClient) post(ctx context.Context, path string, body any, streamOK bo
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.gw.Password)
+	setGatewayHeaders(req, c.gw)
 	req.Header.Set("acp-connection-id", c.connectionID)
 	if c.sessionToken != "" {
 		req.Header.Set("acp-session-token", c.sessionToken)

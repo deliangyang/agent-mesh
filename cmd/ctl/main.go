@@ -26,7 +26,7 @@ func main() {
 	direct := fs.String("direct", env("MESH_DIRECT", ""), "直连节点 URL，设置后不走中继")
 	nodeID := fs.String("node", env("MESH_NODE", ""), "目标节点 ID")
 	key := fs.String("key", filepath.Join(os.Getenv("HOME"), ".agent-mesh", "client.key"), "客户端身份密钥")
-	engine := fs.String("engine", "", "引擎：workbuddy/claude/cursor/codex/opencode/pi")
+	engine := fs.String("engine", "", "引擎：workbuddy/claude/cursor/codex/opencode/pi/qoder-cn")
 	all := fs.Bool("all", false, "包含历史会话")
 	tail := fs.Int("tail", 80, "history 条数")
 	cwd := fs.String("cwd", "", "send 工作目录")

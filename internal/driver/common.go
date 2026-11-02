@@ -1406,6 +1406,8 @@ func TitleOf(name string) string {
 		return "OpenCode"
 	case "pi":
 		return "Pi"
+	case "qoder-cn", "qodercn":
+		return "Qoder CN"
 	default:
 		return name
 	}

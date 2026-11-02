@@ -153,6 +153,18 @@ func slashRoots(engine, cwd, home string) (commands, skills []slashDir) {
 			{Path: project(".agents", "skills"), Source: "project"},
 			{Path: user(".agents", "skills"), Source: "user"},
 		}
+	case "qoder-cn":
+		commands = []slashDir{
+			{Path: project(".qoder", "commands"), Source: "project"},
+			{Path: user(".qoder-cn", "commands"), Source: "user"},
+		}
+		skills = []slashDir{
+			{Path: project(".qoder", "skills"), Source: "project"},
+			{Path: user(".qoder-cn", "skills"), Source: "user"},
+			{Path: project(".agents", "skills"), Source: "project"},
+			{Path: user(".agents", "skills"), Source: "user"},
+			{Path: user(".qoder-cn", "plugins"), Source: "plugin", Tree: true},
+		}
 	default:
 		skills = []slashDir{
 			{Path: project(".agents", "skills"), Source: "project"},
@@ -421,6 +433,18 @@ func builtinSlash(engine string) []protocol.SlashItem {
 			{Name: "new", Kind: "command", Description: "新会话", Source: "builtin"},
 			{Name: "model", Kind: "command", Description: "切换模型", ArgumentHint: "[model]", Source: "builtin"},
 			{Name: "resume", Kind: "command", Description: "恢复会话", Source: "builtin"},
+		}
+	case "qoder-cn":
+		return []protocol.SlashItem{
+			{Name: "compact", Kind: "command", Description: "压缩对话上下文", Source: "builtin"},
+			{Name: "clear", Kind: "command", Description: "清空当前对话", Source: "builtin"},
+			{Name: "review", Kind: "command", Description: "审查未提交改动", Source: "builtin"},
+			{Name: "init", Kind: "command", Description: "生成项目说明", Source: "builtin"},
+			{Name: "plan", Kind: "command", Description: "进入计划模式", Source: "builtin"},
+			{Name: "new", Kind: "command", Description: "新对话", Source: "builtin"},
+			{Name: "model", Kind: "command", Description: "切换模型", ArgumentHint: "[model]", Source: "builtin"},
+			{Name: "skills", Kind: "command", Description: "列出可用技能", Source: "builtin"},
+			{Name: "help", Kind: "command", Description: "帮助", Source: "builtin"},
 		}
 	default:
 		return nil

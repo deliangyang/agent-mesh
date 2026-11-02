@@ -40,11 +40,9 @@ export function explainError(err: unknown): string {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return "network dropped; check the connection and try again";
   }
-  if (err instanceof DOMException && err.name === "AbortError") {
-    return "";
-  }
+  if (isAbort(err)) return "";
   const raw = err instanceof Error ? err.message : String(err || "");
-  const msg = raw.replace(/\s+/g, " ").trim();
+  const msg = unwrapFailText(raw);
   if (!msg) return "Request failed";
   if (/failed to fetch|networkerror|load failed|err_network|err_internet|net::/i.test(msg)) {
     return "network error; check the connection and try again";
@@ -58,9 +56,35 @@ export function explainError(err: unknown): string {
   return msg;
 }
 
+/** Prefer a human message from plain text or JSON error bodies. */
+export function unwrapFailText(raw: string, status = 0): string {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!text) return status ? "Request failed (" + status + ")" : "";
+  if (text.startsWith("{") || text.startsWith("[")) {
+    try {
+      const j = JSON.parse(text) as { error?: unknown; message?: unknown };
+      if (typeof j.error === "string" && j.error.trim()) return j.error.replace(/\s+/g, " ").trim();
+      if (j.error && typeof j.error === "object") {
+        const nested = (j.error as { message?: unknown }).message;
+        if (typeof nested === "string" && nested.trim()) return nested.replace(/\s+/g, " ").trim();
+      }
+      if (typeof j.message === "string" && j.message.trim()) return j.message.replace(/\s+/g, " ").trim();
+    } catch {
+      /* plain text */
+    }
+  }
+  return text;
+}
+
 export function toastError(err: unknown): void {
   const text = explainError(err);
   if (text) showToast(text, "error");
+}
+
+function isAbort(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const name = (err as { name?: string }).name;
+  return name === "AbortError";
 }
 
 function bump(id: number, ms: number): void {

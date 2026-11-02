@@ -5,7 +5,7 @@ import { reactive } from "vue";
 import { clearAsk, noteAskEvent, noteAskEvents, noteAskFromTool } from "./ask";
 import { keepMediaContent, lastUserPayload } from "./attach";
 import { fetchJSON } from "./http";
-import { showToast, toastError } from "./toast";
+import { showToast, toastError, unwrapFailText } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
 import { chatModelOf } from "./chatModel";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
@@ -92,6 +92,22 @@ function chunkTerminal(obj: LiveChunk): boolean {
   const kind = meshOf(obj).type || "";
   if (reason === "stop" || reason === "end") return true;
   return kind === "done" || kind === "result";
+}
+
+function chunkFail(obj: LiveChunk): string {
+  const top = obj.error;
+  if (typeof top === "string" && top.trim()) return top.replace(/\s+/g, " ").trim();
+  if (top && typeof top === "object") {
+    const msg = (top as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg.replace(/\s+/g, " ").trim();
+  }
+  const mesh = meshOf(obj);
+  if ((mesh.type || "").toLowerCase() !== "error") return "";
+  return (chunkDelta(obj) || mesh.preview || "").replace(/\s+/g, " ").trim() || "Request failed";
+}
+
+async function failBody(resp: Response): Promise<string> {
+  return unwrapFailText(await resp.text(), resp.status) || "http " + resp.status;
 }
 
 function noteSession(obj: LiveChunk): string {
@@ -358,7 +374,7 @@ export class MeshAgent extends AbstractAgent {
         }, 0);
         redirectIfUnauthorized(resp);
         if (!resp.ok) {
-          throw new Error((await resp.text()) || "http " + resp.status);
+          throw new Error(await failBody(resp));
         }
         const ctype = resp.headers.get("content-type") || "";
         let queued = false;
@@ -408,6 +424,13 @@ export class MeshAgent extends AbstractAgent {
           });
         };
         const feed = (obj: LiveChunk): boolean => {
+          const fail = chunkFail(obj);
+          if (fail) {
+            ended = true;
+            showToast(fail, "error");
+            sub.next({ type: EventType.RUN_ERROR, message: fail });
+            return true;
+          }
           const mesh = meshOf(obj);
           const delta = chunkDelta(obj);
           const kind = mesh.type || (mesh.tool ? "tool_call" : "assistant");

@@ -510,6 +510,64 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 	return d.promptSession(ctx, cwd, "", text, model)
 }
 
+func openACPSession(ctx context.Context, acp *acpClient, cwd, resume, model string) (string, error) {
+	params := map[string]any{"cwd": cwd, "mcpServers": []any{}}
+	if model != "" {
+		params["model"] = model
+	}
+	try := func(method string, extra map[string]any) (string, error) {
+		body := map[string]any{}
+		for k, v := range params {
+			body[k] = v
+		}
+		for k, v := range extra {
+			body[k] = v
+		}
+		res, err := acp.call(ctx, method, body)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", method, err)
+		}
+		sid, _ := res["sessionId"].(string)
+		return sid, nil
+	}
+	if resume != "" {
+		if sid, err := try("session/load", map[string]any{"sessionId": resume}); err == nil {
+			if sid == "" {
+				sid = resume
+			}
+			return sid, nil
+		}
+		if sid, err := try("session/resume", map[string]any{"sessionId": resume}); err == nil {
+			if sid == "" {
+				sid = resume
+			}
+			return sid, nil
+		}
+	}
+	sid, err := try("session/new", nil)
+	if err != nil {
+		if looksAuthRequired(err) {
+			return "", fmt.Errorf("%w (open WorkBuddy and sign in, or keep its window running)", err)
+		}
+		return "", err
+	}
+	if sid == "" {
+		if resume != "" {
+			return resume, nil
+		}
+		return "", fmt.Errorf("session/new did not return sessionId")
+	}
+	return sid, nil
+}
+
+func looksAuthRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "authentication required") || strings.Contains(msg, "auth_required") || strings.Contains(msg, "/login")
+}
+
 func (d *Driver) promptSession(ctx context.Context, cwd, resume, text, model string) (<-chan protocol.Event, error) {
 	gw, err := d.ensureGateway(ctx, cwd, resume)
 	if err != nil {
@@ -532,23 +590,14 @@ func (d *Driver) promptSession(ctx context.Context, cwd, resume, text, model str
 	}); err != nil {
 		return nil, fmt.Errorf("acp initialize: %w", err)
 	}
-	newParams := map[string]any{"cwd": cwd, "mcpServers": []any{}}
-	if cwd == "" {
-		newParams["cwd"] = gw.CWD
+	cwdParam := cwd
+	if cwdParam == "" {
+		cwdParam = gw.CWD
 	}
-	if name := driver.CLIModel(model, d.Name()); name != "" {
-		newParams["model"] = name
-	}
-	res, err := acp.call(ctx, "session/new", newParams)
+	modelName := driver.CLIModel(model, d.Name())
+	sid, err := openACPSession(ctx, acp, cwdParam, resume, modelName)
 	if err != nil {
-		return nil, fmt.Errorf("session/new: %w", err)
-	}
-	sid, _ := res["sessionId"].(string)
-	if sid == "" {
-		sid = resume
-	}
-	if sid == "" {
-		return nil, fmt.Errorf("session/new did not return sessionId")
+		return nil, err
 	}
 	out := make(chan protocol.Event, 256)
 	go func() {

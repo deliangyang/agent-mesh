@@ -2,17 +2,26 @@
 
 package driver
 
-import "os"
+import (
+	"golang.org/x/sys/windows"
+)
+
+const stillActive = 259
 
 // PIDAlive reports whether a process is still running.
+// os.FindProcess always succeeds on Windows, so query the exit code instead.
 func PIDAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	p, err := os.FindProcess(pid)
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
 		return false
 	}
-	_ = p.Release()
-	return true
+	defer windows.CloseHandle(h)
+	var code uint32
+	if err := windows.GetExitCodeProcess(h, &code); err != nil {
+		return false
+	}
+	return code == stillActive
 }

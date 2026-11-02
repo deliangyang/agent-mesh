@@ -77,6 +77,55 @@ test("相邻两次不同 Glob 不会被合成一条", () => {
   assert.equal(tools.toolCalls?.length, 2);
 });
 
+test("工具和助手文本按出现顺序交错，不堆在顶部", () => {
+  const msgs = eventsToMessages([
+    { type: "user", role: "user", text: "看一下" },
+    { type: "assistant", text: "先读文件" },
+    { type: "tool_call", tool: "Read", text: '{"path":"/tmp/a.ts"}' },
+    { type: "tool_result", tool: "Read", text: "export const a = 1" },
+    { type: "assistant", text: "再搜一下" },
+    { type: "tool_call", tool: "Grep", text: '{"pattern":"a"}' },
+    { type: "tool_result", tool: "Grep", text: "a.ts:1:export" },
+    { type: "assistant", text: "好了" },
+  ]);
+  const kinds = msgs.map((m) => {
+    if (m.role === "user") return "user";
+    if (m.role === "tool") return "tool";
+    const asst = m as { content?: string; toolCalls?: { function: { name: string } }[] };
+    if (asst.toolCalls?.length) return "tools:" + asst.toolCalls.map((t) => t.function.name).join(",");
+    return "text:" + String(asst.content || "");
+  });
+  assert.deepEqual(kinds, [
+    "user",
+    "text:先读文件",
+    "tools:Read",
+    "tool",
+    "text:再搜一下",
+    "tools:Grep",
+    "tool",
+    "text:好了",
+  ]);
+});
+
+test("有结果后再来的工具另起一条，不和前面的工具堆在一起", () => {
+  const msgs = eventsToMessages([
+    { type: "user", role: "user", text: "find" },
+    { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"*.go"}' },
+    { type: "tool_result", tool: "Glob", text: "a.go" },
+    { type: "tool_call", tool: "Read", text: '{"path":"a.go"}' },
+    { type: "tool_result", tool: "Read", text: "package main" },
+    { type: "assistant", text: "好了" },
+  ]);
+  const kinds = msgs.map((m) => {
+    if (m.role === "user") return "user";
+    if (m.role === "tool") return "tool";
+    const asst = m as { content?: string; toolCalls?: { function: { name: string } }[] };
+    if (asst.toolCalls?.length) return "tools:" + asst.toolCalls.map((t) => t.function.name).join(",");
+    return "text:" + String(asst.content || "");
+  });
+  assert.deepEqual(kinds, ["user", "tools:Glob", "tool", "tools:Read", "tool", "text:好了"]);
+});
+
 test("从 stream JSON 提取 session id", () => {
   assert.equal(
     sessionIdFromChunk({

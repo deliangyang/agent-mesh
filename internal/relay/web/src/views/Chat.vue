@@ -682,11 +682,26 @@ function onLinkUp(): void {
   if (tid) expectHistory(tid);
 }
 
+function hideKitCursor(): void {
+  document.querySelectorAll('[data-testid="copilot-loading-cursor"]').forEach((node) => {
+    const el = node as HTMLElement;
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+    el.style.setProperty("display", "none", "important");
+  });
+}
+
+let cursorObs: MutationObserver | null = null;
+
 onMounted(() => {
   hydrateFromQuery();
   connectCatalog();
   document.addEventListener("click", onDocClick);
   window.addEventListener("mesh-link-up", onLinkUp);
+  hideKitCursor();
+  cursorObs = new MutationObserver(hideKitCursor);
+  const host = document.querySelector(".mesh-chat") || document.body;
+  cursorObs.observe(host, { childList: true, subtree: true });
 });
 
 onBeforeUnmount(() => {
@@ -695,9 +710,22 @@ onBeforeUnmount(() => {
   window.clearTimeout(copiedTimer);
   window.clearTimeout(endedTimer);
   window.clearTimeout(composerGuardTimer);
+  cursorObs?.disconnect();
+  cursorObs = null;
   clearAttachJobs();
 });
 </script>
+
+<style>
+[data-testid="copilot-loading-cursor"] {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  animation: none !important;
+}
+</style>
 
 <template>
   <div class="mesh-app" :class="{ 'nav-open': navOpen }">

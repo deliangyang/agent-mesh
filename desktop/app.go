@@ -19,11 +19,9 @@ import (
 	"agent-mesh/internal/factory"
 	"agent-mesh/internal/node"
 	"agent-mesh/internal/protocol"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// App is the Wails backend: local node plus engine/session/model controls.
+// App is the desktop backend: local node plus engine/session/model controls.
 type App struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -171,10 +169,7 @@ func (a *App) forwardChunks() {
 			if !ok {
 				return
 			}
-			if a.headless {
-				continue
-			}
-			runtime.EventsEmit(a.ctx, "openai:chunk", chunk)
+			_ = chunk
 		}
 	}
 }

@@ -145,7 +145,7 @@ Both node and relay expose `/v1/models` and `/v1/chat/completions`, plus `/v1/op
 
 ### Desktop and headless
 
-`make desktop` builds a Wails window around the local node. `-headless` runs the node HTTP server without a window. Linux machines without `DISPLAY` / `WAYLAND_DISPLAY` fall back to headless automatically.
+`make desktop` builds a local client that opens the same Vue UI as the relay (`internal/relay/web`). The node serves that UI and the `/v1` API itself, so web operations work without a relay. `-headless` runs the node HTTP server without a window. Linux machines without `DISPLAY` / `WAYLAND_DISPLAY` fall back to headless automatically.
 
 ## Build from source
 

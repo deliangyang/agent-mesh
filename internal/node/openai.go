@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"agent-mesh/internal/driver"
@@ -84,12 +85,42 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-	id, ch := s.Hub.Subscribe(64)
-	defer s.Hub.Unsubscribe(id)
+	var wmu sync.Mutex
+	write := func(v any) error {
+		wmu.Lock()
+		defer wmu.Unlock()
+		return conn.WriteJSON(v)
+	}
+	hid, hch := s.Hub.Subscribe(64)
+	defer s.Hub.Unsubscribe(hid)
+	bid, bch := s.bus.subscribe()
+	defer s.bus.unsubscribe(bid)
+	for _, msg := range s.catalogParts() {
+		if err := write(msg); err != nil {
+			return
+		}
+	}
 	go func() {
 		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
 				return
+			}
+			var msg struct {
+				Type    string `json:"type"`
+				Engine  string `json:"engine"`
+				Session string `json:"session"`
+			}
+			if json.Unmarshal(raw, &msg) != nil {
+				continue
+			}
+			switch msg.Type {
+			case "refresh":
+				for _, part := range s.catalogParts() {
+					_ = write(part)
+				}
+			case "watch":
+				s.sendWatchHistory(write, msg.Engine, msg.Session)
 			}
 		}
 	}()
@@ -97,11 +128,19 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case chunk, ok := <-ch:
+		case chunk, ok := <-hch:
 			if !ok {
 				return
 			}
-			if err := conn.WriteJSON(chunk); err != nil {
+			cp := chunk
+			if err := write(busMsg{Type: "chunk", Chunk: &cp}); err != nil {
+				return
+			}
+		case msg, ok := <-bch:
+			if !ok {
+				return
+			}
+			if err := write(msg); err != nil {
 				return
 			}
 		}

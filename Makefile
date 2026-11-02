@@ -23,10 +23,9 @@ ctl:
 	mkdir -p bin
 	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/ctl ./cmd/ctl
 
-desktop:
+desktop: web
 	mkdir -p bin
-	cd desktop && GOTOOLCHAIN=go1.25.0 wails build
-	cp -f desktop/build/bin/agent-mesh bin/agent-mesh
+	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/agent-mesh ./desktop
 
 setup:
 	./scripts/setup.sh

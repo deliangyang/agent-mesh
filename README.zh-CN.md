@@ -145,7 +145,7 @@ export OPENAI_API_KEY=mesh
 
 ### 桌面和无窗口
 
-`make desktop` 用 Wails 给本机节点套一个窗口。`-headless` 只跑节点 HTTP。Linux 上没有 `DISPLAY` / `WAYLAND_DISPLAY` 时会自动改走无窗口。
+`make desktop` 编译本机客户端：界面和中继是同一套 Vue（`internal/relay/web`）。节点自己提供这套界面和 `/v1`，网页操作不依赖中继。`-headless` 只跑节点 HTTP。Linux 上没有 `DISPLAY` / `WAYLAND_DISPLAY` 时会自动改走无窗口。
 
 ## 从源码构建
 

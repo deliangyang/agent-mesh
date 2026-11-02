@@ -1,20 +1,15 @@
 package main
 
 import (
-	"embed"
+	"context"
 	"flag"
 	"log"
 	"os"
+	"os/exec"
+	"os/signal"
 	"strings"
-
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"syscall"
 )
-
-//go:embed all:frontend/dist
-var assets embed.FS
 
 func parseBoot() bootArgs {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -49,24 +44,20 @@ func main() {
 		app.runHeadless()
 		return
 	}
-	err := wails.Run(&options.App{
-		Title:     "Agent Mesh",
-		Width:     1360,
-		Height:    860,
-		MinWidth:  980,
-		MinHeight: 640,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 28, G: 23, B: 18, A: 255},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
-		Bind:             []interface{}{app},
-		Linux: &linux.Options{
-			WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
-		},
-	})
-	if err != nil {
-		log.Fatal(err)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	app.startup(ctx)
+	if app.srv == nil || app.listen == "" {
+		log.Fatal("desktop node failed to start")
 	}
+	uiURL := localUIURL(app.listen)
+	waitUI(uiURL)
+	if err := startChromeApp(uiURL); err != nil {
+		log.Printf("chrome app window unavailable: %v", err)
+		if err := exec.Command("xdg-open", uiURL+"/").Start(); err != nil {
+			log.Fatal(err)
+		}
+	}
+	<-ctx.Done()
+	app.shutdown(context.Background())
 }

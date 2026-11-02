@@ -15,7 +15,7 @@ import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
-import { capsAllowDiff, capsAllowFollowups, engineCaps } from "../engineCaps";
+import { capsAllowDiff, capsAllowFollowups, capsBadges, engineCaps } from "../engineCaps";
 import { formatEngineInstall } from "../engineInstall";
 import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
@@ -957,11 +957,14 @@ onBeforeUnmount(() => {
             v-for="e in engineCards"
             :key="e.name"
             type="button"
-            class="mesh-card"
+            class="mesh-card mesh-card-engine"
             :class="{ sel: filters.engine === e.name }"
             @click="pickEngine(e.name)"
           >
-            {{ e.title || e.name }}
+            <span class="mesh-card-title">{{ e.title || e.name }}</span>
+            <span v-if="capsBadges(e.caps).length" class="mesh-card-caps">
+              <span v-for="b in capsBadges(e.caps)" :key="e.name + b" class="mesh-cap">{{ b }}</span>
+            </span>
           </button>
           <div v-if="engineHint" class="mesh-pick-empty">{{ engineHint }}</div>
           <div v-if="missingEngines.length" class="mesh-engine-hints">

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { capsAllowDiff, capsAllowFollowups, engineCaps } from "./engineCaps.ts";
+import { capsAllowDiff, capsAllowFollowups, capsBadges, engineCaps } from "./engineCaps.ts";
 
 describe("engineCaps", () => {
   it("defaults to all-on when missing", () => {
@@ -20,5 +20,15 @@ describe("engineCaps", () => {
     );
     assert.equal(capsAllowDiff(caps), false);
     assert.equal(capsAllowFollowups(caps), true);
+  });
+});
+
+describe("capsBadges", () => {
+  it("omits ask when false", () => {
+    assert.deepEqual(capsBadges({ tools: true, diff: true, followups: true }), [
+      "tools",
+      "diff",
+      "followups",
+    ]);
   });
 });

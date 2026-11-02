@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router";
 import { catalog, connectCatalog, meshLink, refreshCatalog, watchSession } from "../catalog";
 import MeshAskCard from "../components/MeshAskCard.vue";
+import MeshAttachQueue from "../components/MeshAttachQueue.vue";
 import MeshDiffPanel from "../components/MeshDiffPanel.vue";
 import MeshFollowups from "../components/MeshFollowups.vue";
 import MeshSlashInput from "../components/MeshSlashInput.vue";
@@ -12,11 +13,12 @@ import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
-import { bindHistoryThread, expectHistory, isLiveChat, meshAgent, meshLive, resetDraft } from "../meshAgent";
+import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
 import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
 import { slashItems, watchSlashCatalog } from "../slash";
 import { meshTarget, threadIdOf } from "../target";
+import { clearAttachJobs, onComposerUploadFailed, uploadComposerFile } from "../attachUpload";
 import type { DirRow, Session } from "../types";
 
 useDefaultRenderTool({ render: MeshToolWindow });
@@ -34,6 +36,8 @@ const navOpen = ref(typeof window !== "undefined" && window.matchMedia("(min-wid
 const openPick = ref("");
 const diffOpen = ref(false);
 const picksOpen = reactive({ node: false, engine: false });
+const composerGuarded = ref(false);
+let composerGuardTimer = 0;
 
 function flipTheme(): void {
   theme.value = toggleTheme();
@@ -51,8 +55,24 @@ function closeNav(): void {
   navOpen.value = false;
 }
 
-function closeNavIfMobile(): void {
-  if (isMobileNav()) navOpen.value = false;
+function closeNavIfMobile(afterClick = false): void {
+  if (!isMobileNav()) return;
+  if (!afterClick) {
+    navOpen.value = false;
+    return;
+  }
+  // 等这次点击结束，避免侧栏收起后点穿到输入框弹出键盘
+  window.setTimeout(() => {
+    navOpen.value = false;
+  }, 500);
+}
+
+function guardComposer(): void {
+  composerGuarded.value = true;
+  window.clearTimeout(composerGuardTimer);
+  composerGuardTimer = window.setTimeout(() => {
+    composerGuarded.value = false;
+  }, 700);
 }
 
 const labels = {
@@ -76,6 +96,8 @@ const linkHint = computed(() => {
 const attachConfig = {
   enabled: true,
   maxSize: 20 * 1024 * 1024,
+  onUpload: uploadComposerFile,
+  onUploadFailed: onComposerUploadFailed,
 };
 
 function lastTurnStart(messages: { role?: string }[]): number {
@@ -338,7 +360,8 @@ function openSession(s: Session): void {
   chatKey.value = threadIdOf(s.node_id || filters.node, s.engine, s.id) || "draft";
   syncQuery(s);
   watchSession(s);
-  closeNavIfMobile();
+  guardComposer();
+  closeNavIfMobile(true);
 }
 
 function pickNode(id: string): void {
@@ -573,6 +596,10 @@ watch(
 watchSlashCatalog();
 watchFollowups();
 
+watch(chatKey, () => {
+  clearAttachJobs();
+});
+
 watch(
   () => meshLive.streaming,
   (now, was) => {
@@ -594,6 +621,48 @@ function fileCountOf(slot: object): number {
   return Array.isArray(rows) ? rows.length : 0;
 }
 
+function composerAttachments(slot: object): {
+  id: string;
+  filename?: string;
+  size?: number;
+  status?: string;
+  type?: string;
+  source?: { type: string; value: string; mimeType?: string };
+}[] {
+  const rows = (slot as { attachments?: unknown }).attachments;
+  return Array.isArray(rows) ? rows : [];
+}
+
+function removeComposerAttach(id: string, rows: { id?: string }[]): void {
+  const i = rows.findIndex((row) => row.id === id);
+  if (i < 0) return;
+  const queue = document.querySelector('[data-testid="copilot-chat-attachment-queue"]');
+  const item = queue?.querySelectorAll('[data-testid="copilot-chat-attachment-item"]')[i];
+  const buttons = item?.querySelectorAll("button");
+  const btn = buttons?.[buttons.length - 1];
+  if (btn instanceof HTMLButtonElement) btn.click();
+}
+
+function composerBusy(slot: { isRunning?: boolean }): boolean {
+  if (slot.isRunning) return true;
+  if (!meshLive.streaming) return false;
+  if (creating.value && !selected.value?.id) return true;
+  return sessionStreaming(selected.value);
+}
+
+function stopTurn(slot: { onStop?: () => void }): void {
+  try {
+    slot.onStop?.();
+  } catch {
+    /* CopilotKit 未挂停止 */
+  }
+  try {
+    if (meshAgent.isRunning) meshAgent.abortRun();
+  } catch {
+    /* 没有进行中的请求 */
+  }
+}
+
 function onComposerSubmit(
   slot: {
     isRunning: boolean;
@@ -602,7 +671,7 @@ function onComposerSubmit(
   },
   text: string,
 ): void {
-  if (!fileCountOf(slot) && shouldQueueFollowup(slot.isRunning && isLiveChat())) {
+  if (!fileCountOf(slot) && shouldQueueFollowup(composerBusy(slot))) {
     void pushFollowup(text);
     slot.onUpdateModelValue("");
     return;
@@ -637,6 +706,8 @@ onBeforeUnmount(() => {
   window.removeEventListener("mesh-link-up", onLinkUp);
   window.clearTimeout(copiedTimer);
   window.clearTimeout(endedTimer);
+  window.clearTimeout(composerGuardTimer);
+  clearAttachJobs();
 });
 </script>
 
@@ -806,19 +877,13 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="mesh-chat-title"
-          :class="{ live: meshLive.streaming, copied: copied, ended: turnEnded }"
+          :class="{ copied: copied, ended: turnEnded }"
           :title="copied ? '已复制标题和会话编号' : '点击复制标题和会话编号'"
           :aria-label="copied ? '已复制标题和会话编号' : '复制标题和会话编号'"
           @click="copyTitle"
         >
           <span
-            v-if="meshLive.streaming"
-            class="mesh-lamp"
-            role="status"
-            aria-label="正在输出"
-          ></span>
-          <span
-            v-else-if="turnEnded"
+            v-if="turnEnded"
             class="mesh-ended"
             role="status"
             aria-label="已结束"
@@ -855,7 +920,9 @@ onBeforeUnmount(() => {
               <p>{{ welcomeHint }}</p>
             </div>
           </template>
-          <template #reasoning-message></template>
+          <template #reasoning-message>
+            <div class="mesh-reason-skip" hidden></div>
+          </template>
           <template #message-after="{ message }">
             <MeshThinkWindow v-if="showThinkAfter(message)" :streaming="true" />
           </template>
@@ -929,7 +996,8 @@ onBeforeUnmount(() => {
             </button>
           </template>
           <template #input="slot">
-            <div class="mesh-composer">
+            <div class="mesh-composer" :class="{ 'is-guarded': composerGuarded }">
+              <div v-if="composerGuarded" class="mesh-composer-guard" aria-hidden="true"></div>
               <MeshThinkWindow v-if="thinkInComposer" :streaming="true" />
               <div class="mesh-composer-meta">
                 <div class="mesh-chip">
@@ -994,24 +1062,29 @@ onBeforeUnmount(() => {
               </div>
               <MeshAskCard />
               <MeshFollowups
-                :running="slot.isRunning"
-                :can-stop="slot.canStop"
+                :running="composerBusy(slot)"
+                :can-stop="composerBusy(slot)"
                 @pull="slot.onUpdateModelValue"
-                @stop="slot.onStop"
+                @stop="stopTurn(slot)"
+              />
+              <MeshAttachQueue
+                :items="composerAttachments(slot)"
+                @remove="(id) => removeComposerAttach(id, composerAttachments(slot))"
               />
               <MeshSlashInput
                 :model-value="slot.modelValue"
-                :is-running="slot.isRunning"
+                :is-running="composerBusy(slot)"
                 :input-mode="slot.inputMode"
                 :items="slashItems"
-                :can-stop="slot.canStop"
+                :can-stop="composerBusy(slot)"
                 :can-add-file="slot.canAddFile"
                 :can-transcribe="slot.canTranscribe"
                 :file-count="fileCountOf(slot)"
+                :auto-focus="chatKey.startsWith('draft-')"
                 :on-update-model-value="slot.onUpdateModelValue"
                 :on-submit-message="(text) => onComposerSubmit(slot, text)"
                 :on-pull-followup="() => onComposerPull(slot)"
-                :on-stop="slot.onStop"
+                :on-stop="() => stopTurn(slot)"
                 :on-add-file="slot.onAddFile"
                 :on-start-transcribe="slot.onStartTranscribe"
                 :on-cancel-transcribe="slot.onCancelTranscribe"

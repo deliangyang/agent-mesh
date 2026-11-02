@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, ReasoningMessage } from "@ag-ui/core";
+import type { AssistantMessage, Message } from "@ag-ui/core";
 import type { MeshEvent } from "./types";
 
 const TURN_LIMIT = 20;
@@ -300,9 +300,6 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
     if (t.user) out.push(t.user);
     if (t.tools && t.tools.toolCalls && t.tools.toolCalls.length) out.push(t.tools);
     for (const row of t.results) out.push(row);
-    if (t.think.trim()) {
-      out.push({ id: nextId(), role: "reasoning", content: t.think } as ReasoningMessage);
-    }
     if (t.text && String(t.text.content || "").trim()) out.push(t.text);
   };
 
@@ -373,37 +370,6 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
   return out;
 }
 
-function lastTurnStart(msgs: Message[]): number {
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === "user") return i + 1;
-  }
-  return 0;
-}
-
-export function ensureTurnThink(msgs: Message[], think: string): Message[] {
-  const text = String(think || "").trim();
-  if (!text || !msgs.length) return msgs;
-  const start = lastTurnStart(msgs);
-  for (let i = msgs.length - 1; i >= start; i--) {
-    if (msgs[i].role !== "reasoning") continue;
-    const cur = String((msgs[i] as ReasoningMessage).content || "");
-    if (!cur || text.startsWith(cur) || cur.startsWith(text.slice(0, Math.min(80, text.length)))) {
-      if (cur === text) return msgs;
-      const out = msgs.slice();
-      out[i] = { ...msgs[i], content: text } as ReasoningMessage;
-      return out;
-    }
-  }
-  const out = msgs.slice();
-  let insertAt = out.length;
-  for (let i = start; i < out.length; i++) {
-    const m = out[i];
-    if (m.role === "assistant" && !(m as AssistantMessage).toolCalls?.length) {
-      insertAt = i;
-      break;
-    }
-    insertAt = i + 1;
-  }
-  out.splice(insertAt, 0, { id: "think-live", role: "reasoning", content: text } as ReasoningMessage);
-  return out;
+export function ensureTurnThink(msgs: Message[], _think: string): Message[] {
+  return msgs;
 }

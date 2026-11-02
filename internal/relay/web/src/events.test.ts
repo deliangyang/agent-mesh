@@ -35,7 +35,7 @@ test("流式 delta 仍直接拼接", () => {
   assert.equal(rows[0].text, "显示完整");
 });
 
-test("同一轮工具收成一条，thinking 放在工具之后", () => {
+test("同一轮工具收成一条，thinking 不进入对话气泡", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "ls" },
     { type: "thinking", text: "先看目录" },
@@ -45,16 +45,15 @@ test("同一轮工具收成一条，thinking 放在工具之后", () => {
     { type: "assistant", text: "好了" },
   ]);
   const roles = msgs.map((m) => m.role);
-  assert.deepEqual(roles, ["user", "assistant", "reasoning", "assistant"]);
+  assert.deepEqual(roles, ["user", "assistant", "assistant"]);
   const tools = msgs[1] as { toolCalls?: { function: { name: string } }[] };
   assert.equal(tools.toolCalls?.length, 2);
   assert.equal(tools.toolCalls?.[0]?.function.name, "Glob");
   assert.equal(tools.toolCalls?.[1]?.function.name, "Read");
-  assert.equal((msgs[2] as { content?: string }).content, "先看目录再读 Makefile");
-  assert.equal((msgs[3] as { content?: string }).content, "好了");
+  assert.equal((msgs[2] as { content?: string }).content, "好了");
 });
 
-test("历史没有 thinking 时仍把本轮思考补进对话", () => {
+test("本轮思考不再插入 reasoning 消息", () => {
   const msgs = eventsToMessages([
     { type: "user", role: "user", text: "ls" },
     { type: "tool_call", tool: "Glob", text: '{"glob_pattern":"*"}' },
@@ -63,9 +62,9 @@ test("历史没有 thinking 时仍把本轮思考补进对话", () => {
   const got = ensureTurnThink(msgs, "先看目录");
   assert.deepEqual(
     got.map((m) => m.role),
-    ["user", "assistant", "reasoning", "assistant"],
+    ["user", "assistant", "assistant"],
   );
-  assert.equal((got[2] as { content?: string }).content, "先看目录");
+  assert.equal(got, msgs);
 });
 
 test("相邻两次不同 Glob 不会被合成一条", () => {

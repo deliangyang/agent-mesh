@@ -505,12 +505,6 @@ export class MeshAgent extends AbstractAgent {
         closeTool();
         closeText();
         if (thinkAcc.trim()) {
-          const id = crypto.randomUUID();
-          sub.next({ type: EventType.REASONING_START, messageId: id });
-          sub.next({ type: EventType.REASONING_MESSAGE_START, messageId: id, role: "reasoning" });
-          sub.next({ type: EventType.REASONING_MESSAGE_CONTENT, messageId: id, delta: thinkAcc });
-          sub.next({ type: EventType.REASONING_MESSAGE_END, messageId: id });
-          sub.next({ type: EventType.REASONING_END, messageId: id });
           historyEvents = historyEvents.concat([{ type: "thinking", text: thinkAcc }]);
           if (threadId) historyCache.set(threadId, historyEvents);
         }

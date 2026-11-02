@@ -280,10 +280,8 @@ function argsContinue(prev: string, next: string): boolean {
 }
 
 type TurnBuf = {
-  user?: Message;
   tools: AssistantMessage | null;
   results: Message[];
-  think: string;
   text: AssistantMessage | null;
 };
 
@@ -294,13 +292,18 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
   const nextId = () => "m" + String(++n);
   const lastToolId: Record<string, string> = {};
   let lastAnyToolId = "";
-  let turn: TurnBuf = { tools: null, results: [], think: "", text: null };
+  let turn: TurnBuf = { tools: null, results: [], text: null };
 
-  const flush = (t: TurnBuf) => {
-    if (t.user) out.push(t.user);
-    if (t.tools && t.tools.toolCalls && t.tools.toolCalls.length) out.push(t.tools);
-    for (const row of t.results) out.push(row);
-    if (t.text && String(t.text.content || "").trim()) out.push(t.text);
+  const flushText = () => {
+    if (turn.text && String(turn.text.content || "").trim()) out.push(turn.text);
+    turn.text = null;
+  };
+
+  const flushTools = () => {
+    if (turn.tools && turn.tools.toolCalls && turn.tools.toolCalls.length) out.push(turn.tools);
+    for (const row of turn.results) out.push(row);
+    turn.tools = null;
+    turn.results = [];
   };
 
   const ensureTools = (): AssistantMessage => {
@@ -313,21 +316,16 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
   for (const ev of rows) {
     if (ev.type === "ask") continue;
     if (isUser(ev)) {
-      flush(turn);
-      turn = {
-        user: { id: nextId(), role: "user", content: ev.text || "" },
-        tools: null,
-        results: [],
-        think: "",
-        text: null,
-      };
+      flushTools();
+      flushText();
+      out.push({ id: nextId(), role: "user", content: ev.text || "" });
+      turn = { tools: null, results: [], text: null };
       continue;
     }
-    if (ev.type === "thinking") {
-      turn.think += ev.text || "";
-      continue;
-    }
+    if (ev.type === "thinking") continue;
     if (ev.type === "tool_call") {
+      flushText();
+      if (turn.results.length) flushTools();
       const asst = ensureTools();
       asst.toolCalls = asst.toolCalls || [];
       const name = ev.tool || "tool";
@@ -359,6 +357,7 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
       });
       continue;
     }
+    if (turn.tools) flushTools();
     if (turn.text) {
       const prev = typeof turn.text.content === "string" ? turn.text.content : "";
       turn.text.content = joinAssistantText(prev, ev.text || "", (ev.type || "") !== "delta");
@@ -366,7 +365,8 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
       turn.text = { id: nextId(), role: "assistant", content: ev.text || "" };
     }
   }
-  flush(turn);
+  flushTools();
+  flushText();
   return out;
 }
 

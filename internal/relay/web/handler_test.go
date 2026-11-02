@@ -177,9 +177,9 @@ func TestAttachRoutesAPIAndUI(t *testing.T) {
 		}
 		http.NotFound(w, r)
 	})
-	h, err := Attach(api)
+	h, err := attach(api, testAssets())
 	if err != nil {
-		t.Fatalf("Attach: %v", err)
+		t.Fatalf("attach: %v", err)
 	}
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
@@ -206,7 +206,7 @@ func TestAttachRoutesAPIAndUI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read ui: %v", err)
 	}
-	if !strings.Contains(string(page), "Agent Mesh") {
+	if !strings.Contains(string(page), "UI_INDEX") {
 		t.Fatalf("ui %q", page)
 	}
 }

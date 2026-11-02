@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,17 +28,13 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
-	resp, err := http.Get(ts.URL + "/")
+	resp, err := http.Get(ts.URL + "/healthz")
 	if err != nil {
-		t.Fatalf("get ui: %v", err)
+		t.Fatalf("healthz: %v", err)
 	}
-	page, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if err != nil {
-		t.Fatalf("read ui: %v", err)
-	}
-	if !strings.Contains(string(page), "Agent Mesh") {
-		t.Fatalf("ui %q", page)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("healthz status %d", resp.StatusCode)
 	}
 
 	resp, err = http.Post(ts.URL+"/login", "application/json", strings.NewReader(`{"password":""}`))

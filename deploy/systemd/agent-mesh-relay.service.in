@@ -1,0 +1,16 @@
+[Unit]
+Description=Agent Mesh relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=__LIB_DIR__/run-relay
+Restart=on-failure
+RestartSec=5
+KillMode=process
+Environment=HOME=__HOME__
+WorkingDirectory=__HOME__
+
+[Install]
+WantedBy=multi-user.target

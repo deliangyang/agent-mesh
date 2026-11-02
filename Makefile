@@ -40,3 +40,4 @@ supervisor: node
 test:
 	go test $$(go list ./... | grep -v /desktop)
 	cd internal/relay/web && (test -d node_modules/vue || npm ci) && npm test
+	./scripts/install_test.sh

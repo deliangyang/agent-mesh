@@ -22,7 +22,10 @@ internal/gitdiff  workspace git diff
 internal/relay/web  web source (build output is embedded in relay)
 desktop           Wails desktop shell: local node + web UI
 deploy/supervisor sample supervisord unit for a local node
-scripts           install, setup, and release packaging
+deploy/systemd    systemd units for relay / node (written by install-*.sh)
+deploy/launchd    macOS launchd plists for relay / node
+deploy/desktop    Linux .desktop launcher for the node
+scripts           install-relay.sh / install-node.sh, setup, and release packaging
 ```
 
 ## Trust boundary
@@ -103,7 +106,7 @@ MESH_PASSWORD=... ./bin/relay -listen 0.0.0.0:8443 -web
 ./bin/ctl list --direct http://127.0.0.1:7700 --engine claude
 ```
 
-Environment variables: `MESH_RELAY` `MESH_DIRECT` `MESH_NODE` `MESH_PASSWORD` `MESH_ADVERTISE`. Engine binaries can be overridden with `CURSOR_AGENT_BIN` `QODERCN_BIN` and similar.
+Environment variables: `MESH_RELAY` `MESH_DIRECT` `MESH_NODE` `MESH_PASSWORD` `MESH_ADVERTISE`. Engine binaries can be overridden with `CURSOR_AGENT_BIN` `QODERCN_BIN` and similar. Installer: `AGENT_MESH_MIRROR` `AGENT_MESH_BUNDLE` `AGENT_MESH_PREFIX`.
 
 ## Do not
 

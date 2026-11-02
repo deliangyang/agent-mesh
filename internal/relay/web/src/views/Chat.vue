@@ -15,6 +15,7 @@ import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
+import { capsAllowDiff, capsAllowFollowups, engineCaps } from "../engineCaps";
 import { formatEngineInstall } from "../engineInstall";
 import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
@@ -134,6 +135,12 @@ const missingEngines = computed(() => nodeMissingEngines(catalog.engines, filter
 const selectedNodeOs = computed(() => catalog.nodes.find((row) => row.id === filters.node)?.os || "");
 
 const engineHint = computed(() => (engineCards.value.length ? "" : engineEmptyHint(filters.node)));
+
+const selectedCaps = computed(() => engineCaps(catalog.engines, filters.node, filters.engine));
+
+const showDiff = computed(() => capsAllowDiff(selectedCaps.value));
+
+const showFollowups = computed(() => capsAllowFollowups(selectedCaps.value));
 
 const platformOptions = computed(() => nodePlatforms(catalog.nodes));
 
@@ -1037,6 +1044,7 @@ onBeforeUnmount(() => {
           <span class="mesh-chat-title-text">{{ copied ? t("chat.copied") : chatTitle }}</span>
         </button>
         <button
+          v-if="showDiff"
           type="button"
           class="ghost mesh-diff-toggle"
           :class="{ on: diffOpen }"
@@ -1051,7 +1059,7 @@ onBeforeUnmount(() => {
           {{ t("chat.diff") }}
         </button>
       </div>
-      <MeshDiffPanel :open="diffOpen" @close="diffOpen = false" />
+      <MeshDiffPanel v-if="showDiff" :open="diffOpen" @close="diffOpen = false" />
       <div class="mesh-chat-main">
         <CopilotChat
           :key="chatKey"
@@ -1210,6 +1218,7 @@ onBeforeUnmount(() => {
               </div>
               <MeshAskCard />
               <MeshFollowups
+                v-if="showFollowups"
                 :running="composerBusy(slot)"
                 :can-stop="composerBusy(slot)"
                 @pull="slot.onUpdateModelValue"

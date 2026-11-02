@@ -431,6 +431,8 @@ GUI="${BIN_DIR}/agent-mesh"
 if [ -x "\$GUI" ]; then
   # JavaScriptCore 默认占用 SIGUSR1，和 Go 运行时冲突；改到实时信号 39。
   export JSC_SIGNAL_FOR_GC="\${JSC_SIGNAL_FOR_GC:-39}"
+  # WebKit/GTK 的 C 栈帧让 Go 异步抢占无法完整回溯，窗口会在 GC 时崩掉。
+  export GODEBUG="asyncpreemptoff=1\${GODEBUG:+,\$GODEBUG}"
   exec "\$GUI" "\$@"
 fi
 os="\$(uname -s | tr '[:upper:]' '[:lower:]')"

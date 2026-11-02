@@ -23,10 +23,13 @@ const (
 
 	wmTray         = 0x8001
 	nimAdd         = 0x00000000
+	nimModify      = 0x00000001
 	nimDelete      = 0x00000002
 	nifMessage     = 0x00000001
 	nifIcon        = 0x00000002
 	nifTip         = 0x00000004
+	nifInfo        = 0x00000010
+	niifInfo       = 0x00000001
 	imageIcon      = 1
 	lrLoadFromFile = 0x00000010
 	lrDefaultSize  = 0x00000040
@@ -84,12 +87,18 @@ type wndClassEx struct {
 	IconSm                             windows.Handle
 }
 
+// notifyIconData matches NOTIFYICONDATAW including balloon fields (Vista+).
 type notifyIconData struct {
 	Size                       uint32
 	Wnd                        windows.Handle
 	ID, Flags, CallbackMessage uint32
 	Icon                       windows.Handle
 	Tip                        [128]uint16
+	State, StateMask           uint32
+	Info                       [256]uint16
+	Timeout                    uint32
+	InfoTitle                  [64]uint16
+	InfoFlags                  uint32
 }
 
 type point struct {
@@ -149,6 +158,7 @@ func runTray(ctx context.Context, cancel context.CancelFunc, uiURL string) error
 		return err
 	}
 	trayNID = nid
+	showTrayBalloon(nid)
 	go func() {
 		<-ctx.Done()
 		postQuitMessage.Call(0)
@@ -202,6 +212,22 @@ func trayChineseUI() bool {
 	r, _, _ := getUserDefaultUILanguage.Call()
 	// LANGID primary language is the low 10 bits; LANG_CHINESE == 0x04.
 	return uint16(r)&0x3ff == 0x04
+}
+
+func showTrayBalloon(nid *notifyIconData) {
+	if nid == nil {
+		return
+	}
+	title, body := trayStartBalloon(trayChineseUI())
+	titleU, _ := windows.UTF16FromString(title)
+	bodyU, _ := windows.UTF16FromString(body)
+	copy(nid.InfoTitle[:], titleU)
+	copy(nid.Info[:], bodyU)
+	nid.InfoFlags = niifInfo
+	nid.Timeout = 8000
+	nid.Flags = nifMessage | nifIcon | nifTip | nifInfo
+	shellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(nid)))
+	nid.Flags = nifMessage | nifIcon | nifTip
 }
 
 func showTrayMenu(hwnd windows.Handle) {

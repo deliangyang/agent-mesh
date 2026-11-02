@@ -23,7 +23,7 @@ export const zhCN: Record<string, string> = {
   "nav.closeSidebar": "关闭侧栏",
   "nav.hideSidebar": "隐藏侧栏",
   "nav.showSidebar": "显示侧栏",
-  "nav.nodeSettings": "节点设置",
+  "nav.nodeSettings": "节点设置 / 引擎健康",
   "nav.themeLight": "切换到浅色主题",
   "nav.themeDark": "切换到深色主题",
 
@@ -83,6 +83,13 @@ export const zhCN: Record<string, string> = {
   "settings.savedLinked": "已保存并连接到中继",
   "settings.saved": "中继设置已保存",
   "settings.unavailable": "设置不可用",
+  "settings.health": "引擎健康",
+  "settings.healthSub": "各节点上的引擎可用性",
+  "settings.healthEmpty": "目录里还没有节点。",
+  "settings.healthNode": "节点",
+  "settings.healthOk": "已安装",
+  "settings.healthMiss": "缺失",
+  "settings.healthNone": "未注册",
 
   "toast.requestFailed": "请求失败",
   "toast.requestFailedStatus": "请求失败（{status}）",

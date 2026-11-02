@@ -50,24 +50,11 @@ const navOpen = ref(typeof window !== "undefined" && window.matchMedia("(min-wid
 const openPick = ref("");
 const diffOpen = ref(false);
 const settingsOpen = ref(false);
-const meshSettings = ref(false);
+/** Gear opens relay settings (local node) and/or the engines×nodes health matrix. */
+const meshSettings = ref(true);
 const picksOpen = reactive({ node: false, engine: false });
 const composerGuarded = ref(false);
 let composerGuardTimer = 0;
-
-async function detectMeshSettings(): Promise<void> {
-  try {
-    const resp = await fetchJSON("/v1/openai/mesh", { credentials: "same-origin" }, 4000);
-    if (!resp.ok) {
-      meshSettings.value = false;
-      return;
-    }
-    const st = await resp.json();
-    meshSettings.value = !!st?.local;
-  } catch {
-    meshSettings.value = false;
-  }
-}
 
 function flipTheme(): void {
   theme.value = toggleTheme();
@@ -764,7 +751,6 @@ let cursorObs: MutationObserver | null = null;
 onMounted(() => {
   hydrateFromQuery();
   connectCatalog();
-  void detectMeshSettings();
   document.addEventListener("click", onDocClick);
   window.addEventListener("mesh-link-up", onLinkUp);
   hideKitCursor();

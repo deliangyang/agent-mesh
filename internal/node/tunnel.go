@@ -153,8 +153,21 @@ func (s *Server) handleTunnelReq(conn *websocket.Conn, wmu *sync.Mutex, f protoc
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	req := httptest.NewRequest(method, path, bytes.NewReader(f.Body))
-	req.Header.Set("Content-Type", "application/json")
+	body := []byte(f.Body)
+	if len(f.Raw) > 0 {
+		body = f.Raw
+	}
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	ct := "application/json"
+	if f.Header != nil {
+		if v := f.Header["Content-Type"]; v != "" {
+			ct = v
+		}
+		if v := f.Header["Accept"]; v != "" {
+			req.Header.Set("Accept", v)
+		}
+	}
+	req.Header.Set("Content-Type", ct)
 	rw := &tunnelRW{id: f.ID, conn: conn, wmu: wmu, header: make(http.Header)}
 	s.Handler().ServeHTTP(rw, req)
 	rw.eof()

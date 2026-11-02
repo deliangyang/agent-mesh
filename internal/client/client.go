@@ -128,7 +128,7 @@ func (c *Client) Handshake(ctx context.Context, nodeID string) error {
 
 func (c *Client) postEnvelope(ctx context.Context, u string, env e2e.Envelope) (e2e.Envelope, error) {
 	var out e2e.Envelope
-	raw, err := json.Marshal(env)
+	raw, ct, err := e2e.EncodeEnvelope(env, true)
 	if err != nil {
 		return out, err
 	}
@@ -136,7 +136,8 @@ func (c *Client) postEnvelope(ctx context.Context, u string, env e2e.Envelope) (
 	if err != nil {
 		return out, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", ct)
+	req.Header.Set("Accept", e2e.ContentTypeEnvelope)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return out, err
@@ -145,6 +146,12 @@ func (c *Client) postEnvelope(ctx context.Context, u string, env e2e.Envelope) (
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return out, fmt.Errorf("http %d: %s", resp.StatusCode, b)
+	}
+	if e2e.ContentTypeIsEnvelope(resp.Header.Get("Content-Type")) || e2e.IsBinaryPayload(b) {
+		if err := out.UnmarshalBinary(b); err != nil {
+			return out, fmt.Errorf("decode envelope: %w", err)
+		}
+		return out, nil
 	}
 	if err := json.Unmarshal(b, &out); err != nil {
 		return out, fmt.Errorf("decode envelope: %w", err)
@@ -181,7 +188,7 @@ func (c *Client) Call(ctx context.Context, req protocol.Request) (protocol.Respo
 	return resp, nil
 }
 
-// Stream is encrypted SSE.
+// Stream is encrypted streaming (binary frames by default, SSE fallback).
 func (c *Client) Stream(ctx context.Context, req protocol.Request) (<-chan protocol.Event, error) {
 	if c.sess == nil {
 		return nil, fmt.Errorf("handshake required")
@@ -192,13 +199,16 @@ func (c *Client) Stream(ctx context.Context, req protocol.Request) (<-chan proto
 		return nil, err
 	}
 	env.Kind = "stream"
-	raw, _ := json.Marshal(env)
+	raw, ct, err := e2e.EncodeEnvelope(env, true)
+	if err != nil {
+		return nil, err
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/stream", bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("Content-Type", ct)
+	httpReq.Header.Set("Accept", e2e.ContentTypeEnvelopeStream)
 	httpCli := c.HTTP
 	if httpCli.Timeout != 0 {
 		cp := *httpCli
@@ -214,34 +224,65 @@ func (c *Client) Stream(ctx context.Context, req protocol.Request) (<-chan proto
 		resp.Body.Close()
 		return nil, fmt.Errorf("stream http %d: %s", resp.StatusCode, b)
 	}
+	binStream := e2e.ContentTypeIsEnvelope(resp.Header.Get("Content-Type")) ||
+		strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "envelope-stream")
 	out := make(chan protocol.Event, 32)
 	go func() {
 		defer close(out)
 		defer resp.Body.Close()
-		sc := bufio.NewScanner(resp.Body)
-		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		for sc.Scan() {
-			line := sc.Text()
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-			var env e2e.Envelope
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &env); err != nil {
-				continue
-			}
-			plain, err := c.sess.Open(env)
-			if err != nil {
-				continue
-			}
-			var ev protocol.Event
-			if err := json.Unmarshal(plain, &ev); err != nil {
-				continue
-			}
-			out <- ev
-			if ev.Done {
-				return
-			}
+		if binStream {
+			c.readBinaryStream(resp.Body, out)
+			return
 		}
+		c.readSSEStream(resp.Body, out)
 	}()
 	return out, nil
+}
+
+func (c *Client) readBinaryStream(r io.Reader, out chan<- protocol.Event) {
+	for {
+		env, err := e2e.ReadStreamFrame(r, true)
+		if err != nil {
+			return
+		}
+		plain, err := c.sess.Open(env)
+		if err != nil {
+			continue
+		}
+		var ev protocol.Event
+		if err := json.Unmarshal(plain, &ev); err != nil {
+			continue
+		}
+		out <- ev
+		if ev.Done {
+			return
+		}
+	}
+}
+
+func (c *Client) readSSEStream(r io.Reader, out chan<- protocol.Event) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var env e2e.Envelope
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &env); err != nil {
+			continue
+		}
+		plain, err := c.sess.Open(env)
+		if err != nil {
+			continue
+		}
+		var ev protocol.Event
+		if err := json.Unmarshal(plain, &ev); err != nil {
+			continue
+		}
+		out <- ev
+		if ev.Done {
+			return
+		}
+	}
 }

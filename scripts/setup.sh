@@ -94,6 +94,9 @@ if [ "$INSTALL_BIN" -eq 1 ]; then
   install -m 0755 "${ROOT}/bin/node" "${BIN_DIR}/mesh-node"
   install -m 0755 "${ROOT}/bin/relay" "${BIN_DIR}/mesh-relay"
   install -m 0755 "${ROOT}/bin/ctl" "${BIN_DIR}/mesh-ctl"
+  if [ -x "${ROOT}/bin/agent-mesh" ]; then
+    install -m 0755 "${ROOT}/bin/agent-mesh" "${BIN_DIR}/agent-mesh"
+  fi
   echo "installed binaries to ${BIN_DIR}"
 fi
 

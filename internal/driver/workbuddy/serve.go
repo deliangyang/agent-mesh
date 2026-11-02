@@ -2,6 +2,7 @@ package workbuddy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -26,10 +27,14 @@ type meshServe struct {
 }
 
 func (d *Driver) ensureGateway(ctx context.Context, cwd, resume string) (gateway, error) {
+	// Prefer a live WorkBuddy interactive gateway. /health often needs a password
+	// while loopback ACP still works and already has the signed-in account.
 	if gws := d.discover(); len(gws) > 0 {
-		gw := pickGateway(gws, cwd, resume)
-		if err := pingGateway(ctx, gw); err == nil {
-			return gw, nil
+		ordered := preferGateway(gws, cwd, resume)
+		for _, gw := range ordered {
+			if err := pingGateway(ctx, gw); err == nil {
+				return gw, nil
+			}
 		}
 	}
 	d.mu.Lock()
@@ -50,11 +55,24 @@ func (d *Driver) ensureGateway(ctx context.Context, cwd, resume string) (gateway
 	return gw, nil
 }
 
-func pickGateway(gws []gateway, cwd, resume string) gateway {
+func preferGateway(gws []gateway, cwd, resume string) []gateway {
+	if len(gws) <= 1 {
+		return gws
+	}
+	seen := map[string]bool{}
+	var out []gateway
+	add := func(gw gateway) {
+		key := strings.ToLower(gw.URL) + "|" + gw.Session
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, gw)
+	}
 	if resume != "" {
 		for _, gw := range gws {
 			if gw.Session == resume {
-				return gw
+				add(gw)
 			}
 		}
 	}
@@ -62,16 +80,24 @@ func pickGateway(gws []gateway, cwd, resume string) gateway {
 		want := filepath.Clean(cwd)
 		for _, gw := range gws {
 			if gw.CWD != "" && filepath.Clean(gw.CWD) == want {
-				return gw
+				add(gw)
 			}
 		}
 	}
-	return gws[0]
+	for _, gw := range gws {
+		add(gw)
+	}
+	return out
 }
 
 func pingGateway(ctx context.Context, gw gateway) error {
 	if gw.URL == "" {
 		return fmt.Errorf("empty gateway url")
+	}
+	// Interactive WorkBuddy gateways return 401 on /health without a password,
+	// but ACP connect is allowed on loopback and carries the logged-in session.
+	if err := pingACP(ctx, gw); err == nil {
+		return nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, gw.URL+"/api/v1/health", nil)
 	if err != nil {
@@ -85,6 +111,24 @@ func pingGateway(ctx context.Context, gw gateway) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("health http %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func pingACP(ctx context.Context, gw gateway) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gw.URL+"/api/v1/acp/connect", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setGatewayHeaders(req, gw)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("acp connect http %d", resp.StatusCode)
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -133,11 +134,17 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
-	var env e2e.Envelope
-	if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		http.Error(w, "bad envelope", http.StatusBadRequest)
 		return
 	}
+	env, err := e2e.DecodeEnvelope(r, body)
+	if err != nil {
+		http.Error(w, "bad envelope", http.StatusBadRequest)
+		return
+	}
+	bin := e2e.WantsBinary(r)
 	ack, sess, err := e2e.AcceptHandshake(s.Ident, env)
 	if err != nil {
 		s.Log.Warn("handshake failed", "err", err)
@@ -147,7 +154,9 @@ func (s *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.sessions[sess.PeerID] = sess
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, ack)
+	if err := e2e.WriteEnvelope(w, http.StatusOK, ack, bin); err != nil {
+		s.Log.Debug("handshake write", "err", err)
+	}
 }
 
 func (s *Server) sessionOf(env e2e.Envelope) (*e2e.Session, error) {
@@ -167,6 +176,7 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	bin := e2e.WantsBinary(r)
 	resp := s.dispatch(r.Context(), req)
 	plain, _ := json.Marshal(resp)
 	out, err := sess.Seal(plain)
@@ -175,7 +185,9 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out.Kind = "rpc"
-	writeJSON(w, http.StatusOK, out)
+	if err := e2e.WriteEnvelope(w, http.StatusOK, out, bin); err != nil {
+		s.Log.Debug("rpc write", "err", err)
+	}
 }
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
@@ -189,30 +201,34 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "stream unsupported", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
+	binStream := e2e.WantsBinaryStream(r)
+	if binStream {
+		w.Header().Set("Content-Type", e2e.ContentTypeEnvelopeStream)
+	} else {
+		w.Header().Set("Content-Type", "text/event-stream")
+	}
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	ch, err := s.dispatchStream(r.Context(), req)
 	if err != nil {
-		s.writeSSE(w, flusher, sess, protocol.Event{Type: "error", Text: err.Error(), Done: true})
+		s.writeStream(w, flusher, sess, protocol.Event{Type: "error", Text: err.Error(), Done: true}, binStream)
 		return
 	}
 	for ev := range ch {
-		if err := s.writeSSE(w, flusher, sess, ev); err != nil {
+		if err := s.writeStream(w, flusher, sess, ev, binStream); err != nil {
 			return
 		}
 	}
 }
 
-func (s *Server) writeSSE(w http.ResponseWriter, fl http.Flusher, sess *e2e.Session, ev protocol.Event) error {
+func (s *Server) writeStream(w http.ResponseWriter, fl http.Flusher, sess *e2e.Session, ev protocol.Event, binStream bool) error {
 	plain, _ := json.Marshal(ev)
 	env, err := sess.Seal(plain)
 	if err != nil {
 		return err
 	}
 	env.Kind = "stream"
-	raw, _ := json.Marshal(env)
-	if _, err := fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
+	if err := e2e.WriteStreamFrame(w, env, binStream); err != nil {
 		return err
 	}
 	fl.Flush()
@@ -220,9 +236,13 @@ func (s *Server) writeSSE(w http.ResponseWriter, fl http.Flusher, sess *e2e.Sess
 }
 
 func (s *Server) decodeRequest(r *http.Request) (e2e.Envelope, *e2e.Session, protocol.Request, error) {
-	var env e2e.Envelope
 	var req protocol.Request
-	if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return e2e.Envelope{}, nil, req, fmt.Errorf("bad envelope")
+	}
+	env, err := e2e.DecodeEnvelope(r, body)
+	if err != nil {
 		return env, nil, req, fmt.Errorf("bad envelope")
 	}
 	sess, err := s.sessionOf(env)

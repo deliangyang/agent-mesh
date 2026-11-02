@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-mesh/internal/e2e"
 	"agent-mesh/internal/openai"
 	"agent-mesh/internal/protocol"
 
@@ -127,7 +128,39 @@ func newFrameID() string {
 	return hex.EncodeToString(b[:])
 }
 
+func tunnelReq(id, method, path string, body []byte, hdr http.Header) protocol.TunnelFrame {
+	req := protocol.TunnelFrame{ID: id, Method: method, Path: path, Header: map[string]string{}}
+	if hdr != nil {
+		if ct := hdr.Get("Content-Type"); ct != "" {
+			req.Header["Content-Type"] = ct
+		}
+		if a := hdr.Get("Accept"); a != "" {
+			req.Header["Accept"] = a
+		}
+	}
+	if len(body) == 0 {
+		return req
+	}
+	ct := ""
+	if hdr != nil {
+		ct = hdr.Get("Content-Type")
+	}
+	if e2e.ContentTypeIsEnvelope(ct) || e2e.IsBinaryPayload(body) {
+		req.Raw = append([]byte(nil), body...)
+		if req.Header["Content-Type"] == "" {
+			req.Header["Content-Type"] = e2e.ContentTypeEnvelope
+		}
+		return req
+	}
+	req.Body = json.RawMessage(body)
+	return req
+}
+
 func (h *tunnelHub) Do(ctx context.Context, nodeID, method, path string, body []byte) (int, []byte, error) {
+	return h.DoHdr(ctx, nodeID, method, path, body, nil)
+}
+
+func (h *tunnelHub) DoHdr(ctx context.Context, nodeID, method, path string, body []byte, hdr http.Header) (int, []byte, error) {
 	t := h.get(nodeID)
 	if t == nil {
 		return 0, nil, fmt.Errorf("node tunnel offline")
@@ -135,10 +168,7 @@ func (h *tunnelHub) Do(ctx context.Context, nodeID, method, path string, body []
 	id := newFrameID()
 	ch := t.subscribe(id)
 	defer t.unsubscribe(id)
-	req := protocol.TunnelFrame{ID: id, Method: method, Path: path}
-	if len(body) > 0 {
-		req.Body = json.RawMessage(body)
-	}
+	req := tunnelReq(id, method, path, body, hdr)
 	if err := t.write(req); err != nil {
 		return 0, nil, err
 	}
@@ -175,6 +205,10 @@ func (h *tunnelHub) Do(ctx context.Context, nodeID, method, path string, body []
 }
 
 func (h *tunnelHub) Pipe(ctx context.Context, nodeID, method, path string, body []byte, w http.ResponseWriter) error {
+	return h.PipeHdr(ctx, nodeID, method, path, body, w, nil)
+}
+
+func (h *tunnelHub) PipeHdr(ctx context.Context, nodeID, method, path string, body []byte, w http.ResponseWriter, hdr http.Header) error {
 	t := h.get(nodeID)
 	if t == nil {
 		return fmt.Errorf("node tunnel offline")
@@ -182,10 +216,7 @@ func (h *tunnelHub) Pipe(ctx context.Context, nodeID, method, path string, body 
 	id := newFrameID()
 	ch := t.subscribe(id)
 	defer t.unsubscribe(id)
-	req := protocol.TunnelFrame{ID: id, Method: method, Path: path}
-	if len(body) > 0 {
-		req.Body = json.RawMessage(body)
-	}
+	req := tunnelReq(id, method, path, body, hdr)
 	if err := t.write(req); err != nil {
 		return err
 	}

@@ -233,6 +233,7 @@ type TunnelFrame struct {
 	Method string            `json:"method,omitempty"`
 	Path   string            `json:"path,omitempty"`
 	Body   json.RawMessage   `json:"body,omitempty"`
+	Raw    []byte            `json:"raw,omitempty"` // opaque binary request body (e2e envelopes)
 	Status int               `json:"status,omitempty"`
 	Header map[string]string `json:"header,omitempty"`
 	Chunk  []byte            `json:"chunk,omitempty"`

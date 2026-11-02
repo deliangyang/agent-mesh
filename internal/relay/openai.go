@@ -476,8 +476,12 @@ func (s *Server) getPath(ctx context.Context, rec Record, path string) ([]byte, 
 }
 
 func (s *Server) pipeNode(ctx context.Context, rec Record, method, path string, body []byte, w http.ResponseWriter) error {
+	return s.pipeNodeHdr(ctx, rec, method, path, body, w, nil)
+}
+
+func (s *Server) pipeNodeHdr(ctx context.Context, rec Record, method, path string, body []byte, w http.ResponseWriter, hdr http.Header) error {
 	if s.tunnels != nil && s.tunnels.get(rec.Info.ID) != nil {
-		err := s.tunnels.Pipe(ctx, rec.Info.ID, method, path, body, w)
+		err := s.tunnels.PipeHdr(ctx, rec.Info.ID, method, path, body, w, hdr)
 		if err == nil {
 			return nil
 		}
@@ -486,17 +490,27 @@ func (s *Server) pipeNode(ctx context.Context, rec Record, method, path string, 
 		}
 		s.Log.Debug("tunnel pipe", "node", rec.Info.ID, "path", path, "err", err)
 	}
-	return s.httpPipe(ctx, rec, method, path, body, w)
+	return s.httpPipe(ctx, rec, method, path, body, w, hdr)
 }
 
-func (s *Server) httpPipe(ctx context.Context, rec Record, method, path string, body []byte, w http.ResponseWriter) error {
+func (s *Server) httpPipe(ctx context.Context, rec Record, method, path string, body []byte, w http.ResponseWriter, hdr http.Header) error {
 	u := strings.TrimRight(rec.Advertise, "/") + path
 	req, err := http.NewRequestWithContext(ctx, method, u, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if strings.Contains(path, "/chat/completions") || strings.Contains(path, "/stream") || strings.Contains(path, "/events") {
+	ct := "application/json"
+	if hdr != nil {
+		if v := hdr.Get("Content-Type"); v != "" {
+			ct = v
+		}
+		if v := hdr.Get("Accept"); v != "" {
+			req.Header.Set("Accept", v)
+		}
+	}
+	req.Header.Set("Content-Type", ct)
+	if req.Header.Get("Accept") == "" &&
+		(strings.Contains(path, "/chat/completions") || strings.Contains(path, "/stream") || strings.Contains(path, "/events")) {
 		req.Header.Set("Accept", "text/event-stream")
 	}
 	cli := s.Client

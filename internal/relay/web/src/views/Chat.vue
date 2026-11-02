@@ -556,7 +556,15 @@ watch(
     // 草稿会话钉在 draft-* thread 上；中途改 thread-id 会 abort 首轮流式输出。
     if (isDraftChat.value) return;
     meshAgent.threadId = threadId.value;
-    expectHistory(threadId.value);
+  },
+  { immediate: true },
+);
+
+watch(
+  threadId,
+  (tid) => {
+    if (isDraftChat.value || !tid) return;
+    expectHistory(tid);
   },
   { immediate: true },
 );
@@ -678,8 +686,6 @@ async function onComposerPull(
 
 function onLinkUp(): void {
   refreshCatalog();
-  const tid = threadId.value;
-  if (tid) expectHistory(tid);
 }
 
 function hideKitCursor(): void {

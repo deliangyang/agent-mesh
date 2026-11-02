@@ -271,6 +271,34 @@ export function lastTurnMessages(msgs: Message[], n: number): Message[] {
   return rows;
 }
 
+export function sameEvents(a: MeshEvent[], b: MeshEvent[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if ((x.type || "") !== (y.type || "")) return false;
+    if ((x.role || "") !== (y.role || "")) return false;
+    if ((x.tool || "") !== (y.tool || "")) return false;
+    if ((x.text || "") !== (y.text || "")) return false;
+  }
+  return true;
+}
+
+export function sameMessages(a: Message[], b: Message[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] as Message & { toolCalls?: unknown; toolCallId?: string };
+    const y = b[i] as Message & { toolCalls?: unknown; toolCallId?: string };
+    if (x.role !== y.role) return false;
+    if (JSON.stringify(x.content ?? "") !== JSON.stringify(y.content ?? "")) return false;
+    if (JSON.stringify(x.toolCalls ?? null) !== JSON.stringify(y.toolCalls ?? null)) return false;
+    if ((x.toolCallId || "") !== (y.toolCallId || "")) return false;
+  }
+  return true;
+}
+
 function argsContinue(prev: string, next: string): boolean {
   if (!next) return true;
   const a = (prev || "").trim();

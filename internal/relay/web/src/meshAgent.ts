@@ -6,7 +6,7 @@ import { clearAsk, noteAskEvent, noteAskEvents, noteAskFromTool } from "./ask";
 import { keepMediaContent, lastUserPayload } from "./attach";
 import { fetchJSON } from "./http";
 import { showToast, toastError } from "./toast";
-import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sessionIdFromChunk } from "./events";
+import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
 import { meshTarget, parseThreadId } from "./target";
 import type { MeshEvent } from "./types";
@@ -280,19 +280,17 @@ export class MeshAgent extends AbstractAgent {
       const runId = input.runId || crypto.randomUUID();
       const threadId = input.threadId || this.threadId;
       const cached = historyCache.get(threadId) || [];
+      // 同一会话已在画面上时回放当前列表；换会话则用该会话缓存，不要把旧对话快照带过去。
+      const reuseLive = historyThread === threadId && this.messages.length > 0;
       if (cached.length) {
         historyEvents = cached;
         historyThread = threadId;
       }
-      // 正在本地 run 或本轮已有消息时回放当前列表，避免空快照把对话清掉。
-      const current = this.messages.slice();
-      const snapshot = current.length
-        ? current
-        : this.isRunning
-          ? current
-          : cached.length
-            ? lastTurnMessages(eventsToMessages(cached), FIRST_PAINT_TURNS)
-            : [];
+      const snapshot = reuseLive
+        ? this.messages.slice()
+        : cached.length
+          ? eventsToMessages(cached)
+          : [];
       sub.next({ type: EventType.RUN_STARTED, threadId, runId });
       sub.next({
         type: EventType.MESSAGES_SNAPSHOT,
@@ -300,7 +298,6 @@ export class MeshAgent extends AbstractAgent {
       });
       sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
       sub.complete();
-      if (!this.isRunning) void refreshHistory(threadId);
       return () => {};
     });
   }
@@ -603,15 +600,20 @@ export function expectHistory(threadId: string): void {
   if (!threadId) return;
   chatLoad.thread = threadId;
   const cached = historyCache.get(threadId);
-  chatLoad.loading = !cached || cached.length === 0;
   if (cached && cached.length) {
+    const sameThread = historyThread === threadId;
     historyEvents = cached;
     historyThread = threadId;
-    noteAskEvents(cached, true);
-    paintMessages(cached, true);
-  } else {
-    clearAsk();
+    if (historySource === "none") historySource = "http";
+    chatLoad.loading = false;
+    if (!sameThread || meshAgent.messages.length === 0) {
+      noteAskEvents(cached, true);
+      paintMessages(cached, meshAgent.messages.length === 0);
+    }
+    return;
   }
+  chatLoad.loading = true;
+  clearAsk();
   void refreshHistory(threadId);
 }
 
@@ -619,14 +621,15 @@ function paintMessages(evs: MeshEvent[], progressive: boolean): void {
   if (!runningNow()) noteAskEvents(evs, true);
   const prev = meshAgent.messages.slice();
   const all = ensureTurnThink(keepMediaContent(eventsToMessages(evs), prev), meshLive.think);
-  const first = progressive ? lastTurnMessages(all, FIRST_PAINT_TURNS) : all;
-  if (!runningNow()) meshAgent.setMessages(first);
+  const first = progressive && prev.length === 0 ? lastTurnMessages(all, FIRST_PAINT_TURNS) : all;
+  if (!runningNow() && !sameMessages(prev, first)) meshAgent.setMessages(first);
   chatLoad.loading = false;
-  if (!progressive || first.length >= all.length) return;
+  if (!progressive || first.length >= all.length || prev.length > 0) return;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       if (runningNow()) return;
       if (historyEvents !== evs) return;
+      if (sameMessages(meshAgent.messages, all)) return;
       meshAgent.setMessages(all);
     });
   });
@@ -640,14 +643,23 @@ export function applyHistory(evs: MeshEvent[], reset: boolean): void {
   const incoming = evs || [];
   // 新建会话的历史可能尚为空；空快照不能覆盖正在流式输出的对话。
   if (reset && keepLiveTranscript(incoming)) return;
-  noteAskEvents(incoming, reset);
   const thread = meshAgent.threadId || historyThread;
-  if (reset) historyEvents = incoming.slice();
-  else historyEvents = historyEvents.concat(incoming);
+  if (reset) {
+    if (historyThread === thread && sameEvents(historyEvents, incoming)) {
+      historySource = "ws";
+      chatLoad.loading = false;
+      return;
+    }
+    historyEvents = incoming.slice();
+  } else {
+    if (!incoming.length) return;
+    historyEvents = historyEvents.concat(incoming);
+  }
+  noteAskEvents(incoming, reset);
   historySource = "ws";
   historyThread = thread;
   if (thread) historyCache.set(thread, historyEvents);
-  paintMessages(historyEvents, reset);
+  paintMessages(historyEvents, reset && meshAgent.messages.length === 0);
   putFlags(
     flagsAfterEvents(
       { streaming: meshLive.streaming, thinking: meshLive.thinking },
@@ -665,15 +677,13 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal): Pr
     chatLoad.thread = "";
     return;
   }
-  if (historyThread !== threadId) historySource = "none";
-  const cached = historyCache.get(threadId);
-  chatLoad.thread = threadId;
-  chatLoad.loading = !cached || cached.length === 0;
-  if (cached && cached.length) {
-    historyEvents = cached;
-    historyThread = threadId;
-    paintMessages(cached, true);
+  if (historyThread === threadId && historyEvents.length && historySource !== "none") {
+    chatLoad.loading = false;
+    return;
   }
+  if (historyThread !== threadId) historySource = "none";
+  chatLoad.thread = threadId;
+  chatLoad.loading = historyEvents.length === 0 || historyThread !== threadId;
   historyAbort?.abort();
   const ac = new AbortController();
   historyAbort = ac;
@@ -707,11 +717,16 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal): Pr
       chatLoad.loading = false;
       return;
     }
+    if (historyThread === threadId && sameEvents(historyEvents, rows)) {
+      historySource = "http";
+      chatLoad.loading = false;
+      return;
+    }
     historyEvents = rows;
     historyThread = threadId;
     historySource = "http";
     historyCache.set(threadId, historyEvents);
-    paintMessages(historyEvents, true);
+    paintMessages(historyEvents, meshAgent.messages.length === 0);
   } catch (err) {
     if (ac.signal.aborted || gen !== historyGen) return;
     chatLoad.loading = false;

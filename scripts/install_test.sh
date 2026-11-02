@@ -100,6 +100,8 @@ assert_grep 'MESH_RELAY=https://mesh.example.com' "${STATE_NODE}/node.env"
 assert_file "${TMP}/systemd/agent-mesh-node.service"
 assert_file "${TMP}/applications/agent-mesh.desktop"
 assert_grep 'run-desktop' "${TMP}/applications/agent-mesh.desktop"
+gui_out="$("${PREFIX_NODE}/lib/agent-mesh/run-desktop")"
+[ "$gui_out" = "gui" ] || fail "run-desktop should exec the window binary, got: ${gui_out}"
 
 # 字符界面：headless，不装桌面程序；重装时更新 MESH_RELAY
 PREFIX_H="${TMP}/prefix-headless"

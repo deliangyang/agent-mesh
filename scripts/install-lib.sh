@@ -429,6 +429,8 @@ if [ -f "\${STATE}/node.env" ]; then
 fi
 GUI="${BIN_DIR}/agent-mesh"
 if [ -x "\$GUI" ]; then
+  # JavaScriptCore 默认占用 SIGUSR1，和 Go 运行时冲突；改到实时信号 39。
+  export JSC_SIGNAL_FOR_GC="\${JSC_SIGNAL_FOR_GC:-39}"
   exec "\$GUI" "\$@"
 fi
 os="\$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -890,6 +892,13 @@ mesh_build_from_source() {
     make -C "$src" node ctl
     install -m 0755 "${src}/bin/node" "${dest_dir}/mesh-node"
     install -m 0755 "${src}/bin/ctl" "${dest_dir}/mesh-ctl"
+    if [ "$WITH_DESKTOP" -eq 1 ]; then
+      if command -v wails >/dev/null 2>&1 && make -C "$src" desktop; then
+        install -m 0755 "${src}/bin/agent-mesh" "${dest_dir}/agent-mesh"
+      else
+        echo "skip desktop GUI (need wails + gtk/webkit); launcher will open MESH_RELAY in a browser" >&2
+      fi
+    fi
   fi
   rm -rf "$src"
 }

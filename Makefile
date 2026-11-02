@@ -25,7 +25,7 @@ ctl:
 
 desktop:
 	mkdir -p bin
-	cd desktop && wails build
+	cd desktop && GOTOOLCHAIN=go1.25.0 wails build
 	cp -f desktop/build/bin/agent-mesh bin/agent-mesh
 
 setup:

@@ -33,6 +33,8 @@ func prepareWebKitEnv() {
 	setenvDefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
 	setenvDefault("LIBGL_DRI3_DISABLE", "1")
 	setenvDefault("GDK_GL", "disable")
+	// JavaScriptCore 默认占用 SIGUSR1，和 Go 运行时冲突，窗口会在 runtime.scanstack 里崩掉。
+	setenvDefault("JSC_SIGNAL_FOR_GC", "39")
 	if driAccessible() {
 		return
 	}

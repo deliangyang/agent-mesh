@@ -399,29 +399,45 @@ func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error)
 		}
 		jsonl := d.findJSONL(gw.Session)
 		s.JSONL = jsonl
-		s.Busy = driver.Recent(jsonl)
+		s.Busy = driver.RecentWithin(jsonl, 2*time.Minute)
 		s.UpdatedAt = driver.MtimeUnix(jsonl)
 		seen[s.ID] = driver.WithJSONLTitle(s)
 	}
-	if all {
-		_ = filepath.Walk(filepath.Join(d.root, "projects"), func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".jsonl") {
-				return nil
-			}
-			id := strings.TrimSuffix(info.Name(), ".jsonl")
-			if _, ok := seen[id]; ok {
-				return nil
-			}
-			seen[id] = driver.WithJSONLTitle(protocol.Session{
-				Engine:    d.Name(),
-				ID:        id,
-				Status:    "history",
-				JSONL:     path,
-				UpdatedAt: info.ModTime().Unix(),
-			})
+	// Always scan projects so recently-active jsonl sessions stay Busy for the
+	// hub watcher. On Windows the interactive gateway file often dies while the
+	// desktop app keeps appending the transcript.
+	_ = filepath.Walk(filepath.Join(d.root, "projects"), func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".jsonl") {
 			return nil
+		}
+		id := strings.TrimSuffix(info.Name(), ".jsonl")
+		if cur, ok := seen[id]; ok {
+			if cur.JSONL == "" {
+				cur.JSONL = path
+			}
+			cur.Busy = cur.Busy || driver.RecentWithin(path, 2*time.Minute)
+			cur.UpdatedAt = driver.MtimeUnix(path)
+			seen[id] = driver.WithJSONLTitle(cur)
+			return nil
+		}
+		busy := driver.RecentWithin(path, 2*time.Minute)
+		if !all && !busy {
+			return nil
+		}
+		status := "history"
+		if busy {
+			status = "busy"
+		}
+		seen[id] = driver.WithJSONLTitle(protocol.Session{
+			Engine:    d.Name(),
+			ID:        id,
+			Status:    status,
+			JSONL:     path,
+			Busy:      busy,
+			UpdatedAt: info.ModTime().Unix(),
 		})
-	}
+		return nil
+	})
 	out := make([]protocol.Session, 0, len(seen))
 	for _, s := range seen {
 		if !all && !s.Live && !s.Busy {
@@ -471,9 +487,6 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-ch
 		return nil, fmt.Errorf("no live workbuddy gateway")
 	}
 	gw := gws[0]
-	if gw.Password == "" {
-		return nil, fmt.Errorf("gateway password missing")
-	}
 	// watch jsonl first so live lines are not lost during the reply round-trip.
 	watchCtx, cancelWatch := context.WithCancel(ctx)
 	ch, watchErr := d.Watch(watchCtx, sessionID)
@@ -487,7 +500,9 @@ func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-ch
 		cancelWatch()
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+gw.Password)
+	if gw.Password != "" {
+		req.Header.Set("Authorization", "Bearer "+gw.Password)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	cli := &http.Client{Timeout: 15 * time.Second}
 	resp, err := cli.Do(req)

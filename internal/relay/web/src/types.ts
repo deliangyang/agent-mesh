@@ -17,6 +17,8 @@ export type EngineRow = {
   name: string;
   title?: string;
   node_id?: string;
+  available?: boolean;
+  enabled?: boolean;
 };
 
 export type ModelCard = {

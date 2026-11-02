@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -342,24 +341,6 @@ func (d *Driver) discover() []gateway {
 			pass = env["WORKBUDDY_GATEWAY_PASSWORD"]
 		}
 		out = append(out, gateway{PID: pid, URL: strings.TrimRight(url, "/"), Password: pass, Session: sid, CWD: cwd})
-	}
-	return out
-}
-
-func readProcEnviron(pid int) map[string]string {
-	if runtime.GOOS != "linux" {
-		return nil
-	}
-	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
-	if err != nil {
-		return nil
-	}
-	out := map[string]string{}
-	for _, part := range bytes.Split(raw, []byte{0}) {
-		k, v, ok := strings.Cut(string(part), "=")
-		if ok {
-			out[k] = v
-		}
 	}
 	return out
 }

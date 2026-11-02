@@ -914,13 +914,66 @@ func piMessageUpdate(obj map[string]any) []protocol.Event {
 	return []protocol.Event{}
 }
 
+// contentUseful reports whether v looks like a real message body (not empty / usage-only).
+func contentUseful(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(t) != ""
+	case []any:
+		return len(t) > 0
+	case map[string]any:
+		return len(t) > 0
+	default:
+		return true
+	}
+}
+
+// jsonlContent picks the message body across engine layouts (same product can differ by
+// version/OS): Claude/Cursor nest under message.content; WorkBuddy keeps text on the
+// top-level content and may put only usage under message{}.
+func jsonlContent(obj, msg map[string]any) any {
+	var nested any
+	if msg != nil {
+		nested = msg["content"]
+	}
+	top := obj["content"]
+	switch {
+	case contentUseful(nested):
+		return nested
+	case contentUseful(top):
+		return top
+	case nested != nil:
+		return nested
+	default:
+		return top
+	}
+}
+
+func jsonlRole(obj, msg map[string]any, kind string) string {
+	if role := strField(obj, "role"); role != "" {
+		return role
+	}
+	if msg != nil {
+		if role := strField(msg, "role"); role != "" {
+			return role
+		}
+	}
+	if kind != "" && kind != "message" {
+		return kind
+	}
+	return ""
+}
+
 // ParseJSONL parses one jsonl object into structured events, including tool calls and results.
 func ParseJSONL(obj map[string]any) []protocol.Event {
 	if obj == nil {
 		return nil
 	}
 	kind := strField(obj, "type")
-	role := strField(obj, "role")
+	msg, _ := obj["message"].(map[string]any)
+	role := jsonlRole(obj, msg, kind)
 	if role == "" {
 		role = kind
 	}
@@ -963,13 +1016,7 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 	if b, ok := obj["isMeta"].(bool); ok && b {
 		return nil
 	}
-	msg, _ := obj["message"].(map[string]any)
-	var content any
-	if msg != nil {
-		content = msg["content"]
-	} else {
-		content = obj["content"]
-	}
+	content := jsonlContent(obj, msg)
 
 	if kind == "thinking" || kind == "reasoning" || kind == "thought" || kind == "thinking_delta" {
 		text := ContentToText(content)

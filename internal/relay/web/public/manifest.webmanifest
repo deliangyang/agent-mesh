@@ -1,0 +1,19 @@
+{
+  "name": "Agent Mesh",
+  "short_name": "Mesh",
+  "description": "One session mesh for local coding agents",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F1F3F2",
+  "theme_color": "#1E2B27",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

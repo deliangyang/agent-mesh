@@ -24,9 +24,13 @@ func main() {
 	key := flag.String("key", defaultKey(), "identity key file")
 	name := flag.String("name", hostname(), "node name")
 	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi,qoder-cn", "enabled engines")
+	noTray := flag.Bool("no-tray", false, "Windows: do not show a tray icon")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	if !*noTray {
+		log = withGUILog(log)
+	}
 	ident, err := e2e.LoadOrCreate(*key)
 	if err != nil {
 		log.Error("load identity", "err", err)
@@ -49,7 +53,18 @@ func main() {
 		adv = node.GuessAdvertise(*listen)
 	}
 	go srv.RegisterLoop(ctx, relayList, adv, *password)
-	if err := srv.ListenAndServe(ctx); err != nil {
+	errCh := make(chan error, 1)
+	go func() {
+		err := srv.ListenAndServe(ctx)
+		errCh <- err
+		if err != nil {
+			stop()
+		}
+	}()
+	if !*noTray {
+		_ = runWindowsTray(ctx, stop, nodeUIURL(*listen))
+	}
+	if err := <-errCh; err != nil {
 		log.Error("serve", "err", err)
 		os.Exit(1)
 	}
@@ -64,5 +79,5 @@ func hostname() string {
 }
 
 func defaultKey() string {
-	return filepath.Join(os.Getenv("HOME"), ".agent-mesh", "node.key")
+	return filepath.Join(driver.MeshHome(), "node.key")
 }

@@ -47,10 +47,7 @@ func baseDir() string {
 	if root != "" {
 		return root
 	}
-	if env := strings.TrimSpace(os.Getenv("AGENT_MESH_HOME")); env != "" {
-		return filepath.Join(env, "followups")
-	}
-	return filepath.Join(driver.Home(), ".agent-mesh", "followups")
+	return filepath.Join(driver.MeshHome(), "followups")
 }
 
 func safeName(s string) string {

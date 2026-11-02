@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -43,13 +43,14 @@ func New() *Driver {
 	if data == "" {
 		data = filepath.Join(driver.Home(), ".cursor")
 	}
-	bin := os.Getenv("CURSOR_AGENT_BIN")
-	if bin == "" {
-		bin, _ = exec.LookPath("agent")
+	var extra []string
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		extra = []string{
+			filepath.Join(local, "cursor-agent", "agent.exe"),
+			filepath.Join(local, "Programs", "cursor", "agent.exe"),
+		}
 	}
-	if bin == "" {
-		bin = filepath.Join(driver.Home(), ".local", "bin", "agent")
-	}
+	bin := driver.LookCLI([]string{"CURSOR_AGENT_BIN"}, []string{"agent", "cursor-agent"}, extra)
 	return &Driver{config: cfg, data: data, bin: bin}
 }
 
@@ -62,7 +63,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Binary: d.bin,
 		Detail: d.config,
 	}
-	info.Available = driver.FileExists(d.bin)
+	info.Available = driver.BinExists(d.bin)
 	if info.Available {
 		info.Version = driver.BinVersion(ctx, d.bin)
 	}
@@ -123,8 +124,12 @@ func (d *Driver) findJSONL(id, cwd string) string {
 
 func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error) {
 	seen := map[string]protocol.Session{}
-	procDir, err := os.ReadDir("/proc")
-	if err == nil {
+	var procDir []os.DirEntry
+	var err error
+	if runtime.GOOS == "linux" {
+		procDir, err = os.ReadDir("/proc")
+	}
+	if err == nil && len(procDir) > 0 {
 		for _, e := range procDir {
 			if !e.IsDir() {
 				continue
@@ -338,7 +343,7 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) 
 		args = append(args, "--workspace", cwd)
 	}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
-	cmd := exec.CommandContext(ctx, d.bin, args...)
+	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}

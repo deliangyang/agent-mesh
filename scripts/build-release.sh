@@ -25,7 +25,17 @@ pack_files() {
   (
     cd "$src"
     if [ "${archive%.zip}" != "$archive" ]; then
-      zip -qr "$archive" "$@"
+      if command -v zip >/dev/null 2>&1; then
+        zip -qr "$archive" "$@"
+      else
+        python3 - "$archive" "$@" <<'PY'
+import sys, zipfile
+archive = sys.argv[1]
+with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+    for name in sys.argv[2:]:
+        z.write(name)
+PY
+      fi
     else
       tar -czf "$archive" "$@"
     fi
@@ -42,7 +52,9 @@ build_one() {
   rm -rf "$work"
   mkdir -p "$work"
   echo "building ${goos}/${goarch}"
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$ldflags" -o "${work}/mesh-node${ext}" ./cmd/node
+  node_ldflags="$ldflags"
+  [ "$goos" = windows ] && node_ldflags="$ldflags -H windowsgui"
+  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$node_ldflags" -o "${work}/mesh-node${ext}" ./cmd/node
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$ldflags" -o "${work}/mesh-relay${ext}" ./cmd/relay
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$ldflags" -o "${work}/mesh-ctl${ext}" ./cmd/ctl
   cp "$ROOT/README.md" "$work/"

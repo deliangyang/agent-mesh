@@ -25,7 +25,7 @@ func main() {
 	relay := fs.String("relay", env("MESH_RELAY", ""), "relay URL")
 	direct := fs.String("direct", env("MESH_DIRECT", ""), "direct node URL; skips the relay when set")
 	nodeID := fs.String("node", env("MESH_NODE", ""), "target node ID")
-	key := fs.String("key", filepath.Join(os.Getenv("HOME"), ".agent-mesh", "client.key"), "client identity key")
+	key := fs.String("key", defaultClientKey(), "client identity key")
 	engine := fs.String("engine", "", "engine: workbuddy/claude/cursor/codex/opencode/pi/qoder-cn")
 	all := fs.Bool("all", false, "include history")
 	tail := fs.Int("tail", 80, "history line count")
@@ -195,6 +195,14 @@ func needEngine(e string) string {
 		fatal("pass --engine with workbuddy/claude/cursor/codex/opencode/pi")
 	}
 	return e
+}
+
+func defaultClientKey() string {
+	if env := strings.TrimSpace(os.Getenv("AGENT_MESH_HOME")); env != "" {
+		return filepath.Join(env, "client.key")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".agent-mesh", "client.key")
 }
 
 func env(k, def string) string {

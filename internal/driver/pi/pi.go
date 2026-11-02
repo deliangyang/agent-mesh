@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -22,23 +22,12 @@ type Driver struct {
 }
 
 func findBin() string {
-	if bin := os.Getenv("PI_BIN"); bin != "" {
-		return bin
-	}
-	if bin, err := exec.LookPath("pi"); err == nil {
-		return bin
-	}
 	home := driver.Home()
-	for _, p := range []string{
-		filepath.Join(home, ".npm-global", "bin", "pi"),
-		filepath.Join(home, ".local", "bin", "pi"),
-		"/usr/local/bin/pi",
-	} {
-		if driver.FileExists(p) {
-			return p
-		}
+	extra := []string{filepath.Join(home, ".npm-global", "bin", "pi")}
+	if runtime.GOOS != "windows" {
+		extra = append(extra, "/usr/local/bin/pi")
 	}
-	return filepath.Join(home, ".local", "bin", "pi")
+	return driver.LookCLI([]string{"PI_BIN"}, []string{"pi"}, extra)
 }
 
 // New creates the driver.
@@ -66,7 +55,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Binary: d.bin,
 		Detail: d.root,
 	}
-	info.Available = driver.FileExists(d.bin)
+	info.Available = driver.BinExists(d.bin)
 	if info.Available {
 		info.Version = driver.BinVersion(ctx, d.bin)
 	}
@@ -230,7 +219,7 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 }
 
 func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
-	if !driver.FileExists(d.bin) {
+	if !driver.BinExists(d.bin) {
 		return nil, fmt.Errorf("cannot find the pi binary (tried PATH and ~/.npm-global/bin/pi)")
 	}
 	args := []string{"-p", "--mode", "json"}
@@ -241,7 +230,7 @@ func (d *Driver) run(ctx context.Context, cwd, text, resume, model string) (<-ch
 	}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
 	args = append(args, "--", text)
-	cmd := exec.CommandContext(ctx, d.bin, args...)
+	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -31,13 +30,7 @@ func New() *Driver {
 	if root == "" {
 		root = filepath.Join(driver.Home(), ".codex")
 	}
-	bin := os.Getenv("CODEX_BIN")
-	if bin == "" {
-		bin, _ = exec.LookPath("codex")
-	}
-	if bin == "" {
-		bin = filepath.Join(driver.Home(), ".local", "bin", "codex")
-	}
+	bin := driver.LookCLI([]string{"CODEX_BIN"}, []string{"codex"}, nil)
 	return &Driver{root: root, bin: bin}
 }
 
@@ -50,7 +43,7 @@ func (d *Driver) Probe(ctx context.Context) protocol.EngineInfo {
 		Binary: d.bin,
 		Detail: d.root,
 	}
-	info.Available = driver.FileExists(d.bin)
+	info.Available = driver.BinExists(d.bin)
 	if info.Available {
 		info.Version = driver.BinVersion(ctx, d.bin)
 	}
@@ -167,7 +160,7 @@ func (d *Driver) sessionDirs() []string {
 func (d *Driver) List(ctx context.Context, all bool) ([]protocol.Session, error) {
 	seen := map[string]protocol.Session{}
 	if d.bin != "" {
-		cmd := exec.CommandContext(ctx, d.bin, "agents")
+		cmd := driver.CommandContext(ctx, d.bin, "agents")
 		if out, err := cmd.Output(); err == nil {
 			var rows []map[string]any
 			if json.Unmarshal(out, &rows) == nil {
@@ -345,7 +338,7 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 }
 
 func (d *Driver) Reply(ctx context.Context, sessionID, text, model string) (<-chan protocol.Event, error) {
-	cmd := exec.CommandContext(ctx, d.bin, "queue", sessionID, text)
+	cmd := driver.CommandContext(ctx, d.bin, "queue", sessionID, text)
 	if err := cmd.Run(); err == nil {
 		return d.Watch(ctx, sessionID)
 	}
@@ -363,7 +356,7 @@ func (d *Driver) runExec(ctx context.Context, cwd, text, resume, model string) (
 		args = append(args, "resume", resume)
 	}
 	args = append(args, text)
-	cmd := exec.CommandContext(ctx, d.bin, args...)
+	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}

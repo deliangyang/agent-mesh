@@ -105,7 +105,7 @@ MESH_PASSWORD=change-me ./bin/relay -listen 0.0.0.0:8443 -web
 
 Claude Code · Cursor Agent · Codex · OpenCode · Pi · WorkBuddy · Qoder CN
 
-节点只列出这台机器上装了的引擎。任何能填 OpenAI chat completions 的工具也可以打节点或中继：
+节点只列出这台机器上装了的引擎。Windows 上会从 `PATH`、`%USERPROFILE%\.local\bin` 和 `%APPDATA%\npm` 查找（含 `.exe` / `.cmd`）。双击 `mesh-node-windows-amd64.exe` 会进托盘：左键打开界面且不退出，右键「退出」才结束节点。任何能填 OpenAI chat completions 的工具也可以打节点或中继：
 
 ```sh
 export OPENAI_BASE_URL=http://127.0.0.1:7700/v1
@@ -153,7 +153,8 @@ export OPENAI_API_KEY=mesh
 make setup         # 工具链 + 编译 + ~/.agent-mesh
 make test          # Go 测试（排除 desktop）+ 网页测试
 make node relay ctl
-make dist          # dist/agent-mesh-{relay,node}_<os>_<arch>.tar.gz
+make dist          # dist/agent-mesh-{relay,node}_<os>_<arch>.tar.gz（Windows 为 .zip）
+make node-windows  # bin/mesh-node-windows-{amd64,arm64}.exe 以及 mesh-ctl-windows-*.exe
 make supervisor    # 生成并重启本机 supervisord 单元
 ```
 

@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -1403,14 +1401,6 @@ func TitleOf(name string) string {
 	}
 }
 
-// DataHome user data directory.
-func DataHome() string {
-	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
-		return x
-	}
-	return filepath.Join(Home(), ".local", "share")
-}
-
 // StreamJSONL turns JSONL on stdout into events.
 func StreamJSONL(r io.Reader, engine, session string, emit func(protocol.Event)) {
 	sc := bufio.NewScanner(r)
@@ -1445,7 +1435,7 @@ func RunOutput(ctx context.Context, timeout time.Duration, bin string, args ...s
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := CommandContext(ctx, bin, args...)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf

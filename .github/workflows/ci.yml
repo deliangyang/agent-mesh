@@ -29,6 +29,8 @@ jobs:
         run: make web
       - name: Build binaries
         run: make node relay ctl
+      - name: Cross-compile Windows node
+        run: make node-windows
       - name: Smoke CLI
         run: |
           ./bin/ctl >/dev/null || true

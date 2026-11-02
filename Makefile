@@ -4,6 +4,7 @@ all: relay desktop
 
 web:
 	cd internal/relay/web && npm ci && npm run build
+	touch internal/relay/web/dist/.gitkeep
 
 relay: web
 	mkdir -p bin

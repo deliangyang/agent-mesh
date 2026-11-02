@@ -9,6 +9,10 @@
 node_modules/
 dist-ssr/
 *.local
+
+# vite 网页产物，make web 时再生成；占位文件留给 go:embed
+internal/relay/web/dist/*
+!internal/relay/web/dist/.gitkeep
 npm-debug.log*
 pnpm-debug.log*
 yarn-error.log*

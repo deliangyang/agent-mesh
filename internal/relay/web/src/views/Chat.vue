@@ -137,7 +137,7 @@ const filters = reactive({
   dir: String(route.query.dir || savedPick?.dir || ""),
 });
 
-const osFilter = ref("");
+const osFilter = ref(String(route.query.os || savedPick?.os || ""));
 
 const engineCards = computed(() => nodeEngines(catalog.engines, filters.node));
 
@@ -351,9 +351,15 @@ function syncQuery(s: Session | null): void {
     model: filters.model,
     dir: filters.dir,
     session: s?.id || "",
+    os: osFilter.value || "",
   };
   saveLastPick(pick);
   router.replace({ path: "/", query: pickToQuery(pick) });
+}
+
+function setOsFilter(os: string): void {
+  osFilter.value = os;
+  syncQuery(selected.value);
 }
 
 function findSession(node: string, engine: string, sid: string): Session | undefined {
@@ -552,6 +558,12 @@ watch(
     }
   },
 );
+
+watch(platformOptions, (opts) => {
+  if (osFilter.value && !opts.includes(osFilter.value)) {
+    setOsFilter("");
+  }
+});
 
 watch(
   () => [meshLive.session, meshLive.title] as const,
@@ -885,7 +897,7 @@ onBeforeUnmount(() => {
               type="button"
               class="mesh-os-chip"
               :class="{ sel: !osFilter }"
-              @click="osFilter = ''"
+              @click="setOsFilter('')"
             >
               {{ t("nav.filterAll") }}
             </button>
@@ -895,7 +907,7 @@ onBeforeUnmount(() => {
               type="button"
               class="mesh-os-chip"
               :class="{ sel: osFilter === os }"
-              @click="osFilter = os"
+              @click="setOsFilter(os)"
             >
               {{ platformLabel({ os }) || os }}
             </button>

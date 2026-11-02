@@ -6,6 +6,7 @@ export type LastPick = {
   model?: string;
   dir?: string;
   session?: string;
+  os?: string;
   all?: boolean;
 };
 
@@ -36,6 +37,7 @@ export function pickToQuery(pick: LastPick): Record<string, string> {
   if (pick.model) q.model = pick.model;
   if (pick.dir) q.dir = pick.dir;
   if (pick.session) q.session = pick.session;
+  if (pick.os) q.os = pick.os;
   if (pick.all) q.all = "1";
   return q;
 }

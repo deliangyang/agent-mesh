@@ -94,15 +94,83 @@ func TestParseJSONLWorkBuddy(t *testing.T) {
 		t.Fatalf("function_call_result %#v", res)
 	}
 
-	msg := ParseJSONL(map[string]any{
-		"type": "message",
-		"role": "assistant",
-		"content": []any{
-			map[string]any{"type": "output_text", "text": "done"},
+	cases := []struct {
+		name string
+		obj  map[string]any
+		want string
+	}{
+		{
+			name: "workbuddy-top-only",
+			obj: map[string]any{
+				"type": "message",
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": "done"},
+				},
+			},
+			want: "done",
 		},
-	})
-	if len(msg) != 1 || msg[0].Type != "assistant" || msg[0].Text != "done" {
-		t.Fatalf("message %#v", msg)
+		{
+			name: "workbuddy-usage-sidecar",
+			obj: map[string]any{
+				"type": "message",
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": "目录是空的"},
+				},
+				"message": map[string]any{
+					"usage": map[string]any{"input_tokens": 1, "output_tokens": 2},
+				},
+			},
+			want: "目录是空的",
+		},
+		{
+			name: "workbuddy-empty-nested-content",
+			obj: map[string]any{
+				"type": "message",
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": "from-top"},
+				},
+				"message": map[string]any{
+					"content": []any{},
+					"usage":   map[string]any{"input_tokens": 1},
+				},
+			},
+			want: "from-top",
+		},
+		{
+			name: "claude-nested-content",
+			obj: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"role": "assistant",
+					"content": []any{
+						map[string]any{"type": "text", "text": "nested-ok"},
+					},
+				},
+			},
+			want: "nested-ok",
+		},
+		{
+			name: "role-inside-message",
+			obj: map[string]any{
+				"type": "message",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": "role-nested"},
+				},
+				"message": map[string]any{"role": "assistant"},
+			},
+			want: "role-nested",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseJSONL(tc.obj)
+			if len(got) != 1 || got[0].Type != "assistant" || got[0].Text != tc.want {
+				t.Fatalf("got %#v want assistant %q", got, tc.want)
+			}
+		})
 	}
 }
 

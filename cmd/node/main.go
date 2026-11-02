@@ -24,7 +24,7 @@ func main() {
 	key := flag.String("key", defaultKey(), "identity key file")
 	name := flag.String("name", hostname(), "node name")
 	engines := flag.String("engines", "workbuddy,claude,cursor,codex,opencode,pi,qoder-cn", "enabled engines")
-	noTray := flag.Bool("no-tray", false, "Windows: do not show a tray icon")
+	noTray := flag.Bool("no-tray", false, "do not open desktop UI / tray (headless)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))

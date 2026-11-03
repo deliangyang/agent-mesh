@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { capsAllowDiff, capsAllowFollowups, capsBadges, engineCaps } from "./engineCaps.ts";
+import {
+  capsAllowAsk,
+  capsAllowDiff,
+  capsAllowFollowups,
+  capsBadges,
+  engineCaps,
+  showAskChrome,
+} from "./engineCaps.ts";
 
 describe("engineCaps", () => {
   it("defaults to all-on when missing", () => {
@@ -20,6 +27,21 @@ describe("engineCaps", () => {
     );
     assert.equal(capsAllowDiff(caps), false);
     assert.equal(capsAllowFollowups(caps), true);
+    assert.equal(capsAllowAsk(caps), false);
+  });
+});
+
+describe("showAskChrome", () => {
+  it("hides ask chrome when caps omit ask and no live prompt", () => {
+    assert.equal(showAskChrome({ tools: true }, false), false);
+  });
+
+  it("keeps streaming asks visible even without caps.ask", () => {
+    assert.equal(showAskChrome({ tools: true }, true), true);
+  });
+
+  it("shows chrome for ask-capable engines", () => {
+    assert.equal(showAskChrome({ ask: true, tools: true }, false), true);
   });
 });
 

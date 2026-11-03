@@ -22,6 +22,19 @@ export function capsAllowFollowups(caps: EngineCaps): boolean {
   return caps.followups !== false;
 }
 
+/** Ask is opt-in: only engines that advertise caps.ask. */
+export function capsAllowAsk(caps: EngineCaps): boolean {
+  return caps.ask === true;
+}
+
+/**
+ * Mount MeshAskCard when the engine supports ask, or when a live ask prompt
+ * already arrived (keep streaming asks visible even if caps omitted ask).
+ */
+export function showAskChrome(caps: EngineCaps, hasPrompt: boolean): boolean {
+  return hasPrompt || capsAllowAsk(caps);
+}
+
 /** Compact labels for engine picker / health surfaces. */
 export function capsBadges(caps: EngineCaps | undefined): string[] {
   const c = caps || { ask: true, tools: true, diff: true, followups: true };

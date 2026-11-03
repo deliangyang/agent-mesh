@@ -421,7 +421,7 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Reply(ctx, p.SessionID, text, driver.CLIModel(p.Model, p.Engine))
+		return d.Reply(ctx, p.SessionID, text, s.cliModelFor(p.Model, p.Engine))
 	case protocol.MethodSend:
 		var p protocol.SendParams
 		_ = json.Unmarshal(req.Params, &p)
@@ -433,10 +433,17 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Send(ctx, p.CWD, text, p.Resume, driver.CLIModel(p.Model, p.Engine))
+		return d.Send(ctx, p.CWD, text, p.Resume, s.cliModelFor(p.Model, p.Engine))
 	default:
 		return nil, fmt.Errorf("method %s is not a stream", req.Method)
 	}
+}
+
+// cliModelFor normalizes Vue catalog ids (nodeID/engine/name) the same way as handleChat.
+func (s *Server) cliModelFor(model, engine string) string {
+	model = s.localModelID(model)
+	_, name := openai.EngineModel(model, engine, s.Drivers.Names())
+	return driver.CLIModel(name, engine)
 }
 
 func applyRPCFiles(text, cwd string, files []protocol.AttachFile) (string, error) {

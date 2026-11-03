@@ -262,11 +262,19 @@ export function watchSession(s: Session | null): void {
 }
 
 export function refreshCatalog(): void {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "refresh" }));
-    return;
-  }
-  connectCatalog();
+  void import("./e2e/mode.ts").then(async ({ ensureMeshMode, isE2EMode }) => {
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      const { refreshE2ECatalog } = await import("./e2e/sync.ts");
+      await refreshE2ECatalog();
+      return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "refresh" }));
+      return;
+    }
+    connectCatalog();
+  });
 }
 
 function resendWatch(sock: WebSocket): void {
@@ -284,6 +292,30 @@ function resendWatch(sock: WebSocket): void {
 }
 
 export function connectCatalog(): void {
+  void import("./e2e/mode.ts").then(async ({ ensureMeshMode, isE2EMode }) => {
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      // E2E: never attach plaintext /v1/openai/ws — PublicSnapshot would wipe sessions.
+      if (ws) {
+        const old = ws;
+        ws = null;
+        try {
+          old.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      window.clearTimeout(reconnectTimer);
+      meshLink.state = meshLink.state === "live" ? "live" : "connecting";
+      const { startE2ECatalogLoop } = await import("./e2e/sync.ts");
+      startE2ECatalogLoop();
+      return;
+    }
+    connectPlainCatalog();
+  });
+}
+
+function connectPlainCatalog(): void {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return;
   }
@@ -308,35 +340,41 @@ export function connectCatalog(): void {
       sock.send(JSON.stringify({ type: "refresh" }));
       window.dispatchEvent(new Event("mesh-link-up"));
     }
-    void import("./e2e/mode.ts").then(async ({ ensureMeshMode, isE2EMode }) => {
-      await ensureMeshMode();
-      if (!isE2EMode()) return;
-      const { startE2ECatalogLoop } = await import("./e2e/sync.ts");
-      startE2ECatalogLoop();
-    });
   };
   sock.onclose = () => {
     const wasLive = meshLink.state === "live";
     if (ws === sock) ws = null;
-    meshLink.state = "down";
-    meshLink.attempt += 1;
-    if (wasLive) showToast(t("link.nodeDown"), "error");
-    const delay = Math.min(1200 * Math.max(1, meshLink.attempt), 8000);
-    window.clearTimeout(reconnectTimer);
-    reconnectTimer = window.setTimeout(connectCatalog, delay);
+    void import("./e2e/mode.ts").then(({ isE2EMode }) => {
+      if (isE2EMode()) return;
+      meshLink.state = "down";
+      meshLink.attempt += 1;
+      if (wasLive) showToast(t("link.nodeDown"), "error");
+      const delay = Math.min(1200 * Math.max(1, meshLink.attempt), 8000);
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = window.setTimeout(connectCatalog, delay);
+    });
   };
   sock.onerror = () => {};
   ws = sock;
 }
 
 function onBrowserResume(): void {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "refresh" }));
-    resendWatch(ws);
-    window.dispatchEvent(new Event("mesh-link-up"));
-    return;
-  }
-  connectCatalog();
+  void import("./e2e/mode.ts").then(async ({ ensureMeshMode, isE2EMode }) => {
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      const { refreshE2ECatalog } = await import("./e2e/sync.ts");
+      await refreshE2ECatalog();
+      window.dispatchEvent(new Event("mesh-link-up"));
+      return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "refresh" }));
+      resendWatch(ws);
+      window.dispatchEvent(new Event("mesh-link-up"));
+      return;
+    }
+    connectPlainCatalog();
+  });
 }
 
 if (typeof window !== "undefined") {

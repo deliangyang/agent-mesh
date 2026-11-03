@@ -417,6 +417,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
+        <MeshSettings v-else-if="section === 'nodes'" section="nodes" />
         <MeshSettings v-else-if="section === 'relay'" section="relay" />
         <MeshSettings v-else-if="section === 'health'" section="health" @pick="onHealthPick" />
 

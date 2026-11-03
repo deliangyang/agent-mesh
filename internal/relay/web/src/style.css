@@ -3064,6 +3064,74 @@ html.dark #app {
   color: var(--mute);
 }
 
+.mesh-nodes-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 0 16px 16px;
+}
+
+.mesh-nodes-card {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--lamp);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.mesh-nodes-card-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.mesh-nodes-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.mesh-nodes-dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.mesh-nodes-dl > div {
+  margin: 0;
+}
+
+.mesh-nodes-dl dt {
+  margin: 0 0 2px;
+  font-size: 11px;
+  color: var(--mute);
+}
+
+.mesh-nodes-dl dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.mesh-nodes-pub {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 4px 0;
+  text-align: left;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mesh-conn-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

@@ -21,13 +21,24 @@ func TestLocalModelID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(ident, "unused", "test", driver.NewSet(), nil)
+	set := driver.NewSet()
+	set.Register(stubDriver{})
+	srv := New(ident, "unused", "test", set, nil)
 	prefixed := ident.ID + "/workbuddy/fast"
 	if got := srv.localModelID(prefixed); got != "workbuddy/fast" {
 		t.Fatalf("strip = %q", got)
 	}
 	if got := srv.localModelID("workbuddy/fast"); got != "workbuddy/fast" {
 		t.Fatalf("plain = %q", got)
+	}
+	if got := srv.cliModelFor(ident.ID+"/stub/composer-2.5", "stub"); got != "composer-2.5" {
+		t.Fatalf("cliModelFor prefixed = %q", got)
+	}
+	if got := srv.cliModelFor("stub/composer-2.5", "stub"); got != "composer-2.5" {
+		t.Fatalf("cliModelFor engine/model = %q", got)
+	}
+	if got := srv.cliModelFor("composer-2.5", "stub"); got != "composer-2.5" {
+		t.Fatalf("cliModelFor bare = %q", got)
 	}
 }
 

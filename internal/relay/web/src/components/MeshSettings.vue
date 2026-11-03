@@ -26,7 +26,7 @@ export type MeshSettingsState = {
 const props = withDefaults(
   defineProps<{
     /** Which panel to render; parent Settings page switches modules. */
-    section?: "relay" | "health";
+    section?: "relay" | "health" | "nodes";
   }>(),
   { section: "relay" },
 );
@@ -56,6 +56,19 @@ const keyPass = ref("");
 const keyNew = ref("");
 const keyBusy = ref(false);
 const keyMsg = ref("");
+const nodeRows = ref<
+  {
+    id: string;
+    name: string;
+    os: string;
+    arch: string;
+    engines: string;
+    sign: string;
+    x25519: string;
+    lastSeen: string;
+  }[]
+>([]);
+const nodesBusy = ref(false);
 
 const fullMatrix = computed(() => buildHealthMatrix(catalog.nodes, catalog.engines));
 const osFilter = computed(() => resolveHealthOsFilter(String(route.query.os || "")));
@@ -63,6 +76,7 @@ const matrix = computed(() => filterHealthMatrix(fullMatrix.value, osFilter.valu
 const osOptions = computed(() => listHealthOsOptions(fullMatrix.value));
 const showRelay = computed(() => props.section === "relay");
 const showHealth = computed(() => props.section === "health");
+const showNodes = computed(() => props.section === "nodes");
 
 function setOsFilter(osKey: string): void {
   const q: Record<string, string> = {};
@@ -97,10 +111,29 @@ function pickCell(nodeId: string, engine: string, cell: string): void {
   emit("pick", { nodeId, engine });
 }
 
-async function load(): Promise<void> {
-  loading.value = true;
-  local.value = false;
-  e2e.value = false;
+function encodePub(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    const bytes = new Uint8Array(v);
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s);
+  }
+  return "";
+}
+
+function fmtSeen(unix?: number): string {
+  if (!unix) return "—";
+  try {
+    return new Date(unix * 1000).toLocaleString();
+  } catch {
+    return String(unix);
+  }
+}
+
+async function loadNodes(): Promise<void> {
+  nodesBusy.value = true;
   keyMsg.value = "";
   try {
     const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
@@ -111,6 +144,56 @@ async function load(): Promise<void> {
       const st = await vaultStatus();
       keyHint.value = st.idHint || "";
     }
+    const resp = await fetchJSON("/v1/nodes", { credentials: "same-origin" }, 8000);
+    if (!resp.ok) throw new Error(`nodes http ${resp.status}`);
+    const rows = (await resp.json()) as Array<{
+      id: string;
+      name?: string;
+      os?: string;
+      arch?: string;
+      engines?: string[];
+      sign_pub?: unknown;
+      x25519_pub?: unknown;
+      last_seen?: number;
+    }>;
+    const { saveNodePeers } = await import("../e2e/peers.ts");
+    saveNodePeers(rows);
+    nodeRows.value = rows.map((n) => ({
+      id: n.id,
+      name: n.name || n.id,
+      os: n.os || "",
+      arch: n.arch || "",
+      engines: (n.engines || []).join(", "),
+      sign: encodePub(n.sign_pub),
+      x25519: encodePub(n.x25519_pub),
+      lastSeen: fmtSeen(n.last_seen),
+    }));
+  } catch (err) {
+    toastError(err);
+  } finally {
+    nodesBusy.value = false;
+  }
+}
+
+async function copyPub(raw: string): Promise<void> {
+  if (!raw) return;
+  try {
+    await navigator.clipboard.writeText(raw);
+    showToast(t("settings.nodesCopied"), "info");
+  } catch (err) {
+    toastError(err);
+  }
+}
+
+async function load(): Promise<void> {
+  loading.value = true;
+  local.value = false;
+  e2e.value = false;
+  keyMsg.value = "";
+  try {
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    e2e.value = isE2EMode();
     const resp = await fetchJSON("/v1/openai/mesh", { credentials: "same-origin" }, 8000);
     if (!resp.ok) return;
     const st = (await resp.json()) as MeshSettingsState;
@@ -308,45 +391,102 @@ watch(
   () => props.section,
   (sec) => {
     if (sec === "relay") void load();
+    if (sec === "nodes") void loadNodes();
   },
 );
 
 onMounted(() => {
   if (showRelay.value) void load();
+  if (showNodes.value) void loadNodes();
 });
 </script>
 
 <template>
-  <div class="mesh-settings-panel" :aria-label="showRelay ? t('settings.title') : t('settings.health')">
-    <template v-if="showRelay">
+  <div
+    class="mesh-settings-panel"
+    :aria-label="showNodes ? t('settings.nodesTitle') : showRelay ? t('settings.title') : t('settings.health')"
+  >
+    <template v-if="showNodes">
+      <header class="mesh-settings-panel-head">
+        <h2>{{ t("settings.nodesTitle") }}</h2>
+        <p class="mesh-settings-sub">{{ t("settings.nodesSub") }}</p>
+      </header>
+      <section v-if="e2e" class="mesh-settings-form mesh-settings-pad" :aria-label="t('settings.keyTitle')">
+        <h3>{{ t("settings.keyTitle") }}</h3>
+        <p class="mesh-settings-sub">{{ t("settings.keySub") }}</p>
+        <p v-if="keyHint" class="mesh-settings-status">{{ t("settings.keyId") }}: {{ keyHint }}</p>
+        <label>
+          <span>{{ t("login.keyPassphrase") }}</span>
+          <input v-model="keyPass" type="password" autocomplete="off" />
+        </label>
+        <label>
+          <span>{{ t("settings.keyNewPass") }}</span>
+          <input v-model="keyNew" type="password" autocomplete="off" />
+        </label>
+        <p v-if="keyMsg" class="mesh-settings-status">{{ keyMsg }}</p>
+        <div class="mesh-settings-actions">
+          <button type="button" class="ghost" :disabled="keyBusy" @click="exportKey">{{ t("settings.keyExport") }}</button>
+          <button type="button" class="ghost" :disabled="keyBusy" @click="importKey">{{ t("settings.keyImport") }}</button>
+          <button type="button" class="mesh-settings-save" :disabled="keyBusy" @click="changeKeyPass">
+            {{ t("settings.keyChangePass") }}
+          </button>
+        </div>
+      </section>
+      <div class="mesh-settings-actions-stack mesh-settings-pad">
+        <button type="button" class="mesh-settings-action" :disabled="nodesBusy" @click="loadNodes">
+          {{ nodesBusy ? t("settings.loading") : t("settings.nodesRefresh") }}
+        </button>
+      </div>
+      <div v-if="!nodeRows.length && !nodesBusy" class="mesh-settings-status mesh-settings-pad">
+        {{ t("settings.nodesEmpty") }}
+      </div>
+      <div v-else class="mesh-nodes-list" role="list" :aria-label="t('settings.nodesTitle')">
+        <article v-for="n in nodeRows" :key="n.id" class="mesh-nodes-card" role="listitem">
+          <header class="mesh-nodes-card-head">
+            <h3>{{ n.name }}</h3>
+            <p class="mesh-nodes-meta">
+              <span>{{ n.id }}</span>
+              <span v-if="n.os || n.arch">{{ [n.os, n.arch].filter(Boolean).join(" / ") }}</span>
+            </p>
+          </header>
+          <dl class="mesh-nodes-dl">
+            <div>
+              <dt>{{ t("settings.nodesEngines") }}</dt>
+              <dd>{{ n.engines || "—" }}</dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.nodesLastSeen") }}</dt>
+              <dd>{{ n.lastSeen }}</dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.nodesSignPub") }}</dt>
+              <dd>
+                <button type="button" class="ghost mesh-nodes-pub" :disabled="!n.sign" @click="copyPub(n.sign)">
+                  {{ n.sign || "—" }}
+                </button>
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.nodesX25519") }}</dt>
+              <dd>
+                <button type="button" class="ghost mesh-nodes-pub" :disabled="!n.x25519" @click="copyPub(n.x25519)">
+                  {{ n.x25519 || "—" }}
+                </button>
+              </dd>
+            </div>
+          </dl>
+          <p class="mesh-settings-hotkey-hint">{{ t("settings.nodesCached") }}</p>
+        </article>
+      </div>
+    </template>
+
+    <template v-else-if="showRelay">
       <header class="mesh-settings-panel-head">
         <h2>{{ t("settings.title") }}</h2>
         <p class="mesh-settings-sub">{{ t("settings.sub") }}</p>
       </header>
       <div v-if="loading" class="mesh-settings-status mesh-settings-pad">{{ t("settings.loading") }}</div>
       <template v-else>
-        <section v-if="e2e" class="mesh-settings-form mesh-settings-pad" :aria-label="t('settings.keyTitle')">
-          <h3>{{ t("settings.keyTitle") }}</h3>
-          <p class="mesh-settings-sub">{{ t("settings.keySub") }}</p>
-          <p v-if="keyHint" class="mesh-settings-status">{{ t("settings.keyId") }}: {{ keyHint }}</p>
-          <label>
-            <span>{{ t("login.keyPassphrase") }}</span>
-            <input v-model="keyPass" type="password" autocomplete="off" />
-          </label>
-          <label>
-            <span>{{ t("settings.keyNewPass") }}</span>
-            <input v-model="keyNew" type="password" autocomplete="off" />
-          </label>
-          <p v-if="keyMsg" class="mesh-settings-status">{{ keyMsg }}</p>
-          <div class="mesh-settings-actions">
-            <button type="button" class="ghost" :disabled="keyBusy" @click="exportKey">{{ t("settings.keyExport") }}</button>
-            <button type="button" class="ghost" :disabled="keyBusy" @click="importKey">{{ t("settings.keyImport") }}</button>
-            <button type="button" class="mesh-settings-save" :disabled="keyBusy" @click="changeKeyPass">
-              {{ t("settings.keyChangePass") }}
-            </button>
-          </div>
-        </section>
-
         <form v-if="local" class="mesh-settings-form" @submit.prevent="save">
           <label>
             <span>{{ t("settings.relayUrl") }}</span>
@@ -404,7 +544,7 @@ onMounted(() => {
           </div>
           <p class="mesh-settings-hotkey-hint">{{ t("settings.importHint") }}</p>
         </form>
-        <div v-else-if="!e2e" class="mesh-settings-status mesh-settings-pad">{{ t("settings.relayRemoteOnly") }}</div>
+        <div v-else class="mesh-settings-status mesh-settings-pad">{{ t("settings.relayRemoteOnly") }}</div>
       </template>
     </template>
 

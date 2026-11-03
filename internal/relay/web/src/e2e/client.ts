@@ -10,6 +10,7 @@ import {
   type Envelope,
 } from "./frame.ts";
 import { parseNodePublic, type Identity, type PublicIdentity } from "./identity.ts";
+import { listNodePeers, peerByID, saveNodePeers } from "./peers.ts";
 import { beginHandshake, finishHandshake, open, seal, sessionExpired, type HandshakeState, type Session } from "./session.ts";
 
 export type NodeRow = {
@@ -113,7 +114,9 @@ export class E2EClient {
   async nodes(): Promise<NodeRow[]> {
     const resp = await fetch(this.relay + "/v1/nodes", { credentials: "same-origin" });
     if (!resp.ok) throw new Error(`nodes http ${resp.status}`);
-    return (await resp.json()) as NodeRow[];
+    const rows = (await resp.json()) as NodeRow[];
+    saveNodePeers(rows);
+    return rows;
   }
 
   async ensureSession(nodeID: string): Promise<NodeSession> {
@@ -136,8 +139,12 @@ export class E2EClient {
     const cached = nodeID ? this.byNode.get(nodeID) : undefined;
     if (cached && !sessionExpired(cached.sess)) return cached;
 
-    const rows = await this.nodes();
-    const row = rows.find((n) => n.id === nodeID) || (!nodeID ? rows[0] : undefined);
+    // Prefer plaintext pubs cached from /v1/nodes (settings Nodes panel); refresh if missing.
+    let row = nodeID ? peerByID(nodeID) : listNodePeers()[0];
+    if (!row || row.sign_pub == null || row.x25519_pub == null) {
+      const rows = await this.nodes();
+      row = rows.find((n) => n.id === nodeID) || (!nodeID ? rows[0] : undefined);
+    }
     if (!row) throw new Error(nodeID ? `node ${nodeID} not found` : "no nodes registered");
     // Another waiter may have finished while we fetched the directory.
     const raced = this.byNode.get(row.id);
@@ -257,6 +264,7 @@ export class E2EClient {
   async openCatalogWS(
     nodeID: string,
     onPart: (msg: Record<string, unknown>) => void,
+    onClose?: () => void,
   ): Promise<{ close: () => void; peerID: string }> {
     return this.withNode(nodeID, async () => {
       const ns = await this.ensureSession(nodeID);
@@ -279,10 +287,20 @@ export class E2EClient {
       const sock = new WebSocket(url);
       sock.binaryType = "arraybuffer";
       let closed = false;
+      let intentional = false;
       const close = () => {
+        intentional = true;
         closed = true;
         try {
           sock.close();
+        } catch {
+          /* ignore */
+        }
+      };
+      const notifyClose = () => {
+        if (intentional) return;
+        try {
+          onClose?.();
         } catch {
           /* ignore */
         }
@@ -352,6 +370,7 @@ export class E2EClient {
       });
       sock.onclose = () => {
         closed = true;
+        notifyClose();
       };
       return { close, peerID: ns.peer.id };
     });

@@ -93,6 +93,6 @@ Release `darwin_*` archives are unsigned unless you notarize them. Before a publ
 4. launchd plists stay user-level (`~/Library/LaunchAgents`); do not require root for the node.
 5. Publish `SHA256` checksums beside each tarball on the Release page.
 
-On Linux desktops with a StatusNotifier host (GNOME extensions, KDE, etc.), `mesh-node` also registers a tray icon (Open / Quit) via pure-Go D-Bus when `DISPLAY` or `WAYLAND_DISPLAY` is set. Without a watcher it still opens the UI once, same as macOS.
+On Linux desktops with a StatusNotifier host (GNOME extensions, KDE, etc.), `mesh-node` also registers a tray icon (Open / Quit) via pure-Go D-Bus when `DISPLAY` or `WAYLAND_DISPLAY` is set. The icon is an embedded Agent Mesh pixmap (not a theme name). Without a watcher it still opens the UI once, same as macOS.
 
 See also: [Windows](windows.md) for the tray zip on PCs.

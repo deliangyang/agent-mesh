@@ -41,3 +41,11 @@ export function saveLastSettingsSection(section: SettingsSection): void {
     /* ignore quota */
   }
 }
+
+/** Move one step in the settings nav; wraps at the ends. */
+export function adjacentSettingsSection(current: SettingsSection, delta: number): SettingsSection {
+  const ids = SETTINGS_NAV.map((n) => n.id);
+  const i = Math.max(0, ids.indexOf(current));
+  const next = (i + delta + ids.length * 8) % ids.length;
+  return ids[next];
+}

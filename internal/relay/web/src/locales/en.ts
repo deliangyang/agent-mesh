@@ -82,6 +82,7 @@ export const en: Record<string, string> = {
   "settings.connRefresh": "Refresh catalog",
   "settings.connNodeList": "Nodes",
   "settings.connNodeEngines": "{count} engines",
+  "settings.connOpenNode": "Open this node in chat",
   "settings.navRelay": "Relay",
   "settings.navRelayHint": "Link this node to a relay",
   "settings.navHealth": "Engine health",

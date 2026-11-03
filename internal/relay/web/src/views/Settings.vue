@@ -201,14 +201,22 @@ onBeforeUnmount(() => {
               <dd>{{ diag.sessionCount }}</dd>
             </div>
           </dl>
-          <div v-if="diag.nodes.length" class="mesh-conn-nodes" :aria-label="t('settings.connNodeList')">
-            <div v-for="n in diag.nodes" :key="n.id" class="mesh-conn-node">
+          <div v-if="diag.nodes.length" class="mesh-conn-nodes" role="list" :aria-label="t('settings.connNodeList')">
+            <button
+              v-for="n in diag.nodes"
+              :key="n.id"
+              type="button"
+              class="mesh-conn-node"
+              role="listitem"
+              :title="t('settings.connOpenNode')"
+              @click="onHealthPick({ nodeId: n.id })"
+            >
               <div class="mesh-conn-node-name">{{ n.name }}</div>
               <div class="mesh-conn-node-meta">
                 <span v-if="n.platform">{{ n.platform }}</span>
                 <span>{{ t("settings.connNodeEngines", { count: n.engineCount }) }}</span>
               </div>
-            </div>
+            </button>
           </div>
           <div class="mesh-settings-actions-stack">
             <button type="button" class="mesh-settings-action" @click="refreshCatalog">

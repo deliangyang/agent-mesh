@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { connectCatalog } from "../catalog";
+import { catalog, connectCatalog, meshLink, refreshCatalog } from "../catalog";
 import MeshSettings from "../components/MeshSettings.vue";
+import { buildConnectionDiag } from "../connectionDiag";
 import {
   cycleLocale,
   localeButtonLabel,
@@ -24,6 +25,17 @@ const router = useRouter();
 const theme = ref<MeshTheme>(loadTheme());
 
 const section = computed(() => resolveSettingsSection(String(route.params.section || "")));
+const diag = computed(() => buildConnectionDiag(meshLink, catalog));
+
+function linkStateLabel(state: string): string {
+  if (state === "live") return t("settings.connLive");
+  if (state === "connecting") return t("settings.connConnecting");
+  return t("settings.connDown");
+}
+
+function reloadPage(): void {
+  window.location.reload();
+}
 
 function goHome(): void {
   void router.push({ path: "/", query: route.query });
@@ -157,6 +169,45 @@ onBeforeUnmount(() => {
               <span>{{ localeButtonTitle(localePref) }}</span>
             </button>
             <p class="mesh-settings-hotkey-hint">{{ t("settings.hotkeyOpen") }}</p>
+          </div>
+        </section>
+
+        <section v-else-if="section === 'connection'" class="mesh-settings-panel" :aria-label="t('settings.navConnection')">
+          <header class="mesh-settings-panel-head">
+            <h2>{{ t("settings.navConnection") }}</h2>
+            <p class="mesh-settings-sub">{{ t("settings.navConnectionHint") }}</p>
+          </header>
+          <dl class="mesh-conn-grid">
+            <div>
+              <dt>{{ t("settings.connLink") }}</dt>
+              <dd :class="{ ok: diag.linkState === 'live', bad: diag.linkState === 'down' }">
+                {{ linkStateLabel(diag.linkState) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.connAttempts") }}</dt>
+              <dd>{{ diag.attempt }}</dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.connNodes") }}</dt>
+              <dd>{{ diag.nodeCount }}</dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.connEngines") }}</dt>
+              <dd>{{ diag.engineCount }}</dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.connSessions") }}</dt>
+              <dd>{{ diag.sessionCount }}</dd>
+            </div>
+          </dl>
+          <div class="mesh-settings-actions-stack">
+            <button type="button" class="mesh-settings-action" @click="refreshCatalog">
+              {{ t("settings.connRefresh") }}
+            </button>
+            <button type="button" class="mesh-settings-action" @click="reloadPage">
+              {{ t("link.reload") }}
+            </button>
           </div>
         </section>
 

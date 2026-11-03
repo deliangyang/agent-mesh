@@ -1,6 +1,6 @@
 /** Settings page left-nav modules. */
 
-export type SettingsSection = "appearance" | "relay" | "health" | "account";
+export type SettingsSection = "appearance" | "connection" | "relay" | "health" | "account";
 
 export type SettingsNavItem = {
   id: SettingsSection;
@@ -12,6 +12,7 @@ const LAST_KEY = "mesh.settings.section";
 
 export const SETTINGS_NAV: SettingsNavItem[] = [
   { id: "appearance", labelKey: "settings.navAppearance", hintKey: "settings.navAppearanceHint" },
+  { id: "connection", labelKey: "settings.navConnection", hintKey: "settings.navConnectionHint" },
   { id: "relay", labelKey: "settings.navRelay", hintKey: "settings.navRelayHint" },
   { id: "health", labelKey: "settings.navHealth", hintKey: "settings.navHealthHint" },
   { id: "account", labelKey: "settings.navAccount", hintKey: "settings.navAccountHint" },
@@ -19,7 +20,9 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
 
 export function resolveSettingsSection(raw: string | undefined | null): SettingsSection {
   const id = (raw || "").trim().toLowerCase();
-  if (id === "appearance" || id === "relay" || id === "health" || id === "account") return id;
+  if (id === "appearance" || id === "connection" || id === "relay" || id === "health" || id === "account") {
+    return id;
+  }
   return "appearance";
 }
 

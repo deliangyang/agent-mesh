@@ -843,7 +843,9 @@ onMounted(() => {
       const { bootE2E } = await import("../e2e/runtime.ts");
       const st = await vaultStatus();
       if (!st.unlocked) {
-        location.href = "/login";
+        // SPA navigate — full location.href to /login races the relay's cookie and
+        // used to bounce authorized clients / ↔ /login forever.
+        void router.replace({ path: "/login", query: route.query });
         return;
       }
       await bootE2E();

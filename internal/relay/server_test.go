@@ -217,6 +217,33 @@ func TestClientAPIRequiresPassword(t *testing.T) {
 	}
 }
 
+func TestLoginPageServesWhenAuthorized(t *testing.T) {
+	// Authorized clients must still receive the login SPA (vault unlock), not a bounce to "/".
+	srv := New("unused", NewMemory(), nil)
+	srv.Password = "secret"
+	srv.Web = true
+	srv.initAuth()
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/login", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: cookieName, Value: srv.sessionToken()})
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /login with session want 200 got %d", resp.StatusCode)
+	}
+}
+
 func TestSPAPublicPaths(t *testing.T) {
 	s := New("unused", NewMemory(), nil)
 	if !s.publicPath("/assets/index-abc.js") {

@@ -78,10 +78,9 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		if s.authorized(r) {
-			http.Redirect(w, r, "/", http.StatusFound)
-			return
-		}
+		// Always serve the SPA login route. An existing mesh_session cookie must not
+		// bounce back to "/" — relay E2E still needs the passphrase vault unlock step,
+		// and Chat redirects locked vaults here (a 302 would infinite-refresh).
 		s.serveWeb(w, r, "index.html")
 		return
 	}

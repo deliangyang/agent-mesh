@@ -20,6 +20,24 @@ const router = useRouter();
 
 onMounted(async () => {
   await ensureMeshMode();
+  // Cookie may already be valid (Chat sent us here for vault unlock only).
+  try {
+    const resp = await fetch("/v1/openai/mesh", { credentials: "same-origin" });
+    if (resp.status === 401) return;
+    if (!isE2EMode()) {
+      await goChat();
+      return;
+    }
+    const st = await vaultStatus();
+    vaultPresent.value = st.present;
+    if (st.unlocked) {
+      await goChat();
+      return;
+    }
+    step.value = "vault";
+  } catch {
+    /* stay on password gate */
+  }
 });
 
 async function goChat(): Promise<void> {

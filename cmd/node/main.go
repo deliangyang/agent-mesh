@@ -31,6 +31,11 @@ func main() {
 	if !*noTray {
 		log = withGUILog(log)
 	}
+	uiURL := nodeUIURL(*listen)
+	if !*noTray && existingNodeHealthy(uiURL) {
+		openUI(uiURL)
+		return
+	}
 	ident, err := e2e.LoadOrCreate(*key)
 	if err != nil {
 		log.Error("load identity", "err", err)
@@ -69,7 +74,7 @@ func main() {
 		}
 	}()
 	if !*noTray {
-		_ = runWindowsTray(ctx, stop, nodeUIURL(*listen))
+		_ = runWindowsTray(ctx, stop, uiURL)
 	}
 	if err := <-errCh; err != nil {
 		log.Error("serve", "err", err)

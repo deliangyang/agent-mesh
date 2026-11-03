@@ -114,7 +114,17 @@ type msg struct {
 	Pt      point
 }
 
+func setAppUserModelID(id string) {
+	p, err := windows.UTF16PtrFromString(id)
+	if err != nil {
+		return
+	}
+	proc := shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
+	_, _, _ = proc.Call(uintptr(unsafe.Pointer(p)))
+}
+
 func runTray(ctx context.Context, cancel context.CancelFunc, uiURL string) error {
+	setAppUserModelID("AgentMesh.Node")
 	trayUIURL = uiURL
 	trayCancel = cancel
 	className, err := windows.UTF16PtrFromString("AgentMeshNodeTray")

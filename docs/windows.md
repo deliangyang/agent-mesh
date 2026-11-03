@@ -38,7 +38,7 @@ Double-click `mesh-node.exe`. It:
 - creates `%USERPROFILE%\.agent-mesh\node.key`
 - appends logs to `%USERPROFILE%\.agent-mesh\node.log`
 
-On first start the tray shows a short balloon (“node is running”). Left-click the tray icon to open the UI again. Closing the browser window does **not** stop the node. Right-click **退出** / **Quit** to quit.
+On first start the tray shows a short balloon (“node is running”). Left-click the tray icon to open the UI again. Closing the browser window does **not** stop the node. Right-click **退出** / **Quit** to quit. Starting `mesh-node.exe` again while the node is already healthy only re-opens the UI (no second process). The tray process sets AppUserModelID `AgentMesh.Node` so the taskbar can group/pin it stably.
 
 Direct mode (no relay): open `http://127.0.0.1:7700/` and use the node UI.
 

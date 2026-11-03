@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SETTINGS_NAV, resolveSettingsSection } from "./settingsNav.ts";
+import { afterEach, describe, it } from "node:test";
+import {
+  SETTINGS_NAV,
+  loadLastSettingsSection,
+  resolveSettingsSection,
+  saveLastSettingsSection,
+} from "./settingsNav.ts";
+
+afterEach(() => {
+  try {
+    localStorage.removeItem("mesh.settings.section");
+  } catch {
+    /* ignore */
+  }
+});
 
 describe("settingsNav", () => {
   it("lists the four settings modules in order", () => {
@@ -15,5 +28,11 @@ describe("settingsNav", () => {
     assert.equal(resolveSettingsSection("Health"), "health");
     assert.equal(resolveSettingsSection(""), "appearance");
     assert.equal(resolveSettingsSection("nope"), "appearance");
+  });
+
+  it("remembers the last opened section", () => {
+    assert.equal(loadLastSettingsSection(), "appearance");
+    saveLastSettingsSection("health");
+    assert.equal(loadLastSettingsSection(), "health");
   });
 });

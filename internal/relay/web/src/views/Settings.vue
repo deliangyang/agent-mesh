@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { connectCatalog } from "../catalog";
 import MeshSettings from "../components/MeshSettings.vue";
@@ -10,7 +10,13 @@ import {
   localePref,
   t,
 } from "../locale";
-import { SETTINGS_NAV, resolveSettingsSection, type SettingsSection } from "../settingsNav";
+import {
+  SETTINGS_NAV,
+  loadLastSettingsSection,
+  resolveSettingsSection,
+  saveLastSettingsSection,
+  type SettingsSection,
+} from "../settingsNav";
 import { loadTheme, toggleTheme, type MeshTheme } from "../theme";
 
 const route = useRoute();
@@ -24,6 +30,7 @@ function goHome(): void {
 }
 
 function openSection(id: SettingsSection): void {
+  saveLastSettingsSection(id);
   void router.replace({ path: `/settings/${id}`, query: route.query });
 }
 
@@ -44,16 +51,33 @@ function onHealthPick(p: { nodeId: string; engine?: string; focusMissing?: boole
   void router.push({ path: "/", query: q });
 }
 
+function onKey(ev: KeyboardEvent): void {
+  if (ev.key !== "Escape") return;
+  const t = ev.target as HTMLElement | null;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  ev.preventDefault();
+  goHome();
+}
+
 watch(
   () => route.params.section,
   (raw) => {
-    if (!raw) openSection("appearance");
+    if (!raw) {
+      openSection(loadLastSettingsSection());
+      return;
+    }
+    saveLastSettingsSection(resolveSettingsSection(String(raw)));
   },
   { immediate: true },
 );
 
 onMounted(() => {
   connectCatalog();
+  window.addEventListener("keydown", onKey);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
 });
 </script>
 

@@ -48,7 +48,7 @@ const composerGuarded = ref(false);
 let composerGuardTimer = 0;
 
 function openSettings(): void {
-  void router.push({ path: "/settings/appearance", query: route.query });
+  void router.push({ path: "/settings", query: route.query });
   closeNavIfMobile();
 }
 

@@ -2,6 +2,7 @@
 
 export type SettingsSection =
   | "appearance"
+  | "shortcuts"
   | "connection"
   | "platforms"
   | "relay"
@@ -18,6 +19,7 @@ const LAST_KEY = "mesh.settings.section";
 
 export const SETTINGS_NAV: SettingsNavItem[] = [
   { id: "appearance", labelKey: "settings.navAppearance", hintKey: "settings.navAppearanceHint" },
+  { id: "shortcuts", labelKey: "settings.navShortcuts", hintKey: "settings.navShortcutsHint" },
   { id: "connection", labelKey: "settings.navConnection", hintKey: "settings.navConnectionHint" },
   { id: "platforms", labelKey: "settings.navPlatforms", hintKey: "settings.navPlatformsHint" },
   { id: "relay", labelKey: "settings.navRelay", hintKey: "settings.navRelayHint" },
@@ -29,6 +31,7 @@ export function resolveSettingsSection(raw: string | undefined | null): Settings
   const id = (raw || "").trim().toLowerCase();
   if (
     id === "appearance" ||
+    id === "shortcuts" ||
     id === "connection" ||
     id === "platforms" ||
     id === "relay" ||

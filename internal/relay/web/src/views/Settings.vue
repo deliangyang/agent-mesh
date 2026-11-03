@@ -20,12 +20,25 @@ import {
   saveLastSettingsSection,
   type SettingsSection,
 } from "../settingsNav";
+import {
+  chordTokens,
+  modKeyLabel,
+  shortcutsByScope,
+  type ShortcutScope,
+} from "../settingsShortcuts";
 import { loadTheme, toggleTheme, type MeshTheme } from "../theme";
 
 const route = useRoute();
 const router = useRouter();
 const theme = ref<MeshTheme>(loadTheme());
 const navEl = ref<HTMLElement | null>(null);
+const modLabel = modKeyLabel();
+
+const SHORTCUT_SCOPES: { id: ShortcutScope; labelKey: string }[] = [
+  { id: "chat", labelKey: "settings.scScopeChat" },
+  { id: "settings", labelKey: "settings.scScopeSettings" },
+  { id: "ask", labelKey: "settings.scScopeAsk" },
+];
 
 const section = computed(() => resolveSettingsSection(String(route.params.section || "")));
 const diag = computed(() => buildConnectionDiag(meshLink, catalog));
@@ -34,6 +47,15 @@ const sectionTitle = computed(() => {
   const item = SETTINGS_NAV.find((n) => n.id === section.value);
   return item ? t(item.labelKey) : t("settings.pageTitle");
 });
+const shortcutGroups = computed(() =>
+  SHORTCUT_SCOPES.map((scope) => ({
+    ...scope,
+    items: shortcutsByScope(scope.id).map((entry) => ({
+      ...entry,
+      tokens: chordTokens(entry.chord, modLabel),
+    })),
+  })).filter((g) => g.items.length),
+);
 
 function scrollActiveNav(): void {
   void nextTick(() => {
@@ -196,7 +218,32 @@ onBeforeUnmount(() => {
               <span class="mesh-settings-action-mark">{{ localeButtonLabel(localePref) }}</span>
               <span>{{ localeButtonTitle(localePref) }}</span>
             </button>
-            <p class="mesh-settings-hotkey-hint">{{ t("settings.hotkeyOpen") }}</p>
+            <button type="button" class="mesh-settings-action" @click="openSection('shortcuts')">
+              {{ t("settings.hotkeySeeAll") }}
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="section === 'shortcuts'" class="mesh-settings-panel" :aria-label="t('settings.navShortcuts')">
+          <header class="mesh-settings-panel-head">
+            <h2>{{ t("settings.navShortcuts") }}</h2>
+            <p class="mesh-settings-sub">{{ t("settings.navShortcutsHint") }}</p>
+          </header>
+          <div class="mesh-sc-list">
+            <section v-for="g in shortcutGroups" :key="g.id" class="mesh-sc-group" :aria-label="t(g.labelKey)">
+              <h3 class="mesh-sc-scope">{{ t(g.labelKey) }}</h3>
+              <ul class="mesh-sc-rows">
+                <li v-for="row in g.items" :key="row.id" class="mesh-sc-row">
+                  <span class="mesh-sc-label">{{ t(row.labelKey) }}</span>
+                  <span class="mesh-sc-keys" aria-hidden="true">
+                    <template v-for="(tok, i) in row.tokens" :key="row.id + tok + i">
+                      <span v-if="i > 0" class="mesh-sc-sep">{{ row.chord.kind === 'keys' && row.tokens.length > 1 ? '/' : '+' }}</span>
+                      <kbd>{{ tok }}</kbd>
+                    </template>
+                  </span>
+                </li>
+              </ul>
+            </section>
           </div>
         </section>
 

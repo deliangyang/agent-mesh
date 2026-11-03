@@ -42,13 +42,14 @@ describe("settingsNav", () => {
   it("lists the settings modules in order", () => {
     assert.deepEqual(
       SETTINGS_NAV.map((n) => n.id),
-      ["appearance", "connection", "platforms", "relay", "health", "account"],
+      ["appearance", "shortcuts", "connection", "platforms", "relay", "health", "account"],
     );
   });
 
   it("resolves known sections and defaults unknown to appearance", () => {
     assert.equal(resolveSettingsSection("relay"), "relay");
     assert.equal(resolveSettingsSection("connection"), "connection");
+    assert.equal(resolveSettingsSection("shortcuts"), "shortcuts");
     assert.equal(resolveSettingsSection("platforms"), "platforms");
     assert.equal(resolveSettingsSection("Health"), "health");
     assert.equal(resolveSettingsSection(""), "appearance");
@@ -62,7 +63,8 @@ describe("settingsNav", () => {
   });
 
   it("moves to the adjacent settings module and wraps", () => {
-    assert.equal(adjacentSettingsSection("appearance", 1), "connection");
+    assert.equal(adjacentSettingsSection("appearance", 1), "shortcuts");
+    assert.equal(adjacentSettingsSection("shortcuts", 1), "connection");
     assert.equal(adjacentSettingsSection("connection", 1), "platforms");
     assert.equal(adjacentSettingsSection("account", 1), "appearance");
     assert.equal(adjacentSettingsSection("appearance", -1), "account");

@@ -62,6 +62,7 @@ export const zhCN: Record<string, string> = {
   "link.disconnected": "已断开，正在重连",
   "link.copy": "连接成功后，会话、目录与实时进度会自动刷新。",
   "link.reload": "重新加载",
+  "link.openConnection": "连接诊断",
   "link.nodeDown": "节点已断开，正在重连",
 
   "settings.pageTitle": "设置",

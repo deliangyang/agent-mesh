@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { applyLocalePref } from "./locale.ts";
 import {
   capsAllowAsk,
   capsAllowDiff,
   capsAllowFollowups,
+  capsBadgeLabel,
+  capsBadgeTitle,
   capsBadges,
   engineCaps,
   showAskChrome,
@@ -52,5 +55,15 @@ describe("capsBadges", () => {
       "diff",
       "followups",
     ]);
+  });
+});
+
+describe("capsBadgeLabel", () => {
+  it("localizes known badges", () => {
+    applyLocalePref("en");
+    assert.equal(capsBadgeLabel("tools"), "Tools");
+    assert.equal(capsBadgeTitle("diff"), "View workspace git diff");
+    applyLocalePref("zh-CN");
+    assert.equal(capsBadgeLabel("ask"), "询问");
   });
 });

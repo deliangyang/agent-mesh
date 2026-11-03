@@ -15,7 +15,15 @@ import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
-import { capsAllowDiff, capsAllowFollowups, capsBadges, engineCaps, showAskChrome } from "../engineCaps";
+import {
+  capsAllowDiff,
+  capsAllowFollowups,
+  capsBadgeLabel,
+  capsBadgeTitle,
+  capsBadges,
+  engineCaps,
+  showAskChrome,
+} from "../engineCaps";
 import { formatEngineInstall } from "../engineInstall";
 import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
@@ -910,7 +918,12 @@ onBeforeUnmount(() => {
           >
             <span class="mesh-card-title">{{ e.title || e.name }}</span>
             <span v-if="capsBadges(e.caps).length" class="mesh-card-caps">
-              <span v-for="b in capsBadges(e.caps)" :key="e.name + b" class="mesh-cap">{{ b }}</span>
+              <span
+                v-for="b in capsBadges(e.caps)"
+                :key="e.name + b"
+                class="mesh-cap"
+                :title="capsBadgeTitle(b)"
+              >{{ capsBadgeLabel(b) }}</span>
             </span>
           </button>
           <div v-if="engineHint" class="mesh-pick-empty">{{ engineHint }}</div>

@@ -1,3 +1,4 @@
+import { t } from "./locale.ts";
 import type { EngineCaps, EngineRow } from "./types";
 
 export type { EngineCaps };
@@ -44,4 +45,18 @@ export function capsBadges(caps: EngineCaps | undefined): string[] {
   if (c.diff !== false) out.push("diff");
   if (c.followups !== false) out.push("followups");
   return out;
+}
+
+/** Localized short label for a caps badge id. */
+export function capsBadgeLabel(badge: string): string {
+  const key = `caps.${badge}`;
+  const label = t(key);
+  return label === key ? badge : label;
+}
+
+/** Localized tooltip explaining what a capability means. */
+export function capsBadgeTitle(badge: string): string {
+  const key = `caps.${badge}Hint`;
+  const label = t(key);
+  return label === key ? capsBadgeLabel(badge) : label;
 }

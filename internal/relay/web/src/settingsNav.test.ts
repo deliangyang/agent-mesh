@@ -38,15 +38,16 @@ afterEach(() => {
 });
 
 describe("settingsNav", () => {
-  it("lists the four settings modules in order", () => {
+  it("lists the settings modules in order", () => {
     assert.deepEqual(
       SETTINGS_NAV.map((n) => n.id),
-      ["appearance", "relay", "health", "account"],
+      ["appearance", "connection", "relay", "health", "account"],
     );
   });
 
   it("resolves known sections and defaults unknown to appearance", () => {
     assert.equal(resolveSettingsSection("relay"), "relay");
+    assert.equal(resolveSettingsSection("connection"), "connection");
     assert.equal(resolveSettingsSection("Health"), "health");
     assert.equal(resolveSettingsSection(""), "appearance");
     assert.equal(resolveSettingsSection("nope"), "appearance");

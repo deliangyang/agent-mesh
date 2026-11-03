@@ -122,6 +122,15 @@ export const en: Record<string, string> = {
   "toast.networkDropped": "network dropped; check the connection and try again",
   "toast.notSignedIn": "not signed in",
 
+  "caps.tools": "Tools",
+  "caps.ask": "Ask",
+  "caps.diff": "Diff",
+  "caps.followups": "Follow-ups",
+  "caps.toolsHint": "Can run tools in the workspace",
+  "caps.askHint": "Can pause for structured questions",
+  "caps.diffHint": "View workspace git diff",
+  "caps.followupsHint": "Queue follow-up messages while busy",
+
   "engine.pickNode": "Pick a node first",
   "engine.empty": "No engines on this node. Install an agent CLI on the machine, then refresh.",
   "engine.missing": "Not installed",

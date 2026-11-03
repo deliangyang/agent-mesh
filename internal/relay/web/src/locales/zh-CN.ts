@@ -122,6 +122,15 @@ export const zhCN: Record<string, string> = {
   "toast.networkDropped": "网络中断，请检查连接后重试",
   "toast.notSignedIn": "未登录",
 
+  "caps.tools": "工具",
+  "caps.ask": "询问",
+  "caps.diff": "Diff",
+  "caps.followups": "追问",
+  "caps.toolsHint": "可在工作区执行工具",
+  "caps.askHint": "可暂停并向你提出结构化问题",
+  "caps.diffHint": "可查看工作区 git diff",
+  "caps.followupsHint": "忙碌时可排队发送后续消息",
+
   "engine.pickNode": "请先选择节点",
   "engine.empty": "此节点没有可用引擎。请在该机器安装 agent CLI 后刷新。",
   "engine.missing": "未安装",

@@ -48,7 +48,8 @@ func (s *Server) authorized(r *http.Request) bool {
 
 func (s *Server) publicPath(path string) bool {
 	switch path {
-	case "/healthz", "/login", "/v1/register", "/v1/node/tunnel", "/favicon.ico", "/favicon.svg":
+	case "/healthz", "/login", "/v1/register", "/v1/node/tunnel",
+		"/favicon.ico", "/favicon.svg", "/manifest.webmanifest", "/sw.js":
 		return true
 	}
 	if strings.HasPrefix(path, "/assets/") {

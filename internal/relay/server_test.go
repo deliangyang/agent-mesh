@@ -225,6 +225,9 @@ func TestSPAPublicPaths(t *testing.T) {
 	if !s.publicPath("/login") || !s.publicPath("/favicon.svg") {
 		t.Fatal("login static assets should be public")
 	}
+	if !s.publicPath("/manifest.webmanifest") || !s.publicPath("/sw.js") {
+		t.Fatal("PWA shell files should be public")
+	}
 	if s.publicPath("/style.css") || s.publicPath("/app.js") || s.publicPath("/") {
 		t.Fatal("chat page must not be anonymous")
 	}

@@ -91,6 +91,7 @@ export const zhCN: Record<string, string> = {
   "settings.connNodes": "节点",
   "settings.connEngines": "引擎",
   "settings.connSessions": "会话",
+  "settings.connClientOs": "当前浏览器",
   "settings.connRefresh": "刷新目录",
   "settings.connNodeList": "节点列表",
   "settings.connNodeEngines": "{count} 个引擎",

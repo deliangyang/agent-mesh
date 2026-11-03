@@ -91,6 +91,7 @@ export const en: Record<string, string> = {
   "settings.connNodes": "Nodes",
   "settings.connEngines": "Engines",
   "settings.connSessions": "Sessions",
+  "settings.connClientOs": "This browser",
   "settings.connRefresh": "Refresh catalog",
   "settings.connNodeList": "Nodes",
   "settings.connNodeEngines": "{count} engines",

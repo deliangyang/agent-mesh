@@ -11,6 +11,7 @@ import {
   localePref,
   t,
 } from "../locale";
+import { clientPlatformLabel } from "../clientPlatform";
 import { formatEngineInstall } from "../engineInstall";
 import { buildPlatformGroups } from "../platformGroups";
 import { showToast, toastError } from "../toast";
@@ -35,6 +36,7 @@ const router = useRouter();
 const theme = ref<MeshTheme>(loadTheme());
 const navEl = ref<HTMLElement | null>(null);
 const modLabel = modKeyLabel();
+const clientPlatform = clientPlatformLabel();
 
 const SHORTCUT_SCOPES: { id: ShortcutScope; labelKey: string }[] = [
   { id: "chat", labelKey: "settings.scScopeChat" },
@@ -313,6 +315,10 @@ onBeforeUnmount(() => {
             <div>
               <dt>{{ t("settings.connSessions") }}</dt>
               <dd>{{ diag.sessionCount }}</dd>
+            </div>
+            <div>
+              <dt>{{ t("settings.connClientOs") }}</dt>
+              <dd>{{ clientPlatform }}</dd>
             </div>
           </dl>
           <div v-if="diag.nodes.length" class="mesh-conn-nodes" role="list" :aria-label="t('settings.connNodeList')">

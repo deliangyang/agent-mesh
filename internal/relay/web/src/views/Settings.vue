@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { catalog, connectCatalog, meshLink, refreshCatalog } from "../catalog";
 import MeshSettings from "../components/MeshSettings.vue";
@@ -24,9 +24,17 @@ import { loadTheme, toggleTheme, type MeshTheme } from "../theme";
 const route = useRoute();
 const router = useRouter();
 const theme = ref<MeshTheme>(loadTheme());
+const navEl = ref<HTMLElement | null>(null);
 
 const section = computed(() => resolveSettingsSection(String(route.params.section || "")));
 const diag = computed(() => buildConnectionDiag(meshLink, catalog));
+
+function scrollActiveNav(): void {
+  void nextTick(() => {
+    const btn = navEl.value?.querySelector<HTMLElement>(".mesh-settings-nav-item.on");
+    btn?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+}
 
 function linkStateLabel(state: string): string {
   if (state === "live") return t("settings.connLive");
@@ -91,6 +99,7 @@ watch(
       return;
     }
     saveLastSettingsSection(resolveSettingsSection(String(raw)));
+    scrollActiveNav();
   },
   { immediate: true },
 );
@@ -124,7 +133,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="mesh-settings-layout">
-      <nav class="mesh-settings-nav" :aria-label="t('settings.pageTitle')">
+      <nav ref="navEl" class="mesh-settings-nav" :aria-label="t('settings.pageTitle')">
         <button
           v-for="item in SETTINGS_NAV"
           :key="item.id"

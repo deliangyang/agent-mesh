@@ -4,7 +4,7 @@ The Windows node is a tray app that talks to local coding-agent CLIs. There is n
 
 The public **relay** still belongs on Linux or macOS. Run the node on the Windows machine that has Claude / Cursor / Codex / OpenCode / Pi / WorkBuddy / Qoder CN.
 
-English · [简体中文](windows.zh-CN.md)
+English · [简体中文](windows.zh-CN.md) · [日本語](windows.ja.md)
 
 ## 1 · Get the binary
 

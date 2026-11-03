@@ -4,7 +4,7 @@ Windows 上的 node 是托盘程序，负责驱动本机的 coding agent 命令�
 
 对外的 **中继** 仍建议放在 Linux / macOS。Windows 机器只跑节点，并安装 Claude / Cursor / Codex / OpenCode / Pi / WorkBuddy / Qoder CN。
 
-[English](windows.md) · 简体中文
+[English](windows.md) · 简体中文 · [日本語](windows.ja.md)
 
 ## 1 · 拿到二进制
 

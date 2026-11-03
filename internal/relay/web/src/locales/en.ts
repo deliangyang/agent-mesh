@@ -2,6 +2,7 @@ export const en: Record<string, string> = {
   "locale.followSystem": "Language: follow system",
   "locale.english": "Language: English",
   "locale.chinese": "Language: Chinese",
+  "locale.japanese": "Language: Japanese",
 
   "login.title": "Enter chat",
   "login.hint": "Enter the shared password",

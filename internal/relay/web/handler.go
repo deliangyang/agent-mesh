@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"agent-mesh/internal/i18n"
 )
 
 // NewHandler serves the embedded Vue UI and optionally reverse-proxies API calls.
@@ -97,7 +99,7 @@ func newHandler(relayURL, password string, assets fs.FS) (http.Handler, error) {
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.apiPath(r) {
 		if h.proxy == nil {
-			http.Error(w, "relay url is not set", http.StatusBadGateway)
+			i18n.Error(w, r, http.StatusBadGateway, "http.relayURLNotSet")
 			return
 		}
 		h.proxy.ServeHTTP(w, r)

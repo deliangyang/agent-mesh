@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { fetchJSON } from "../http";
 import { t } from "../locale";
 import { meshTarget } from "../target";
 import { toastError } from "../toast";
@@ -41,7 +42,7 @@ async function loadRepos(): Promise<void> {
   error.value = "";
   try {
     const q = new URLSearchParams({ cwd: cwd.value, node: meshTarget.node });
-    const resp = await fetch("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
+    const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
     if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
     const data = (await resp.json()) as { repos?: GitRepo[] };
     repos.value = data.repos || [];
@@ -67,7 +68,7 @@ async function loadDiff(path: string): Promise<void> {
   error.value = "";
   try {
     const q = new URLSearchParams({ repo: path, node: meshTarget.node, cwd: cwd.value });
-    const resp = await fetch("/v1/openai/git/diff?" + q.toString(), { credentials: "same-origin" });
+    const resp = await fetchJSON("/v1/openai/git/diff?" + q.toString(), { credentials: "same-origin" });
     if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
     bundle.value = (await resp.json()) as GitBundle;
     const first = (bundle.value.files || []).find((f) => f.patch);

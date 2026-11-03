@@ -1,0 +1,28 @@
+{
+  "tray.balloonTitle": "Agent Mesh",
+  "tray.balloonBody": "Node is running in the tray. Left-click to open the UI.",
+  "tray.open": "Open",
+  "tray.settings": "Settings",
+  "tray.quit": "Quit",
+
+  "http.unauthorized": "unauthorized",
+  "http.wrongPassword": "wrong password",
+  "http.method": "method",
+  "http.methodNotAllowed": "method not allowed",
+  "http.badJSON": "bad json",
+  "http.badEnvelope": "bad envelope",
+  "http.handshakeFailed": "handshake failed",
+  "http.seal": "seal",
+  "http.streamUnsupported": "stream unsupported",
+  "http.webMissing": "web missing",
+  "http.staleRegister": "stale register",
+  "http.badSignature": "bad signature",
+  "http.cwdRequired": "cwd is required",
+  "http.repoRequired": "repo is required",
+  "http.missingChoiceText": "missing choice text",
+  "http.engineRequired": "engine is required",
+  "http.messagesMissingUserText": "messages missing user text",
+  "http.relayURLNotSet": "relay url is not set",
+  "http.modelMustLookLikeNode": "model must look like {nodeID}/{engine}, or {engine} when this relay has a single node",
+  "http.modelMustLookLikeEngine": "model must look like cursor or cursor/composer-2.5"
+}

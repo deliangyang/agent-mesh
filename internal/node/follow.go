@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agent-mesh/internal/followup"
+	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/protocol"
 )
 
@@ -141,7 +142,7 @@ func (s *Server) handleFollowups(w http.ResponseWriter, r *http.Request) {
 			s.publishFollow(out)
 		}
 	default:
-		http.Error(w, "method", http.StatusMethodNotAllowed)
+		i18n.Error(w, r, http.StatusMethodNotAllowed, "http.method")
 		return
 	}
 	if err != nil {

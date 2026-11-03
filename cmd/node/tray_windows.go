@@ -11,6 +11,8 @@ import (
 
 	_ "embed"
 
+	"agent-mesh/internal/i18n"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -221,17 +223,24 @@ func trayWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 	return r
 }
 
-func trayChineseUI() bool {
+func trayUILocale() string {
 	r, _, _ := getUserDefaultUILanguage.Call()
-	// LANGID primary language is the low 10 bits; LANG_CHINESE == 0x04.
-	return uint16(r)&0x3ff == 0x04
+	// LANGID primary language is the low 10 bits.
+	switch uint16(r) & 0x3ff {
+	case 0x04: // LANG_CHINESE
+		return i18n.LangZhCN
+	case 0x11: // LANG_JAPANESE
+		return i18n.LangJa
+	default:
+		return i18n.Default
+	}
 }
 
 func showTrayBalloon(nid *notifyIconData) {
 	if nid == nil {
 		return
 	}
-	title, body := trayStartBalloon(trayChineseUI())
+	title, body := trayStartBalloon(trayUILocale())
 	titleU, _ := windows.UTF16FromString(title)
 	bodyU, _ := windows.UTF16FromString(body)
 	copy(nid.InfoTitle[:], titleU)
@@ -249,7 +258,7 @@ func showTrayMenu(hwnd windows.Handle) {
 		return
 	}
 	defer destroyMenu.Call(hMenu)
-	openLabel, settingsLabel, quitLabel := trayMenuLabels(trayChineseUI())
+	openLabel, settingsLabel, quitLabel := trayMenuLabels(trayUILocale())
 	openText, _ := windows.UTF16PtrFromString(openLabel)
 	settingsText, _ := windows.UTF16PtrFromString(settingsLabel)
 	quitText, _ := windows.UTF16PtrFromString(quitLabel)

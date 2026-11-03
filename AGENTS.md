@@ -19,6 +19,7 @@ internal/relay    relay HTTP / directory / embedded web UI
 internal/hub      local sessions → OpenAI chunks, pushed to subscribers and the relay
 internal/followup follow-up queue (default ~/.agent-mesh/followups)
 internal/gitdiff  workspace git diff
+internal/i18n     embedded locale JSON; Accept-Language negotiation for HTTP/tray
 internal/relay/web  web source (build output is embedded in relay)
 desktop           local node + shared Vue UI (Chrome app, or Wails WebView2/WebKitGTK with CGO)
 deploy/supervisor sample supervisord unit for a local node
@@ -28,8 +29,11 @@ deploy/desktop    Linux .desktop launcher for the node
 scripts           install-relay.sh / install-node.sh, setup, and release packaging
 docs/windows.md   Windows node zip, tray, and logon startup
 docs/windows.zh-CN.md  same, in Chinese
+docs/windows.ja.md     same, in Japanese
 docs/macos.md     macOS install-node, launchd, Agent Mesh.app
 docs/macos.zh-CN.md  same, in Chinese
+docs/macos.ja.md     same, in Japanese
+docs/i18n.md      Accept-Language + embedded locale catalogs
 ```
 
 ## Trust boundary
@@ -97,6 +101,7 @@ See: `internal/driver/claude` (jsonl + socket inject), `internal/driver/cursor` 
 - Identifiers in English; exported symbols use English godoc (`// Driver is a local coding-agent engine.`).
 - Wrap errors with `%w` and include the engine or method name so logs can locate them.
 - Use stdlib `testing`. Name table cases with `t.Run`. Fail assertions with `t.Fatalf`.
+- User-facing HTTP/tray strings go through `internal/i18n` (embedded `locales/*.json`); language from `Accept-Language`. See `docs/i18n.md`. Web UI catalogs live in `internal/relay/web/src/locales/` (`en` / `zh-CN` / `ja`).
 - Prefix web components with `Mesh`. Style with CSS variables in `style.css` (`--paper` `--ink` `--signal`); do not start another theme.
 - After user-visible web changes, cover the path in a browser or `node --test`. Do not stop at a screenshot.
 - Keep diffs small: no unrelated refactors, no mass formatting outside `dist` assets.

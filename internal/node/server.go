@@ -14,6 +14,7 @@ import (
 	"agent-mesh/internal/driver"
 	"agent-mesh/internal/e2e"
 	"agent-mesh/internal/hub"
+	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/protocol"
 	meshweb "agent-mesh/internal/relay/web"
 
@@ -114,7 +115,7 @@ func (s *Server) handleLocalLogin(w http.ResponseWriter, r *http.Request) {
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept-Language")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -139,19 +140,19 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "bad envelope", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badEnvelope")
 		return
 	}
 	env, err := e2e.DecodeEnvelope(r, body)
 	if err != nil {
-		http.Error(w, "bad envelope", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badEnvelope")
 		return
 	}
 	bin := e2e.WantsBinary(r)
 	ack, sess, err := e2e.AcceptHandshake(s.Ident, env)
 	if err != nil {
 		s.Log.Warn("handshake failed", "err", err)
-		http.Error(w, "handshake failed", http.StatusUnauthorized)
+		i18n.Error(w, r, http.StatusUnauthorized, "http.handshakeFailed")
 		return
 	}
 	s.mu.Lock()
@@ -184,7 +185,7 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	plain, _ := json.Marshal(resp)
 	out, err := sess.Seal(plain)
 	if err != nil {
-		http.Error(w, "seal", http.StatusInternalServerError)
+		i18n.Error(w, r, http.StatusInternalServerError, "http.seal")
 		return
 	}
 	out.Kind = "rpc"
@@ -201,7 +202,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "stream unsupported", http.StatusInternalServerError)
+		i18n.Error(w, r, http.StatusInternalServerError, "http.streamUnsupported")
 		return
 	}
 	binStream := e2e.WantsBinaryStream(r)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agent-mesh/internal/driver"
+	"agent-mesh/internal/i18n"
 )
 
 // MeshStatus is the local node ↔ relay settings shown in the desktop UI.
@@ -191,7 +192,7 @@ func (s *Server) handleMesh(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		var body meshBody
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
+			i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 			return
 		}
 		if err := s.ConfigureMesh(r.Context(), body.relayList(), body.Advertise, body.Password); err != nil {
@@ -204,14 +205,14 @@ func (s *Server) handleMesh(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "mesh": s.MeshStatus()})
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		i18n.Error(w, r, http.StatusMethodNotAllowed, "http.methodNotAllowed")
 	}
 }
 
 func (s *Server) handleMeshTest(w http.ResponseWriter, r *http.Request) {
 	var body meshBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	relays := body.relayList()

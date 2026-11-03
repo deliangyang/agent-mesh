@@ -2,7 +2,7 @@
 
 macOS uses the same `install-node.sh` flow as Linux: it installs `mesh-node` / `mesh-ctl`, writes a launchd plist (`RunAtLoad` + `KeepAlive`), and on a graphical session also creates `Agent Mesh.app` under `~/Applications`.
 
-English · [简体中文](macos.zh-CN.md)
+English · [简体中文](macos.zh-CN.md) · [日本語](macos.ja.md)
 
 The public **relay** can run on the same Mac or on a Linux host. Run the **node** on the Mac that has Claude / Cursor / Codex / OpenCode / Pi / WorkBuddy / Qoder CN.
 

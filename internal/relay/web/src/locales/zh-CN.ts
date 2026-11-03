@@ -2,6 +2,7 @@ export const zhCN: Record<string, string> = {
   "locale.followSystem": "语言：跟随系统",
   "locale.english": "语言：English",
   "locale.chinese": "语言：中文",
+  "locale.japanese": "语言：日本語",
 
   "login.title": "进入聊天",
   "login.hint": "输入共享密码",

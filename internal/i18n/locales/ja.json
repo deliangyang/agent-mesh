@@ -1,0 +1,28 @@
+{
+  "tray.balloonTitle": "Agent Mesh",
+  "tray.balloonBody": "ノードはトレイで実行中です。左クリックで UI を開きます。",
+  "tray.open": "開く",
+  "tray.settings": "設定",
+  "tray.quit": "終了",
+
+  "http.unauthorized": "認証が必要です",
+  "http.wrongPassword": "パスワードが違います",
+  "http.method": "メソッドが許可されていません",
+  "http.methodNotAllowed": "メソッドが許可されていません",
+  "http.badJSON": "不正な JSON です",
+  "http.badEnvelope": "不正なエンベロープです",
+  "http.handshakeFailed": "ハンドシェイクに失敗しました",
+  "http.seal": "シールに失敗しました",
+  "http.streamUnsupported": "ストリームはサポートされていません",
+  "http.webMissing": "Web リソースがありません",
+  "http.staleRegister": "登録が期限切れです",
+  "http.badSignature": "署名が無効です",
+  "http.cwdRequired": "作業ディレクトリが必要です",
+  "http.repoRequired": "リポジトリが必要です",
+  "http.missingChoiceText": "選択肢のテキストがありません",
+  "http.engineRequired": "エンジンが必要です",
+  "http.messagesMissingUserText": "メッセージにユーザーテキストがありません",
+  "http.relayURLNotSet": "リレー URL が設定されていません",
+  "http.modelMustLookLikeNode": "model は {nodeID}/{engine} 形式、またはこのリレーにノードが1つの場合は {engine} です",
+  "http.modelMustLookLikeEngine": "model は cursor または cursor/composer-2.5 形式です"
+}

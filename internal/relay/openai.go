@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/openai"
 	"agent-mesh/internal/protocol"
 
@@ -126,7 +127,7 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	var chunk openai.Chunk
 	if err := json.NewDecoder(r.Body).Decode(&chunk); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	s.ingest.publish(chunk)
@@ -148,7 +149,7 @@ func writePipeErr(w http.ResponseWriter, err error) {
 func (s *Server) handleOpenEvents(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "stream unsupported", http.StatusInternalServerError)
+		i18n.Error(w, r, http.StatusInternalServerError, "http.streamUnsupported")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -413,12 +414,12 @@ func (s *Server) handleOpenChat(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	var req openai.ChatRequest
 	if json.Unmarshal(body, &req) != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	nodeID, model := splitNodeModel(req.Model, s.Dir.List())
 	if nodeID == "" {
-		http.Error(w, "model must look like {nodeID}/{engine}, or {engine} when this relay has a single node", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.modelMustLookLikeNode")
 		return
 	}
 	req.Model = model

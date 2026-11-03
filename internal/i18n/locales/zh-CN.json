@@ -1,0 +1,28 @@
+{
+  "tray.balloonTitle": "Agent Mesh",
+  "tray.balloonBody": "节点已在托盘运行。左键打开界面。",
+  "tray.open": "打开",
+  "tray.settings": "设置",
+  "tray.quit": "退出",
+
+  "http.unauthorized": "未授权",
+  "http.wrongPassword": "密码错误",
+  "http.method": "方法不允许",
+  "http.methodNotAllowed": "方法不允许",
+  "http.badJSON": "JSON 无效",
+  "http.badEnvelope": "信封无效",
+  "http.handshakeFailed": "握手失败",
+  "http.seal": "封装失败",
+  "http.streamUnsupported": "不支持流式响应",
+  "http.webMissing": "缺少 Web 资源",
+  "http.staleRegister": "注册已过期",
+  "http.badSignature": "签名无效",
+  "http.cwdRequired": "需要工作目录",
+  "http.repoRequired": "需要仓库路径",
+  "http.missingChoiceText": "缺少选项文本",
+  "http.engineRequired": "需要引擎",
+  "http.messagesMissingUserText": "消息缺少用户文本",
+  "http.relayURLNotSet": "未设置中继地址",
+  "http.modelMustLookLikeNode": "model 格式应为 {nodeID}/{engine}；若本中继仅有一个节点也可为 {engine}",
+  "http.modelMustLookLikeEngine": "model 格式应为 cursor 或 cursor/composer-2.5"
+}

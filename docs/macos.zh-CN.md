@@ -2,7 +2,7 @@
 
 macOS 与 Linux 共用 `install-node.sh`：安装 `mesh-node` / `mesh-ctl`、写入 launchd plist（`RunAtLoad` + `KeepAlive`），图形会话下还会在 `~/Applications` 生成 `Agent Mesh.app`。
 
-[English](macos.md) · 简体中文
+[English](macos.md) · 简体中文 · [日本語](macos.ja.md)
 
 公共 **relay** 可跑在同一台 Mac 或 Linux 上；**node** 应跑在已安装 Claude / Cursor / Codex / OpenCode / Pi / WorkBuddy / Qoder CN 的那台 Mac。
 

@@ -1,3 +1,5 @@
+import { acceptLanguageHeader } from "./locale.ts";
+
 export function timeoutSignal(ms: number, parent?: AbortSignal): AbortSignal {
   const ac = new AbortController();
   const timer = window.setTimeout(() => ac.abort(), ms);
@@ -10,7 +12,16 @@ export function timeoutSignal(ms: number, parent?: AbortSignal): AbortSignal {
   return ac.signal;
 }
 
+function withAcceptLanguage(init: RequestInit = {}): RequestInit {
+  const headers = new Headers(init.headers || undefined);
+  if (!headers.has("Accept-Language")) {
+    headers.set("Accept-Language", acceptLanguageHeader());
+  }
+  return { ...init, headers };
+}
+
 export function fetchJSON(input: RequestInfo | URL, init: RequestInit = {}, ms = 15000): Promise<Response> {
-  if (ms <= 0) return fetch(input, init);
-  return fetch(input, { ...init, signal: timeoutSignal(ms, init.signal || undefined) });
+  const next = withAcceptLanguage(init);
+  if (ms <= 0) return fetch(input, next);
+  return fetch(input, { ...next, signal: timeoutSignal(ms, next.signal || undefined) });
 }

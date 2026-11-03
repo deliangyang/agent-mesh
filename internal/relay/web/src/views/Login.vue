@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { fetchJSON } from "../http";
 import { loadLastPick, pickToQuery } from "../lastPick";
 import { t } from "../locale";
 import { toastError } from "../toast";
@@ -14,7 +15,7 @@ async function submit(): Promise<void> {
   err.value = "";
   busy.value = true;
   try {
-    const resp = await fetch("/login", {
+    const resp = await fetchJSON("/login", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },

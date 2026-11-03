@@ -264,7 +264,7 @@ func runLinuxTray(ctx context.Context, cancel context.CancelFunc, uiURL string) 
 	}
 	defer conn.Close()
 
-	openLabel, settingsLabel, quitLabel := trayMenuLabels(trayChineseLocale())
+	openLabel, settingsLabel, quitLabel := trayMenuLabels(trayLocaleFromEnv())
 	sni := &linuxSNI{uiURL: uiURL, cancel: cancel}
 	menu := &linuxMenu{uiURL: uiURL, cancel: cancel, open: openLabel, settings: settingsLabel, quit: quitLabel}
 

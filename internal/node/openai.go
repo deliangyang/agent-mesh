@@ -14,6 +14,7 @@ import (
 	"agent-mesh/internal/driver"
 	"agent-mesh/internal/followup"
 	"agent-mesh/internal/gitdiff"
+	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/openai"
 	"agent-mesh/internal/protocol"
 
@@ -188,7 +189,7 @@ func (s *Server) handleEngineToggle(w http.ResponseWriter, r *http.Request) {
 		Enabled bool `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	if err := s.Drivers.SetEnabled(name, body.Enabled); err != nil {
@@ -298,7 +299,7 @@ func (s *Server) sessionHistory(ctx context.Context, engine, sid string, tail in
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "stream unsupported", http.StatusInternalServerError)
+		i18n.Error(w, r, http.StatusInternalServerError, "http.streamUnsupported")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -326,7 +327,7 @@ func (s *Server) handleOpenStream(w http.ResponseWriter, r *http.Request) {
 	sid := r.URL.Query().Get("session")
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "stream unsupported", http.StatusInternalServerError)
+		i18n.Error(w, r, http.StatusInternalServerError, "http.streamUnsupported")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -350,7 +351,7 @@ func (s *Server) handleOpenStream(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGitRepos(w http.ResponseWriter, r *http.Request) {
 	cwd := r.URL.Query().Get("cwd")
 	if cwd == "" {
-		http.Error(w, "cwd is required", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.cwdRequired")
 		return
 	}
 	rows, err := gitdiff.List(r.Context(), cwd)
@@ -370,7 +371,7 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 		repo = r.URL.Query().Get("cwd")
 	}
 	if repo == "" {
-		http.Error(w, "repo is required", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.repoRequired")
 		return
 	}
 	bundle, err := gitdiff.Diff(r.Context(), repo)
@@ -416,16 +417,16 @@ func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 		Text    string `json:"text"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	req.Text = strings.TrimSpace(req.Text)
 	if req.Text == "" {
-		http.Error(w, "missing choice text", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.missingChoiceText")
 		return
 	}
 	if req.Engine == "" {
-		http.Error(w, "engine is required", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.engineRequired")
 		return
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
@@ -463,19 +464,19 @@ func (s *Server) localModelID(model string) string {
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	var req openai.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	req.Model = s.localModelID(req.Model)
 	engine, modelName := openai.EngineModel(req.Model, req.Engine, s.Drivers.Names())
 	if engine == "" {
-		http.Error(w, "model must look like cursor or cursor/composer-2.5", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.modelMustLookLikeEngine")
 		return
 	}
 	text := openai.LastUserText(req.Messages)
 	files := openai.CollectFiles(req)
 	if text == "" && len(files) == 0 {
-		http.Error(w, "messages missing user text", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.messagesMissingUserText")
 		return
 	}
 	text, err := openai.ApplyFiles(req.CWD, text, files)
@@ -534,7 +535,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if req.Stream {
 		fl, ok := w.(http.Flusher)
 		if !ok {
-			http.Error(w, "stream unsupported", http.StatusInternalServerError)
+			i18n.Error(w, r, http.StatusInternalServerError, "http.streamUnsupported")
 			for range chunks {
 			}
 			return

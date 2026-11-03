@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/protocol"
 )
 
@@ -188,7 +189,7 @@ func (s *Server) Handler() http.Handler {
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept-Language")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -201,16 +202,16 @@ func withCORS(next http.Handler) http.Handler {
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req protocol.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
 		return
 	}
 	if time.Since(time.Unix(req.Unix, 0)) > 2*time.Minute {
-		http.Error(w, "stale register", http.StatusUnauthorized)
+		i18n.Error(w, r, http.StatusUnauthorized, "http.staleRegister")
 		return
 	}
 	msg := []byte(fmt.Sprintf("%s|%s|%d", req.Info.ID, req.Info.Listen, req.Unix))
 	if len(req.Info.SignPub) != ed25519.PublicKeySize || !ed25519.Verify(req.Info.SignPub, msg, req.Signature) {
-		http.Error(w, "bad signature", http.StatusUnauthorized)
+		i18n.Error(w, r, http.StatusUnauthorized, "http.badSignature")
 		return
 	}
 	req.Info.LastSeen = time.Now().Unix()

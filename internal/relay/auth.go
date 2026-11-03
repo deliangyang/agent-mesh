@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/relay/web"
 )
 
@@ -67,7 +68,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/v1/") {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			i18n.Error(w, r, http.StatusUnauthorized, "http.unauthorized")
 			return
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
@@ -84,7 +85,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		http.Error(w, "method", http.StatusMethodNotAllowed)
+		i18n.Error(w, r, http.StatusMethodNotAllowed, "http.method")
 		return
 	}
 	password := r.FormValue("password")
@@ -96,7 +97,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		password = body.Password
 	}
 	if s.Password == "" || subtle.ConstantTimeCompare([]byte(password), []byte(s.Password)) != 1 {
-		http.Error(w, "wrong password", http.StatusUnauthorized)
+		i18n.Error(w, r, http.StatusUnauthorized, "http.wrongPassword")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -134,7 +135,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request, name string) {
 	sub, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
-		http.Error(w, "web missing", http.StatusInternalServerError)
+		i18n.Error(w, r, http.StatusInternalServerError, "http.webMissing")
 		return
 	}
 	http.ServeFileFS(w, r, sub, name)

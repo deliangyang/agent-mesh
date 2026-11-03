@@ -36,6 +36,7 @@ type Server struct {
 	snapRaw  []byte
 	tunConn  tunnelConn
 	follow   *followRuns
+	turns    *turnCancels
 	bus      *busHub
 
 	relays    []string
@@ -64,6 +65,7 @@ func New(ident *e2e.Identity, listen, name string, drivers *driver.Set, log *slo
 		Log:      log,
 		sessions: make(map[string]*e2e.Session),
 		follow:   newFollowRuns(),
+		turns:    newTurnCancels(),
 		snap:     protocol.NodeSnapshot{Followups: []protocol.FollowQueue{}},
 		bus:      newBusHub(),
 	}

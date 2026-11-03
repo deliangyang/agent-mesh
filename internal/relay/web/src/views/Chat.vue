@@ -18,9 +18,6 @@ import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards
 import {
   capsAllowDiff,
   capsAllowFollowups,
-  capsBadgeLabel,
-  capsBadgeTitle,
-  capsBadges,
   engineCaps,
   showAskChrome,
 } from "../engineCaps";
@@ -28,7 +25,7 @@ import { formatEngineInstall } from "../engineInstall";
 import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
-import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
+import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft, stopRemoteTurn } from "../meshAgent";
 import { t } from "../locale";
 import { filterNodesByOs, nodePlatforms } from "../nodeFilter";
 import { platformLabel } from "../platform";
@@ -37,7 +34,7 @@ import { isOpenSettingsHotkey } from "../settingsHotkey";
 import { slashItems, watchSlashCatalog } from "../slash";
 import { meshTarget, threadIdOf } from "../target";
 import { clearAttachJobs, onComposerUploadFailed, uploadComposerFile } from "../attachUpload";
-import type { DirRow, Session } from "../types";
+import type { DirRow, GitRepo, Session } from "../types";
 
 useDefaultRenderTool({ render: MeshToolWindow });
 
@@ -154,7 +151,31 @@ const engineHint = computed(() => (engineCards.value.length ? "" : engineEmptyHi
 
 const selectedCaps = computed(() => engineCaps(catalog.engines, filters.node, filters.engine));
 
-const showDiff = computed(() => capsAllowDiff(selectedCaps.value));
+const gitRepos = ref<GitRepo[]>([]);
+let gitProbeSeq = 0;
+
+async function probeGitRepos(): Promise<void> {
+  const cwd = filters.dir || meshTarget.cwd;
+  const node = filters.node || meshTarget.node;
+  if (!cwd || !capsAllowDiff(selectedCaps.value)) {
+    gitRepos.value = [];
+    return;
+  }
+  const seq = ++gitProbeSeq;
+  try {
+    const q = new URLSearchParams({ cwd, node });
+    const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
+    if (!resp.ok) throw new Error("git probe failed");
+    const data = (await resp.json()) as { repos?: GitRepo[] };
+    if (seq !== gitProbeSeq) return;
+    gitRepos.value = data.repos || [];
+  } catch {
+    if (seq !== gitProbeSeq) return;
+    gitRepos.value = [];
+  }
+}
+
+const showDiff = computed(() => capsAllowDiff(selectedCaps.value) && gitRepos.value.length > 0);
 
 const showFollowups = computed(() => capsAllowFollowups(selectedCaps.value));
 
@@ -661,6 +682,18 @@ watch(
 );
 
 watch(
+  () => [filters.dir, filters.node, filters.engine, selectedCaps.value.diff] as const,
+  () => {
+    void probeGitRepos();
+  },
+  { immediate: true },
+);
+
+watch(showDiff, (on) => {
+  if (!on) diffOpen.value = false;
+});
+
+watch(
   () => dirOptions.value,
   () => {
     if (creating.value || isDraftChat.value) ensureWorkDir();
@@ -751,6 +784,14 @@ function stopTurn(slot: { onStop?: () => void }): void {
   } catch {
     /* no in-flight request */
   }
+  void stopRemoteTurn();
+}
+
+function engineMark(name: string): string {
+  const n = String(name || "").trim();
+  if (!n) return "?";
+  if (n === "qoder-cn" || n === "qodercn") return "Q";
+  return n.charAt(0).toUpperCase();
 }
 
 function onComposerSubmit(
@@ -925,17 +966,11 @@ onBeforeUnmount(() => {
             type="button"
             class="mesh-card mesh-card-engine"
             :class="{ sel: filters.engine === e.name }"
+            :data-engine="e.name"
             @click="pickEngine(e.name)"
           >
+            <span class="mesh-engine-mark" aria-hidden="true">{{ engineMark(e.name) }}</span>
             <span class="mesh-card-title">{{ e.title || e.name }}</span>
-            <span v-if="capsBadges(e.caps).length" class="mesh-card-caps">
-              <span
-                v-for="b in capsBadges(e.caps)"
-                :key="e.name + b"
-                class="mesh-cap"
-                :title="capsBadgeTitle(b)"
-              >{{ capsBadgeLabel(b) }}</span>
-            </span>
           </button>
           <div v-if="engineHint" class="mesh-pick-empty">{{ engineHint }}</div>
           <div v-if="missingEngines.length" class="mesh-engine-hints">

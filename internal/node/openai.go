@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,8 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/openai/ws", s.handleWS)
 	mux.HandleFunc("GET /v1/openai/git", s.handleGitRepos)
 	mux.HandleFunc("GET /v1/openai/git/diff", s.handleGitDiff)
+	mux.HandleFunc("GET /v1/openai/file", s.handleInboxFile)
+	mux.HandleFunc("POST /v1/openai/stop", s.handleStop)
 	mux.HandleFunc("POST /v1/openai/choice", s.handleChoice)
 	mux.HandleFunc("GET /v1/openai/followups", s.handleFollowups)
 	mux.HandleFunc("POST /v1/openai/followups", s.handleFollowups)
@@ -348,6 +351,60 @@ func (s *Server) handleOpenStream(w http.ResponseWriter, r *http.Request) {
 	fl.Flush()
 }
 
+func (s *Server) handleInboxFile(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		i18n.Error(w, r, http.StatusBadRequest, "http.cwdRequired")
+		return
+	}
+	if err := openai.WriteInboxFile(w, r, path); err != nil {
+		if strings.Contains(err.Error(), "forbidden") {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		if os.IsNotExist(err) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadGateway)
+	}
+}
+
+func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Engine  string `json:"engine"`
+		Session string `json:"session"`
+		CWD     string `json:"cwd"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
+		return
+	}
+	if req.Engine == "" {
+		i18n.Error(w, r, http.StatusBadRequest, "http.engineRequired")
+		return
+	}
+	key := turnKey(req.Engine, req.Session, req.CWD)
+	stopped := false
+	if s.turns != nil {
+		stopped = s.turns.stop(key)
+		if !stopped && req.Session != "" && req.CWD != "" {
+			stopped = s.turns.stop(turnKey(req.Engine, "", req.CWD))
+		}
+	}
+	interrupted := false
+	if d, err := s.Drivers.Get(req.Engine); err == nil {
+		if hit, ok := d.(interface {
+			Interrupt(ctx context.Context, sessionID string) error
+		}); ok && req.Session != "" {
+			if err := hit.Interrupt(r.Context(), req.Session); err == nil {
+				interrupted = true
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "stopped": stopped, "interrupted": interrupted})
+}
+
 func (s *Server) handleGitRepos(w http.ResponseWriter, r *http.Request) {
 	cwd := r.URL.Query().Get("cwd")
 	if cwd == "" {
@@ -518,9 +575,30 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	// a dropped browser must not kill the engine process; progress continues over broadcast / WebSocket.
-	// cancel this turn's Watch after Pump; long-term follow stays with Hub.runWatch.
+	// Stop (POST /v1/openai/stop) cancels this turn via turnCancels.
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
 	defer stop()
+	handle := &turnHandle{cancel: stop}
+	var turnIDs []string
+	bindTurn := func(session string) {
+		if s.turns == nil {
+			return
+		}
+		key := turnKey(engine, session, req.CWD)
+		for _, k := range turnIDs {
+			if k == key {
+				return
+			}
+		}
+		s.turns.register(key, handle)
+		turnIDs = append(turnIDs, key)
+	}
+	bindTurn(sid)
+	defer func() {
+		for _, k := range turnIDs {
+			s.turns.clear(k, handle)
+		}
+	}()
 	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text, modelName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -530,6 +608,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	note := func(chunk openai.Chunk) {
 		if chunk.Mesh.Session != "" {
 			sid = chunk.Mesh.Session
+			bindTurn(sid)
 		}
 	}
 	if req.Stream {

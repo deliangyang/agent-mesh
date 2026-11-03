@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -91,9 +92,16 @@ func EventTime(obj map[string]any) int64 {
 
 // ExtractUserText extracts user-visible text.
 func ExtractUserText(text string) string {
+	text, _ = SplitUserPrompt(text)
+	return text
+}
+
+// SplitUserPrompt returns cleaned user text plus inbox attachments from MESH_ATTACH.
+func SplitUserPrompt(text string) (string, []protocol.AttachFile) {
 	if text == "" {
-		return ""
+		return "", nil
 	}
+	files := parseMeshAttachFiles(text)
 	text = stripMeshAttach(text)
 	var parts []string
 	for _, m := range userQueryRe.FindAllStringSubmatch(text, -1) {
@@ -105,9 +113,58 @@ func ExtractUserText(text string) string {
 		}
 	}
 	if len(parts) > 0 {
-		return dropInjectedUserPrefix(strings.Join(parts, "\n"))
+		return dropInjectedUserPrefix(strings.Join(parts, "\n")), files
 	}
-	return dropInjectedUserPrefix(stripEnvelopeTags(text))
+	return dropInjectedUserPrefix(stripEnvelopeTags(text)), files
+}
+
+func parseMeshAttachFiles(text string) []protocol.AttachFile {
+	const open, close = "<<MESH_ATTACH>>", "<</MESH_ATTACH>>"
+	s := text
+	var out []protocol.AttachFile
+	for {
+		i := strings.Index(s, open)
+		if i < 0 {
+			break
+		}
+		j := strings.Index(s[i:], close)
+		if j < 0 {
+			break
+		}
+		block := s[i+len(open) : i+j]
+		s = s[i+j+len(close):]
+		for _, line := range strings.Split(block, "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "- ") {
+				continue
+			}
+			line = strings.TrimSpace(line[2:])
+			mime := ""
+			if p := strings.LastIndex(line, " ("); p > 0 && strings.HasSuffix(line, ")") {
+				mime = strings.TrimSuffix(line[p+2:], ")")
+				line = strings.TrimSpace(line[:p])
+			}
+			slash := filepath.ToSlash(line)
+			if !strings.Contains(slash, "/.agent-mesh/inbox/") {
+				continue
+			}
+			out = append(out, protocol.AttachFile{
+				Path: line,
+				MIME: mime,
+				Name: filepath.Base(line),
+			})
+		}
+	}
+	return out
+}
+
+// UserEvent builds a user event, keeping inbox attachment refs for the web UI.
+func UserEvent(raw string) []protocol.Event {
+	text, files := SplitUserPrompt(raw)
+	if text == "" && len(files) == 0 {
+		return nil
+	}
+	return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text), Files: files}}
 }
 
 var cursorTaskPrefixRe = regexp.MustCompile(`(?s)^\s*Briefly inform the user about the task result[^\n]*(?:\n+|$)`)
@@ -766,14 +823,15 @@ func parseCodexSessionMeta(obj map[string]any) []protocol.Event {
 func parseCodexEventMsg(part map[string]any) []protocol.Event {
 	switch strField(part, "type") {
 	case "user_message":
-		text := ExtractUserText(strField(part, "message", "text"))
-		if text == "" {
-			text = ExtractUserText(ContentToText(part["content"]))
+		raw := strField(part, "message", "text")
+		if raw == "" {
+			raw = ContentToText(part["content"])
 		}
-		if text == "" || codexInjectedUser(text) {
+		evs := UserEvent(raw)
+		if len(evs) == 0 || codexInjectedUser(evs[0].Text) {
 			return []protocol.Event{}
 		}
-		return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+		return evs
 	case "agent_message":
 		text := strField(part, "message", "text")
 		if text == "" {
@@ -805,11 +863,11 @@ func parseCodexResponseItem(part map[string]any) []protocol.Event {
 			return []protocol.Event{}
 		}
 		if role == "user" {
-			text := ExtractUserText(ContentToText(part["content"]))
-			if text == "" || codexInjectedUser(text) {
+			evs := UserEvent(ContentToText(part["content"]))
+			if len(evs) == 0 || codexInjectedUser(evs[0].Text) {
 				return []protocol.Event{}
 			}
-			return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+			return evs
 		}
 		if role == "assistant" {
 			text := ContentToText(part["content"])
@@ -1095,11 +1153,11 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 				}
 			}
 		}
-		text := ExtractUserText(ContentToText(content))
-		if text == "" {
+		evs := UserEvent(ContentToText(content))
+		if len(evs) == 0 {
 			return nil
 		}
-		return []protocol.Event{{Type: "user", Role: "user", Text: FullText(text)}}
+		return evs
 	}
 	if role == "assistant" || kind == "assistant" {
 		if _, ok := content.([]any); ok {

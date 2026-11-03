@@ -291,7 +291,7 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 	if path == "" {
 		return nil, fmt.Errorf("session %s has no jsonl", sessionID)
 	}
-	rows, err := watchfile.PollJSONL(ctx, path, true, 300*time.Millisecond)
+	rows, err := watchfile.PollJSONL(ctx, path, true, 100*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}

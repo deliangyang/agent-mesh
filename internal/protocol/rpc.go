@@ -39,17 +39,25 @@ type Response struct {
 	Body  json.RawMessage `json:"body,omitempty"`
 }
 
+// AttachFile is an inbox attachment referenced from a user turn.
+type AttachFile struct {
+	Path string `json:"path"`
+	MIME string `json:"mime,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
 // Event is streaming progress.
 type Event struct {
-	Type    string `json:"type"`
-	Role    string `json:"role,omitempty"`
-	Tool    string `json:"tool,omitempty"`
-	Engine  string `json:"engine,omitempty"`
-	Session string `json:"session,omitempty"`
-	Text    string `json:"text,omitempty"`
-	Preview string `json:"preview,omitempty"`
-	Unix    int64  `json:"unix,omitempty"`
-	Done    bool   `json:"done,omitempty"`
+	Type    string       `json:"type"`
+	Role    string       `json:"role,omitempty"`
+	Tool    string       `json:"tool,omitempty"`
+	Engine  string       `json:"engine,omitempty"`
+	Session string       `json:"session,omitempty"`
+	Text    string       `json:"text,omitempty"`
+	Preview string       `json:"preview,omitempty"`
+	Unix    int64        `json:"unix,omitempty"`
+	Done    bool         `json:"done,omitempty"`
+	Files   []AttachFile `json:"files,omitempty"`
 }
 
 // WorkDir is a workspace an engine has used.

@@ -101,6 +101,8 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/openai/commands", s.handleOpenCommands)
 	mux.HandleFunc("GET /v1/openai/git", s.handleOpenGitRepos)
 	mux.HandleFunc("GET /v1/openai/git/diff", s.handleOpenGitDiff)
+	mux.HandleFunc("GET /v1/openai/file", s.handleOpenInboxFile)
+	mux.HandleFunc("POST /v1/openai/stop", s.handleOpenStop)
 	mux.HandleFunc("POST /v1/openai/choice", s.handleOpenChoice)
 	mux.HandleFunc("GET /v1/openai/followups", s.handleOpenFollowups)
 	mux.HandleFunc("POST /v1/openai/followups", s.handleOpenFollowups)
@@ -116,6 +118,8 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/commands", s.proxyNode("GET", "/v1/openai/commands"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/git", s.proxyNode("GET", "/v1/openai/git"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/git/diff", s.proxyNode("GET", "/v1/openai/git/diff"))
+	mux.HandleFunc("GET /v1/to/{id}/v1/openai/file", s.proxyNode("GET", "/v1/openai/file"))
+	mux.HandleFunc("POST /v1/to/{id}/v1/openai/stop", s.proxyNode("POST", "/v1/openai/stop"))
 	mux.HandleFunc("POST /v1/to/{id}/v1/openai/choice", s.proxyNode("POST", "/v1/openai/choice"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/followups", s.proxyNode("GET", "/v1/openai/followups"))
 	mux.HandleFunc("POST /v1/to/{id}/v1/openai/followups", s.proxyNode("POST", "/v1/openai/followups"))
@@ -270,6 +274,33 @@ func (s *Server) handleOpenGitRepos(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOpenGitDiff(w http.ResponseWriter, r *http.Request) {
 	s.proxyOpenJSON(w, r, "/v1/openai/git/diff")
+}
+
+func (s *Server) handleOpenInboxFile(w http.ResponseWriter, r *http.Request) {
+	rec, err := s.lookupNode(r.URL.Query().Get("node"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	path := "/v1/openai/file"
+	if q := r.URL.RawQuery; q != "" {
+		path += "?" + q
+	}
+	writePipeErr(w, s.pipeNode(r.Context(), rec, http.MethodGet, path, nil, w))
+}
+
+func (s *Server) handleOpenStop(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	var req struct {
+		Node string `json:"node"`
+	}
+	_ = json.Unmarshal(body, &req)
+	rec, err := s.lookupNode(req.Node)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writePipeErr(w, s.pipeNode(r.Context(), rec, http.MethodPost, "/v1/openai/stop", body, w))
 }
 
 func (s *Server) handleOpenChoice(w http.ResponseWriter, r *http.Request) {

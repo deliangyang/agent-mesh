@@ -1,5 +1,7 @@
 import type { AssistantMessage, Message } from "@ag-ui/core";
-import type { MeshEvent } from "./types";
+import { contentWithAttachRefs, parseAttachBlock } from "./attach.ts";
+import { meshTarget } from "./target.ts";
+import type { MeshEvent } from "./types.ts";
 
 const TURN_LIMIT = 20;
 
@@ -192,6 +194,11 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
   for (const ev of evs || []) {
     const type = normalizeType(ev);
     const user = isUser({ ...ev, type });
+    const files = user
+      ? ev.files && ev.files.length
+        ? ev.files
+        : parseAttachBlock(ev.text || "")
+      : undefined;
     const text = user ? cleanUserText(ev.text || "") : ev.text || "";
     if (type === "title" || type === "session" || type === "system") continue;
     if (type === "ask") {
@@ -205,12 +212,15 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
       });
       continue;
     }
-    if (user && !text) continue;
-    if (!text && !isToolType(type) && !isThinkingType(type) && !ev.tool) continue;
+    if (user && !text && !(files && files.length)) continue;
+    if (!text && !isToolType(type) && !isThinkingType(type) && !ev.tool && !(files && files.length)) continue;
     if (type === "log" && ev.done && !text) continue;
     if (text && !isToolType(type) && !isThinkingType(type) && isInternalDump(text)) continue;
     const last = out[out.length - 1];
-    if (user && last && isUser(last) && (last.text || "") === text) continue;
+    if (user && last && isUser(last) && (last.text || "") === text) {
+      if (files && files.length && !(last.files && last.files.length)) last.files = files;
+      continue;
+    }
     if (last && type === "thinking" && last.type === "thinking") {
       last.text = (last.text || "") + text;
       continue;
@@ -233,6 +243,7 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
       text,
       preview: ev.preview || "",
       unix: ev.unix || 0,
+      ...(files && files.length ? { files } : {}),
     });
   }
   return out;
@@ -346,7 +357,8 @@ export function eventsToMessages(evs: MeshEvent[]): Message[] {
     if (isUser(ev)) {
       flushTools();
       flushText();
-      out.push({ id: nextId(), role: "user", content: ev.text || "" });
+      const content = contentWithAttachRefs(ev.text || "", ev.files, meshTarget.node);
+      out.push({ id: nextId(), role: "user", content: content as Message["content"] });
       turn = { tools: null, results: [], text: null };
       continue;
     }

@@ -421,8 +421,12 @@ The following task has finished.
 	if got := ExtractUserText("<user_query>当前session  what is this?</user_query>"); got != "当前session  what is this?" {
 		t.Fatalf("real question %q", got)
 	}
-	if got := ExtractUserText("look at this image\n\n<<MESH_ATTACH>>\nThe user uploaded these attachments; inspect them with the Read tool:\n- /tmp/a.png (image/png)\n<</MESH_ATTACH>>"); got != "look at this image" {
+	if got := ExtractUserText("look at this image\n\n<<MESH_ATTACH>>\nThe user uploaded these attachments; inspect them with the Read tool:\n- /tmp/proj/.agent-mesh/inbox/a.png (image/png)\n<</MESH_ATTACH>>"); got != "look at this image" {
 		t.Fatalf("attach block %q", got)
+	}
+	attachEvs := UserEvent("look at this image\n\n<<MESH_ATTACH>>\nThe user uploaded these attachments; inspect them with the Read tool:\n- /tmp/proj/.agent-mesh/inbox/a.png (image/png)\n<</MESH_ATTACH>>")
+	if len(attachEvs) != 1 || attachEvs[0].Text != "look at this image" || len(attachEvs[0].Files) != 1 || attachEvs[0].Files[0].Name != "a.png" {
+		t.Fatalf("UserEvent %#v", attachEvs)
 	}
 	models := `<available_subagent_models>
 inherit

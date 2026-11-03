@@ -389,31 +389,54 @@ html.dark #app {
   font-weight: 500;
 }
 
-.mesh-card-node,
-.mesh-card-engine {
+.mesh-card-node {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
 }
 
+.mesh-card-engine {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.mesh-engine-mark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--signal) 16%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--signal) 28%, transparent);
+}
+
+.mesh-card-engine[data-engine="claude"] .mesh-engine-mark {
+  background: color-mix(in srgb, #d97757 18%, var(--paper));
+  border-color: color-mix(in srgb, #d97757 35%, transparent);
+}
+
+.mesh-card-engine[data-engine="cursor"] .mesh-engine-mark {
+  background: color-mix(in srgb, #7c8cff 18%, var(--paper));
+  border-color: color-mix(in srgb, #7c8cff 35%, transparent);
+}
+
+.mesh-card-engine[data-engine="codex"] .mesh-engine-mark {
+  background: color-mix(in srgb, #10a37f 18%, var(--paper));
+  border-color: color-mix(in srgb, #10a37f 35%, transparent);
+}
+
 .mesh-card-title {
   display: block;
-}
-
-.mesh-card-caps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.mesh-cap {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  text-transform: lowercase;
-  color: var(--mute);
-  line-height: 1.2;
+  min-width: 0;
 }
 
 .mesh-card-meta {
@@ -1265,8 +1288,18 @@ html.dark #app {
   object-fit: cover;
 }
 
-.mesh-chat [data-testid="copilot-chat-attachment-renderer-document"].mesh-user-file {
+.mesh-chat [data-testid="copilot-chat-attachment-renderer-document"].mesh-user-file,
+.mesh-user-doc {
   max-width: 220px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  background: color-mix(in srgb, var(--paper) 88%, var(--ink));
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 12.5px;
 }
 
 .mesh-user-text {

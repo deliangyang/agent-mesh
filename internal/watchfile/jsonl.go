@@ -15,7 +15,7 @@ import (
 // file still surface new lines (a long-lived handle often stalls at EOF).
 func PollJSONL(ctx context.Context, path string, fromEnd bool, interval time.Duration) (<-chan map[string]any, error) {
 	if interval <= 0 {
-		interval = 300 * time.Millisecond
+		interval = 100 * time.Millisecond
 	}
 	offset := int64(0)
 	if fromEnd {

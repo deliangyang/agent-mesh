@@ -16,7 +16,8 @@ import (
 
 const (
 	quietAfterDone = 300 * time.Millisecond
-	chunkSendWait  = 2 * time.Second
+	// keep Broadcast from stalling the SSE Pump when a subscriber is slow
+	chunkSendWait = 50 * time.Millisecond
 )
 
 // Hub watches live sessions on enabled local engines and pushes OpenAI chunks to subscribers and the relay.
@@ -191,7 +192,7 @@ func keyOf(engine, id string) string { return engine + "/" + id }
 // Start scans live sessions on a loop and attaches Watch.
 func (h *Hub) Start(ctx context.Context) {
 	h.scan(ctx)
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -317,12 +318,12 @@ func (h *Hub) WatchOne(ctx context.Context, engine, sessionID string) (<-chan op
 				ev.Session = sessionID
 			}
 			chunk := openai.FromEvent(id, engine, h.NodeID, h.NodeName, ev)
-			h.Broadcast(chunk)
 			select {
 			case out <- chunk:
 			case <-ctx.Done():
 				return
 			}
+			h.Broadcast(chunk)
 		}
 	}()
 	return out, nil
@@ -367,13 +368,14 @@ func (h *Hub) Pump(engine, session, model string, evs <-chan protocol.Event) <-c
 				ev.Session = session
 			}
 			chunk := openai.FromEvent(id, model, h.NodeID, h.NodeName, ev)
-			h.Broadcast(chunk)
+			// deliver to the chat SSE first so Broadcast lag cannot delay the browser
 			select {
 			case out <- chunk:
 			case <-time.After(30 * time.Second):
 				h.Log.Debug("pump downstream blocked too long; ending this turn", "session", ev.Session, "type", ev.Type)
 				return
 			}
+			h.Broadcast(chunk)
 			if ev.Done || quiet != nil {
 				quiet = time.After(quietAfterDone)
 			}

@@ -1,3 +1,9 @@
+export type MeshAttachRef = {
+  path: string;
+  mime: string;
+  name?: string;
+};
+
 export type MeshEvent = {
   type: string;
   role?: string;
@@ -6,6 +12,8 @@ export type MeshEvent = {
   preview?: string;
   unix?: number;
   done?: boolean;
+  /** Inbox attachments parsed from <<MESH_ATTACH>> before text strip. */
+  files?: MeshAttachRef[];
 };
 
 export type NodeInfo = {

@@ -3,7 +3,7 @@ import type { BaseEvent, Message, RunAgentInput } from "@ag-ui/core";
 import { Observable } from "rxjs";
 import { reactive } from "vue";
 import { clearAsk, noteAskEvent, noteAskEvents, noteAskFromTool } from "./ask";
-import { keepMediaContent, lastUserPayload } from "./attach";
+import { clearMediaBank, keepMediaContent, lastUserPayload, rememberMedia } from "./attach";
 import { fetchJSON } from "./http";
 import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
@@ -196,7 +196,7 @@ async function waitSessionIdle(
     if (active) seenActive = true;
     if (seenActive && !active) return;
     if (!seenActive && Date.now() - started > graceMs) return;
-    await new Promise((r) => window.setTimeout(r, 400));
+    await new Promise((r) => window.setTimeout(r, 150));
   }
 }
 
@@ -303,9 +303,15 @@ export class MeshAgent extends AbstractAgent {
       meshLive.think = "";
       meshLive.thinking = false;
       let sentText = "";
+      let aborted = false;
       const finish = () => {
         meshLive.thinking = false;
-        meshLive.streaming = heldBusy;
+        if (aborted) {
+          heldBusy = false;
+          meshLive.streaming = false;
+        } else {
+          meshLive.streaming = heldBusy;
+        }
         if (historyEvents.length && pushHasUser(sentText)) {
           paintMessages(historyEvents, false);
         }
@@ -320,6 +326,12 @@ export class MeshAgent extends AbstractAgent {
         const payload = lastUserPayload(input.messages || []);
         const text = payload.text || (payload.files.length ? t("agent.lookAttachments") : "");
         sentText = text;
+        for (let i = (input.messages || []).length - 1; i >= 0; i--) {
+          const m = (input.messages || [])[i];
+          if (m.role !== "user") continue;
+          rememberMedia(text, m.content);
+          break;
+        }
         if (!text) {
           failRun(t("agent.missingText"));
           return;
@@ -586,10 +598,10 @@ export class MeshAgent extends AbstractAgent {
         const sid = meshLive.session || session;
         if (sid) bindLiveWatch(sid, engine, node);
         if (!ac.signal.aborted && !ended && !runFailed) {
-          const grace = sseDropped || queued ? 60000 : 8000;
+          const grace = sseDropped || queued ? 60000 : sawContent ? 1500 : 4000;
           await Promise.race([
             liveDone,
-            waitSessionIdle(ac.signal, () => ended || runFailed, sid, grace),
+            waitSessionIdle(ac.signal, () => ended || runFailed || ac.signal.aborted, sid, grace),
           ]);
         }
         stopLive();
@@ -604,7 +616,7 @@ export class MeshAgent extends AbstractAgent {
         }
         cacheLiveThread(threadId);
         // AG-UI forbids RUN_FINISHED after RUN_ERROR.
-        if (runFailed) {
+        if (runFailed || aborted) {
           sub.complete();
           return;
         }
@@ -612,6 +624,10 @@ export class MeshAgent extends AbstractAgent {
         sub.complete();
       })()
         .catch((err: unknown) => {
+          if (ac.signal.aborted || aborted) {
+            sub.complete();
+            return;
+          }
           toastError(err);
           sub.next({
             type: EventType.RUN_ERROR,
@@ -621,10 +637,39 @@ export class MeshAgent extends AbstractAgent {
         })
         .finally(finish);
       return () => {
+        aborted = true;
         finish();
         ac.abort();
       };
     });
+  }
+}
+
+/** Ask the node to cancel the in-flight engine turn. */
+export async function stopRemoteTurn(): Promise<void> {
+  const engine = meshTarget.engine;
+  if (!engine) return;
+  heldBusy = false;
+  meshLive.streaming = false;
+  meshLive.thinking = false;
+  try {
+    await fetchJSON(
+      "/v1/openai/stop",
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          engine,
+          session: meshTarget.session || meshLive.session || "",
+          cwd: meshTarget.cwd || "",
+          node: meshTarget.node || "",
+        }),
+      },
+      8000,
+    );
+  } catch {
+    /* best-effort stop */
   }
 }
 
@@ -646,6 +691,7 @@ export function resetDraft(): void {
   meshLive.thinking = false;
   heldBusy = false;
   heldBusySession = "";
+  clearMediaBank();
   clearAsk();
   try {
     if (meshAgent.isRunning) meshAgent.abortRun();

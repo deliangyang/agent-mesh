@@ -196,7 +196,7 @@ func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.E
 	if path == "" {
 		return nil, fmt.Errorf("session %s has no jsonl", sessionID)
 	}
-	rows, err := watchfile.PollJSONL(ctx, path, true, 300*time.Millisecond)
+	rows, err := watchfile.PollJSONL(ctx, path, true, 100*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
@@ -253,6 +253,33 @@ func (d *Driver) peerToken(pid int, sock string) string {
 }
 
 func (d *Driver) inject(sess protocol.Session, text string) error {
+	return d.injectMsgs(sess, []map[string]any{
+		{"type": "user", "message": map[string]any{"role": "user", "content": text}, "priority": "next"},
+	})
+}
+
+// Interrupt asks a live Claude session to stop the current turn over its peer socket.
+func (d *Driver) Interrupt(ctx context.Context, sessionID string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	sess, err := d.lookup(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if !sess.Live {
+		return fmt.Errorf("session not live")
+	}
+	return d.injectMsgs(sess, []map[string]any{
+		{
+			"type":       "control_request",
+			"request_id": fmt.Sprintf("mesh-stop-%d", time.Now().UnixNano()),
+			"request":    map[string]any{"subtype": "interrupt", "cancel_queued": true},
+		},
+	})
+}
+
+func (d *Driver) injectMsgs(sess protocol.Session, msgs []map[string]any) error {
 	if sess.Extra == "" || sess.PID == 0 {
 		return fmt.Errorf("no live socket")
 	}
@@ -265,11 +292,10 @@ func (d *Driver) inject(sess protocol.Session, text string) error {
 		return err
 	}
 	defer c.Close()
-	msgs := []map[string]any{
-		{"type": "auth", "token": token},
-		{"type": "user", "message": map[string]any{"role": "user", "content": text}, "priority": "next"},
-	}
 	enc := json.NewEncoder(c)
+	if err := enc.Encode(map[string]any{"type": "auth", "token": token}); err != nil {
+		return err
+	}
 	for _, m := range msgs {
 		if err := enc.Encode(m); err != nil {
 			return err

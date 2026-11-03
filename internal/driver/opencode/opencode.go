@@ -160,7 +160,7 @@ func (d *Driver) History(ctx context.Context, sessionID string, tail int) ([]pro
 
 func (d *Driver) Watch(ctx context.Context, sessionID string) (<-chan protocol.Event, error) {
 	if path := d.findJSONL(sessionID); path != "" {
-		rows, err := watchfile.PollJSONL(ctx, path, true, 300*time.Millisecond)
+		rows, err := watchfile.PollJSONL(ctx, path, true, 100*time.Millisecond)
 		if err != nil {
 			return nil, err
 		}

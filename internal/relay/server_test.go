@@ -234,20 +234,25 @@ func TestSPAPublicPaths(t *testing.T) {
 }
 
 func TestWebPWAStaticFiles(t *testing.T) {
+	// dist/ is gitignored; clean CI trees only embed .gitkeep. Auth must still
+	// treat PWA shell paths as public (404 from empty embed is fine; 302 /login is not).
 	srv := New("unused", NewMemory(), nil)
 	srv.Password = "secret"
 	srv.Web = true
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	for _, path := range []string{"/manifest.webmanifest", "/sw.js"} {
+	for _, path := range []string{"/manifest.webmanifest", "/sw.js", "/favicon.svg"} {
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("%s want 200 got %d", path, resp.StatusCode)
+		if resp.StatusCode == http.StatusFound {
+			t.Fatalf("%s redirected to login; should be public", path)
+		}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s want 200 or 404 got %d", path, resp.StatusCode)
 		}
 	}
 }

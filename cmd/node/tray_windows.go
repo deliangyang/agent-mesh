@@ -18,8 +18,9 @@ import (
 var iconICO []byte
 
 const (
-	idOpen = 1
-	idQuit = 2
+	idOpen     = 1
+	idSettings = 2
+	idQuit     = 3
 
 	wmTray         = 0x8001
 	nimAdd         = 0x00000000
@@ -203,6 +204,8 @@ func trayWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 		switch wParam {
 		case idOpen:
 			openUI(trayUIURL)
+		case idSettings:
+			openUIAt(trayUIURL, traySettingsPath)
 		case idQuit:
 			if trayCancel != nil {
 				trayCancel()
@@ -246,13 +249,12 @@ func showTrayMenu(hwnd windows.Handle) {
 		return
 	}
 	defer destroyMenu.Call(hMenu)
-	openLabel, quitLabel := "Open", "Quit"
-	if trayChineseUI() {
-		openLabel, quitLabel = "打开", "退出"
-	}
+	openLabel, settingsLabel, quitLabel := trayMenuLabels(trayChineseUI())
 	openText, _ := windows.UTF16PtrFromString(openLabel)
+	settingsText, _ := windows.UTF16PtrFromString(settingsLabel)
 	quitText, _ := windows.UTF16PtrFromString(quitLabel)
 	appendMenu.Call(hMenu, mfString, idOpen, uintptr(unsafe.Pointer(openText)))
+	appendMenu.Call(hMenu, mfString, idSettings, uintptr(unsafe.Pointer(settingsText)))
 	appendMenu.Call(hMenu, mfSeparator, 0, 0)
 	appendMenu.Call(hMenu, mfString, idQuit, uintptr(unsafe.Pointer(quitText)))
 	setForegroundWindow.Call(uintptr(hwnd))

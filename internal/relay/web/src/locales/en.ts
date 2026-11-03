@@ -107,6 +107,8 @@ export const en: Record<string, string> = {
   "settings.platOpenHealth": "Open engine health matrix",
   "settings.platOpenHealthOs": "Health · {os}",
   "settings.platInstallTitle": "Install on {os}",
+  "settings.platInstallCopy": "Copy guides",
+  "settings.platInstallCopied": "Copied {os} install guides",
   "settings.healthOsFilter": "Filter by operating system",
   "settings.healthOsAll": "All platforms",
   "settings.healthOsEmpty": "No nodes for {os}.",

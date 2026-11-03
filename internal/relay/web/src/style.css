@@ -2996,11 +2996,25 @@ html.dark #app {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 28%, var(--rule));
 }
 
-.mesh-plat-install-title {
+.mesh-plat-install-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin: 0 0 6px;
+}
+
+.mesh-plat-install-title {
+  margin: 0;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.mesh-plat-install-copy {
+  flex: none;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
 }
 
 .mesh-plat-install-list {

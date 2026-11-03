@@ -13,6 +13,7 @@ import {
 } from "../locale";
 import { formatEngineInstall } from "../engineInstall";
 import { buildPlatformGroups } from "../platformGroups";
+import { showToast, toastError } from "../toast";
 import {
   SETTINGS_NAV,
   adjacentSettingsSection,
@@ -108,6 +109,17 @@ function openSection(id: SettingsSection, extra?: Record<string, string | undefi
 
 function openHealthForOs(osKey: string): void {
   openSection("health", { os: osKey === "unknown" ? undefined : osKey });
+}
+
+async function copyPlatformInstalls(osLabel: string, lines: string[]): Promise<void> {
+  const text = lines.map((s) => s.trim()).filter(Boolean).join("\n");
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(t("settings.platInstallCopied", { os: osLabel }), "info");
+  } catch (err) {
+    toastError(err);
+  }
 }
 
 function flipTheme(): void {
@@ -367,7 +379,16 @@ onBeforeUnmount(() => {
                 </button>
               </div>
               <div v-if="g.installs.length" class="mesh-plat-installs" :aria-label="t('settings.platInstallTitle', { os: g.label })">
-                <h4 class="mesh-plat-install-title">{{ t("settings.platInstallTitle", { os: g.label }) }}</h4>
+                <div class="mesh-plat-install-bar">
+                  <h4 class="mesh-plat-install-title">{{ t("settings.platInstallTitle", { os: g.label }) }}</h4>
+                  <button
+                    type="button"
+                    class="ghost mesh-plat-install-copy"
+                    @click="copyPlatformInstalls(g.label, g.installs.map((row) => row.text))"
+                  >
+                    {{ t("settings.platInstallCopy") }}
+                  </button>
+                </div>
                 <ul class="mesh-plat-install-list">
                   <li v-for="row in g.installs" :key="g.osKey + row.name">{{ row.text }}</li>
                 </ul>

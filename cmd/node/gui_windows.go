@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -55,7 +54,11 @@ func hideOwnConsole() {
 }
 
 func openUI(uiURL string) {
-	url := strings.TrimRight(uiURL, "/") + "/"
+	openUIAt(uiURL, "/")
+}
+
+func openUIAt(uiURL, path string) {
+	url := joinUIPath(uiURL, path)
 	if bin := findBrowser(); bin != "" {
 		cmd := exec.Command(bin, "--app="+url, "--new-window", "--window-size=1360,860")
 		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}

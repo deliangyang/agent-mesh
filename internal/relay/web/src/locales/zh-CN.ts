@@ -107,6 +107,8 @@ export const zhCN: Record<string, string> = {
   "settings.platOpenHealth": "打开引擎健康矩阵",
   "settings.platOpenHealthOs": "健康 · {os}",
   "settings.platInstallTitle": "在 {os} 上安装",
+  "settings.platInstallCopy": "复制指引",
+  "settings.platInstallCopied": "已复制 {os} 安装指引",
   "settings.healthOsFilter": "按操作系统筛选",
   "settings.healthOsAll": "全部平台",
   "settings.healthOsEmpty": "没有 {os} 节点。",

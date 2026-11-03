@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// traySettingsPath opens the Platforms settings module from the tray menu.
+const traySettingsPath = "/settings/platforms"
+
 // trayStartBalloon returns the Windows tray balloon title and body.
 func trayStartBalloon(chinese bool) (title, body string) {
 	if chinese {
@@ -13,12 +16,25 @@ func trayStartBalloon(chinese bool) (title, body string) {
 	return "Agent Mesh", "Node is running in the tray. Left-click to open the UI."
 }
 
-// trayMenuLabels returns Open / Quit labels for tray menus.
-func trayMenuLabels(chinese bool) (open, quit string) {
+// trayMenuLabels returns Open / Settings / Quit labels for tray menus.
+func trayMenuLabels(chinese bool) (open, settings, quit string) {
 	if chinese {
-		return "打开", "退出"
+		return "打开", "设置", "退出"
 	}
-	return "Open", "Quit"
+	return "Open", "Settings", "Quit"
+}
+
+// joinUIPath joins a node UI base URL with a path (defaults to "/").
+func joinUIPath(uiURL, path string) string {
+	base := strings.TrimRight(strings.TrimSpace(uiURL), "/")
+	p := strings.TrimSpace(path)
+	if p == "" || p == "/" {
+		return base + "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return base + p
 }
 
 // trayChineseLocale reports zh* from common Unix locale env vars.

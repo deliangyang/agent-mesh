@@ -19,13 +19,28 @@ func TestTrayStartBalloon(t *testing.T) {
 }
 
 func TestTrayMenuLabels(t *testing.T) {
-	open, quit := trayMenuLabels(false)
-	if open != "Open" || quit != "Quit" {
-		t.Fatalf("en %q %q", open, quit)
+	open, settings, quit := trayMenuLabels(false)
+	if open != "Open" || settings != "Settings" || quit != "Quit" {
+		t.Fatalf("en %q %q %q", open, settings, quit)
 	}
-	open, quit = trayMenuLabels(true)
-	if open != "打开" || quit != "退出" {
-		t.Fatalf("zh %q %q", open, quit)
+	open, settings, quit = trayMenuLabels(true)
+	if open != "打开" || settings != "设置" || quit != "退出" {
+		t.Fatalf("zh %q %q %q", open, settings, quit)
+	}
+}
+
+func TestJoinUIPath(t *testing.T) {
+	if got := joinUIPath("http://127.0.0.1:7700", ""); got != "http://127.0.0.1:7700/" {
+		t.Fatalf("root empty: %q", got)
+	}
+	if got := joinUIPath("http://127.0.0.1:7700/", "/"); got != "http://127.0.0.1:7700/" {
+		t.Fatalf("root slash: %q", got)
+	}
+	if got := joinUIPath("http://127.0.0.1:7700", traySettingsPath); got != "http://127.0.0.1:7700/settings/platforms" {
+		t.Fatalf("settings: %q", got)
+	}
+	if got := joinUIPath("http://127.0.0.1:7700/", "settings/platforms"); got != "http://127.0.0.1:7700/settings/platforms" {
+		t.Fatalf("no leading slash: %q", got)
 	}
 }
 

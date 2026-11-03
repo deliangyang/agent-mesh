@@ -103,10 +103,11 @@ func (s *linuxSNI) Scroll(delta int32, orientation string) *dbus.Error {
 }
 
 type linuxMenu struct {
-	uiURL  string
-	cancel context.CancelFunc
-	open   string
-	quit   string
+	uiURL    string
+	cancel   context.CancelFunc
+	open     string
+	settings string
+	quit     string
 }
 
 func (m *linuxMenu) GetLayout(parentID, recursionDepth int32, propertyNames []string) (uint32, menuLayout, *dbus.Error) {
@@ -124,8 +125,18 @@ func (m *linuxMenu) GetLayout(parentID, recursionDepth int32, propertyNames []st
 			"interactive": dbus.MakeVariant(true),
 		},
 	}
-	quitItem := menuLayout{
+	settingsItem := menuLayout{
 		ID: 2,
+		Properties: map[string]dbus.Variant{
+			"label":       dbus.MakeVariant(m.settings),
+			"enabled":     dbus.MakeVariant(true),
+			"visible":     dbus.MakeVariant(true),
+			"type":        dbus.MakeVariant("standard"),
+			"interactive": dbus.MakeVariant(true),
+		},
+	}
+	quitItem := menuLayout{
+		ID: 3,
 		Properties: map[string]dbus.Variant{
 			"label":       dbus.MakeVariant(m.quit),
 			"enabled":     dbus.MakeVariant(true),
@@ -141,6 +152,7 @@ func (m *linuxMenu) GetLayout(parentID, recursionDepth int32, propertyNames []st
 		},
 		Children: []dbus.Variant{
 			dbus.MakeVariant(openItem),
+			dbus.MakeVariant(settingsItem),
 			dbus.MakeVariant(quitItem),
 		},
 	}
@@ -163,6 +175,7 @@ func (m *linuxMenu) GetGroupProperties(ids []int32, propertyNames []string) ([]s
 		0: rev.Properties,
 		1: nil,
 		2: nil,
+		3: nil,
 	}
 	for _, child := range rev.Children {
 		var item menuLayout
@@ -214,6 +227,8 @@ func (m *linuxMenu) Event(id int32, eventID string, data dbus.Variant, timestamp
 	case 1:
 		openUI(m.uiURL)
 	case 2:
+		openUIAt(m.uiURL, traySettingsPath)
+	case 3:
 		if m.cancel != nil {
 			m.cancel()
 		}
@@ -249,9 +264,9 @@ func runLinuxTray(ctx context.Context, cancel context.CancelFunc, uiURL string) 
 	}
 	defer conn.Close()
 
-	openLabel, quitLabel := trayMenuLabels(trayChineseLocale())
+	openLabel, settingsLabel, quitLabel := trayMenuLabels(trayChineseLocale())
 	sni := &linuxSNI{uiURL: uiURL, cancel: cancel}
-	menu := &linuxMenu{uiURL: uiURL, cancel: cancel, open: openLabel, quit: quitLabel}
+	menu := &linuxMenu{uiURL: uiURL, cancel: cancel, open: openLabel, settings: settingsLabel, quit: quitLabel}
 
 	if err := conn.Export(sni, sniPath, sniIface); err != nil {
 		return err

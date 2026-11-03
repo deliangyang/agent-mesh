@@ -59,6 +59,8 @@ export class E2EClient {
   ident: Identity;
   relay = "";
   private byNode = new Map<string, NodeSession>();
+  /** In-flight handshakes coalesced per node so parallel catalog/watch calls share one session. */
+  private handshakes = new Map<string, Promise<NodeSession>>();
   private reqSeq = 0;
 
   constructor(ident: Identity, relay = "") {
@@ -71,6 +73,12 @@ export class E2EClient {
     return `w${this.reqSeq}-${Date.now()}`;
   }
 
+  private dropSession(nodeID: string): void {
+    const cur = this.byNode.get(nodeID);
+    if (cur) this.byNode.delete(cur.peer.id);
+    this.byNode.delete(nodeID);
+  }
+
   async nodes(): Promise<NodeRow[]> {
     const resp = await fetch(this.relay + "/v1/nodes", { credentials: "same-origin" });
     if (!resp.ok) throw new Error(`nodes http ${resp.status}`);
@@ -78,11 +86,32 @@ export class E2EClient {
   }
 
   async ensureSession(nodeID: string): Promise<NodeSession> {
+    const key = nodeID || "*";
     const cur = this.byNode.get(nodeID);
     if (cur && !sessionExpired(cur.sess)) return cur;
+    if (cur) this.dropSession(nodeID);
+
+    const inflight = this.handshakes.get(key);
+    if (inflight) return inflight;
+
+    const pending = this.handshake(nodeID).finally(() => {
+      if (this.handshakes.get(key) === pending) this.handshakes.delete(key);
+    });
+    this.handshakes.set(key, pending);
+    return pending;
+  }
+
+  private async handshake(nodeID: string): Promise<NodeSession> {
+    const cached = nodeID ? this.byNode.get(nodeID) : undefined;
+    if (cached && !sessionExpired(cached.sess)) return cached;
+
     const rows = await this.nodes();
     const row = rows.find((n) => n.id === nodeID) || (!nodeID ? rows[0] : undefined);
     if (!row) throw new Error(nodeID ? `node ${nodeID} not found` : "no nodes registered");
+    // Another waiter may have finished while we fetched the directory.
+    const raced = this.byNode.get(row.id);
+    if (raced && !sessionExpired(raced.sess)) return raced;
+
     const peer = parseNodePublic(row);
     const base = `${this.relay}/v1/to/${peer.id}`;
     const { env, state } = await beginHandshake(this.ident, peer);
@@ -94,14 +123,29 @@ export class E2EClient {
   }
 
   async call(nodeID: string, method: string, params?: unknown): Promise<RPCResponse> {
-    const ns = await this.ensureSession(nodeID);
-    const req: RPCRequest = { id: this.nextID(), method, params };
-    const env = await seal(ns.sess, utf8(JSON.stringify(req)), "rpc");
-    const ack = await this.postEnvelope(ns.base + "/rpc", env);
-    const plain = await open(ns.sess, ack);
-    const resp = JSON.parse(fromUtf8(plain)) as RPCResponse;
-    if (!resp.ok && resp.error) throw new Error(resp.error);
-    return resp;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ns = await this.ensureSession(nodeID);
+      try {
+        const req: RPCRequest = { id: this.nextID(), method, params };
+        const env = await seal(ns.sess, utf8(JSON.stringify(req)), "rpc");
+        const ack = await this.postEnvelope(ns.base + "/rpc", env);
+        const plain = await open(ns.sess, ack);
+        const resp = JSON.parse(fromUtf8(plain)) as RPCResponse;
+        if (!resp.ok && resp.error) throw new Error(resp.error);
+        return resp;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        // Stale session after a racing handshake (node keeps only the latest per client).
+        if (attempt === 0 && /\bhttp 401\b/.test(msg)) {
+          this.dropSession(ns.peer.id);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
   async *stream(nodeID: string, method: string, params?: unknown, signal?: AbortSignal): AsyncGenerator<MeshEvent> {
@@ -121,8 +165,34 @@ export class E2EClient {
     });
     if (!resp.ok) {
       const t = await resp.text();
+      // One retry after clearing a stale session (same race as call()).
+      if (resp.status === 401) {
+        this.dropSession(ns.peer.id);
+        const ns2 = await this.ensureSession(nodeID);
+        const env2 = await seal(ns2.sess, utf8(JSON.stringify({ ...req, id: this.nextID() })), "stream");
+        const raw2 = marshalEnvelope(env2);
+        const resp2 = await fetch(ns2.base + "/stream", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": CONTENT_TYPE_ENVELOPE,
+            Accept: CONTENT_TYPE_ENVELOPE_STREAM,
+          },
+          body: raw2,
+          signal,
+        });
+        if (!resp2.ok) {
+          throw new Error(`stream http ${resp2.status}: ${await resp2.text()}`);
+        }
+        yield* this.readStream(ns2, resp2);
+        return;
+      }
       throw new Error(`stream http ${resp.status}: ${t}`);
     }
+    yield* this.readStream(ns, resp);
+  }
+
+  private async *readStream(ns: NodeSession, resp: Response): AsyncGenerator<MeshEvent> {
     if (!resp.body) throw new Error("empty stream body");
     const ct = resp.headers.get("Content-Type") || "";
     const bin = contentTypeIsEnvelope(ct) || ct.toLowerCase().includes("envelope-stream");

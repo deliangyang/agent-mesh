@@ -183,6 +183,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/to/{id}/handshake", s.forward("/v1/handshake"))
 	mux.HandleFunc("POST /v1/to/{id}/rpc", s.forward("/v1/rpc"))
 	mux.HandleFunc("POST /v1/to/{id}/stream", s.forwardStream)
+	mux.HandleFunc("GET /v1/to/{id}/e2e/ws", s.handleE2EWS)
 	s.mountOpenAI(mux)
 	s.mountWeb(mux)
 	return s.withAuth(withCORS(mux))

@@ -87,7 +87,16 @@ export function applyFollowups(msg: Record<string, unknown>): void {
   const reset = Boolean(msg.reset);
   const removed = Array.isArray(msg.removed) ? (msg.removed as string[]) : [];
   const rows = Array.isArray(msg.followups) ? (msg.followups as FollowQueue[]) : [];
-  if (reset) queues.clear();
+  if (reset) {
+    const node = String(msg.node_id || "");
+    if (node) {
+      for (const k of [...queues.keys()]) {
+        if (k.startsWith(node + "|")) queues.delete(k);
+      }
+    } else {
+      queues.clear();
+    }
+  }
   for (const row of rows) {
     const k = queueKey(row.node_id, row.engine, row.session);
     if (k !== "||") queues.set(k, asItems(row));

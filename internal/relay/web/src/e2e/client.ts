@@ -6,6 +6,7 @@ import {
   contentTypeIsEnvelope,
   decodeEnvelopeBody,
   marshalEnvelope,
+  unmarshalEnvelope,
   type Envelope,
 } from "./frame.ts";
 import { parseNodePublic, type Identity, type PublicIdentity } from "./identity.ts";
@@ -221,6 +222,77 @@ export class E2EClient {
       yield ev;
       if (ev.done) return;
     }
+  }
+
+  /**
+   * Open an E2E catalog WebSocket for one node. Each WS binary message is a sealed
+   * Envelope whose plaintext is a catalog busMsg (sessions/engines/…).
+   * Returns a closer; onAuth401 clears the session so the next open re-handshakes.
+   */
+  async openCatalogWS(
+    nodeID: string,
+    onPart: (msg: Record<string, unknown>) => void,
+  ): Promise<{ close: () => void; peerID: string }> {
+    const ns = await this.ensureSession(nodeID);
+    const req: RPCRequest = { id: this.nextID(), method: "catalog", stream: true };
+    const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
+    const raw = marshalEnvelope(env);
+    const base = this.relay || (typeof location !== "undefined" ? location.origin : "");
+    const proto = base.startsWith("https") || (typeof location !== "undefined" && location.protocol === "https:") ? "wss:" : "ws:";
+    let host = "";
+    try {
+      host = base ? new URL(base).host : location.host;
+    } catch {
+      host = typeof location !== "undefined" ? location.host : "";
+    }
+    const url = `${proto}//${host}/v1/to/${ns.peer.id}/e2e/ws`;
+    const sock = new WebSocket(url);
+    sock.binaryType = "arraybuffer";
+    let closed = false;
+    const close = () => {
+      closed = true;
+      try {
+        sock.close();
+      } catch {
+        /* ignore */
+      }
+    };
+    await new Promise<void>((resolve, reject) => {
+      const t = window.setTimeout(() => reject(new Error("catalog ws timeout")), 15000);
+      sock.onopen = () => {
+        window.clearTimeout(t);
+        resolve();
+      };
+      sock.onerror = () => {
+        window.clearTimeout(t);
+        reject(new Error("catalog ws error"));
+      };
+    });
+    sock.send(raw);
+    sock.onmessage = (ev) => {
+      if (closed) return;
+      void (async () => {
+        try {
+          const buf =
+            ev.data instanceof ArrayBuffer
+              ? new Uint8Array(ev.data)
+              : ev.data instanceof Blob
+                ? new Uint8Array(await ev.data.arrayBuffer())
+                : null;
+          if (!buf) return;
+          const fe = unmarshalEnvelope(buf);
+          const plain = await open(ns.sess, fe);
+          const msg = JSON.parse(fromUtf8(plain)) as Record<string, unknown>;
+          onPart(msg);
+        } catch {
+          /* decrypt / parse — drop */
+        }
+      })();
+    };
+    sock.onclose = () => {
+      closed = true;
+    };
+    return { close, peerID: ns.peer.id };
   }
 
   private async postEnvelope(url: string, env: Envelope): Promise<Envelope> {

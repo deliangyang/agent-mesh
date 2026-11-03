@@ -188,6 +188,51 @@ function applyPart(msg: Record<string, unknown>): void {
   }
 }
 
+/** Apply one node's E2E catalog part without wiping other nodes' rows on reset. */
+export function applyNodeCatalogPart(nodeID: string, msg: Record<string, unknown>): void {
+  if (!msg || !msg.type) return;
+  const nid = nodeID || String(msg.node_id || "");
+  if (!nid || !msg.reset) {
+    applyPart(msg);
+    return;
+  }
+  if (msg.type === "nodes") {
+    applyPart({ ...msg, reset: false });
+    return;
+  }
+  if (msg.type === "sessions") {
+    const keep = catalog.sessions.filter((s) => (s.node_id || "") !== nid);
+    const incoming = ((msg.sessions as Session[]) || []).map((s) => ({
+      ...s,
+      node_id: s.node_id || nid,
+    }));
+    catalog.sessions = sortSessions([...keep, ...incoming]);
+    syncWatchedBusy();
+    return;
+  }
+  if (msg.type === "engines") {
+    const keep = catalog.engines.filter((e) => (e.node_id || "") !== nid);
+    catalog.engines = [...keep, ...((msg.engines as EngineRow[]) || [])];
+    return;
+  }
+  if (msg.type === "models") {
+    const prefix = nid + "/";
+    const keep = catalog.models.filter((m) => !String(m.id || "").startsWith(prefix));
+    catalog.models = [...keep, ...((msg.models as ModelCard[]) || [])];
+    return;
+  }
+  if (msg.type === "dirs") {
+    const keep = catalog.dirs.filter((d) => (d.node_id || "") !== nid);
+    catalog.dirs = [...keep, ...((msg.dirs as DirRow[]) || [])];
+    return;
+  }
+  if (msg.type === "followups") {
+    applyFollowups({ ...msg, node_id: nid });
+    return;
+  }
+  applyPart(msg);
+}
+
 export function watchSession(s: Session | null): void {
   const key = sessionKey(s);
   applyCatalogBusy(Boolean(s?.busy), s?.id || "");

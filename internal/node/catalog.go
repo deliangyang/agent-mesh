@@ -139,13 +139,17 @@ func (s *Server) webCatalog() (nodes []protocol.NodeInfo, engines []engineRow, m
 
 func (s *Server) catalogParts() []busMsg {
 	nodes, engines, models, dirs, sessions, followups := s.webCatalog()
+	nid := ""
+	if len(nodes) > 0 {
+		nid = nodes[0].ID
+	}
 	return []busMsg{
-		{Type: "sessions", Sessions: sessions, Reset: true},
-		{Type: "nodes", Nodes: nodes, Reset: true},
-		{Type: "engines", Engines: engines, Reset: true},
-		{Type: "models", Models: models, Reset: true},
-		{Type: "dirs", Dirs: dirs, Reset: true},
-		{Type: "followups", Followups: followups, Reset: true},
+		{Type: "sessions", Sessions: sessions, Reset: true, NodeID: nid},
+		{Type: "nodes", Nodes: nodes, Reset: true, NodeID: nid},
+		{Type: "engines", Engines: engines, Reset: true, NodeID: nid},
+		{Type: "models", Models: models, Reset: true, NodeID: nid},
+		{Type: "dirs", Dirs: dirs, Reset: true, NodeID: nid},
+		{Type: "followups", Followups: followups, Reset: true, NodeID: nid},
 	}
 }
 

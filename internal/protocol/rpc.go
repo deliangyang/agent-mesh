@@ -23,6 +23,7 @@ const (
 	MethodChoice    = "choice"
 	MethodGit       = "git"
 	MethodGitDiff   = "git_diff"
+	MethodCatalog   = "catalog" // encrypted push of node catalog parts (sessions/engines/…)
 )
 
 // Request is an RPC request before encryption.

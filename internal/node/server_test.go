@@ -87,6 +87,46 @@ func TestDirectHandshakeList(t *testing.T) {
 	}
 }
 
+func TestCatalogStream(t *testing.T) {
+	ident, err := e2e.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := driver.NewSet()
+	set.Register(stubDriver{})
+	srv := New(ident, "unused", "test", set, nil)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	cliIdent, err := e2e.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := client.New(cliIdent, "", ts.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := cli.Handshake(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	ch, err := cli.Stream(ctx, protocol.Request{ID: "c1", Method: protocol.MethodCatalog, Stream: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for ev := range ch {
+		seen[ev.Type] = true
+		if seen["sessions"] && seen["engines"] && seen["models"] && seen["dirs"] {
+			cancel()
+			break
+		}
+	}
+	for _, want := range []string{"sessions", "engines", "models", "dirs"} {
+		if !seen[want] {
+			t.Fatalf("missing catalog part %q; got %#v", want, seen)
+		}
+	}
+}
+
 type recDriver struct {
 	name     string
 	sessions []string

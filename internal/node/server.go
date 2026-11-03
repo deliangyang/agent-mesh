@@ -216,6 +216,10 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
+	if req.Method == protocol.MethodCatalog {
+		s.streamCatalog(r.Context(), w, flusher, sess, binStream)
+		return
+	}
 	ch, err := s.dispatchStream(r.Context(), req)
 	if err != nil {
 		s.writeStream(w, flusher, sess, protocol.Event{Type: "error", Text: err.Error(), Done: true}, binStream)
@@ -224,6 +228,50 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	for ev := range ch {
 		if err := s.writeStream(w, flusher, sess, ev, binStream); err != nil {
 			return
+		}
+	}
+}
+
+// streamCatalog pushes sealed busMsg JSON (same shape as the local OpenAI WS catalog).
+func (s *Server) streamCatalog(ctx context.Context, w http.ResponseWriter, fl http.Flusher, sess *e2e.Session, bin bool) {
+	writeMsg := func(msg busMsg) error {
+		plain, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+		env, err := sess.Seal(plain)
+		if err != nil {
+			return err
+		}
+		env.Kind = "stream"
+		if err := e2e.WriteStreamFrame(w, env, bin); err != nil {
+			return err
+		}
+		fl.Flush()
+		return nil
+	}
+	for _, msg := range s.catalogParts() {
+		if err := writeMsg(msg); err != nil {
+			return
+		}
+	}
+	if s.bus == nil {
+		<-ctx.Done()
+		return
+	}
+	bid, bch := s.bus.subscribe()
+	defer s.bus.unsubscribe(bid)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-bch:
+			if !ok {
+				return
+			}
+			if err := writeMsg(msg); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -321,6 +369,8 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 
 func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-chan protocol.Event, error) {
 	switch req.Method {
+	case protocol.MethodCatalog:
+		return nil, fmt.Errorf("catalog uses streamCatalog")
 	case protocol.MethodWatch:
 		var p protocol.WatchParams
 		_ = json.Unmarshal(req.Params, &p)

@@ -1,15 +1,18 @@
-import { catalog } from "../catalog";
-import { applyFollowups } from "../followup";
+import { applyNodeCatalogPart, catalog } from "../catalog";
 import { pushLiveChunk } from "../meshAgent";
-import type { DirRow, EngineRow, ModelCard, Session } from "../types";
 import { eventToChunk } from "./chunk.ts";
 import { e2eClient, hasE2EClient } from "./runtime.ts";
 import { isE2EMode } from "./mode.ts";
 
-let syncTimer = 0;
+let reconcileTimer = 0;
 let watchAbort: AbortController | null = null;
 let watchKey = "";
 
+type Sock = { close: () => void; peerID: string };
+const catalogSocks = new Map<string, Sock>();
+const opening = new Map<string, Promise<void>>();
+
+/** Keep public node directory in sync and open one E2E catalog WS per node. */
 export async function refreshE2ECatalog(): Promise<void> {
   if (!isE2EMode() || !hasE2EClient()) return;
   const c = e2eClient();
@@ -21,105 +24,52 @@ export async function refreshE2ECatalog(): Promise<void> {
     arch: n.arch || "",
   }));
 
-  const engines: EngineRow[] = [];
-  const models: ModelCard[] = [];
-  const sessions: Session[] = [];
-  const dirs: DirRow[] = [];
-  const followParts: unknown[] = [];
-
+  const want = new Set(nodes.map((n) => n.id));
+  for (const [id, sock] of catalogSocks) {
+    if (!want.has(id)) {
+      sock.close();
+      catalogSocks.delete(id);
+    }
+  }
   for (const n of nodes) {
-    try {
-      const engResp = await c.call(n.id, "engines");
-      const engRows = (Array.isArray(engResp.body) ? engResp.body : []) as EngineRow[];
-      for (const e of engRows) {
-        engines.push({ ...e, node_id: n.id, node_name: n.name || "" });
-      }
-    } catch {
-      /* node offline */
-    }
-    try {
-      const listResp = await c.call(n.id, "list", { all: true });
-      const rows = (Array.isArray(listResp.body) ? listResp.body : []) as Session[];
-      for (const s of rows) {
-        const row: Session = {
-          ...s,
-          node_id: s.node_id || n.id,
-          node_name: s.node_name || n.name || "",
-        };
-        sessions.push(row);
-        if (row.cwd) {
-          dirs.push({
-            path: row.cwd,
-            engine: row.engine,
-            node_id: n.id,
-            node_name: n.name || "",
-          });
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const modResp = await c.call(n.id, "models", {});
-      const rows = (Array.isArray(modResp.body) ? modResp.body : []) as {
-        id: string;
-        engine?: string;
-        name?: string;
-        title?: string;
-        default?: boolean;
-      }[];
-      for (const m of rows) {
-        const id = m.id.includes("/") ? m.id : `${n.id}/${m.id}`;
-        models.push({
-          id,
-          owned_by: m.engine || "mesh",
-        });
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const fu = await c.call(n.id, "followups", { action: "list" });
-      if (fu.body) followParts.push(fu.body);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  catalog.engines = engines;
-  catalog.models = models;
-  catalog.sessions = sessions;
-  // Dedupe dirs by node|engine|path
-  const dirMap = new Map<string, DirRow>();
-  for (const d of dirs) {
-    const k = `${d.node_id || ""}\x1f${d.engine || ""}\x1f${d.path}`;
-    dirMap.set(k, d);
-  }
-  catalog.dirs = Array.from(dirMap.values());
-
-  for (const body of followParts) {
-    applyFollowups({ type: "followups", followups: normalizeFollowups(body), reset: false });
+    if (catalogSocks.has(n.id) || opening.has(n.id)) continue;
+    const p = openCatalogSock(n.id).finally(() => opening.delete(n.id));
+    opening.set(n.id, p);
+    void p;
   }
 }
 
-function normalizeFollowups(body: unknown): unknown[] {
-  if (Array.isArray(body)) return body;
-  if (body && typeof body === "object" && Array.isArray((body as { queues?: unknown }).queues)) {
-    return (body as { queues: unknown[] }).queues;
+async function openCatalogSock(nodeID: string): Promise<void> {
+  if (!isE2EMode() || !hasE2EClient()) return;
+  try {
+    const c = e2eClient();
+    const sock = await c.openCatalogWS(nodeID, (msg) => {
+      applyNodeCatalogPart(nodeID, msg);
+    });
+    // Replaced while opening.
+    const prev = catalogSocks.get(nodeID);
+    if (prev) prev.close();
+    catalogSocks.set(nodeID, sock);
+  } catch {
+    catalogSocks.delete(nodeID);
   }
-  if (body && typeof body === "object" && Array.isArray((body as { items?: unknown }).items)) {
-    return [body];
-  }
-  return [];
 }
 
 export function startE2ECatalogLoop(): void {
   if (!isE2EMode()) return;
-  window.clearInterval(syncTimer);
+  window.clearInterval(reconcileTimer);
   void refreshE2ECatalog();
-  syncTimer = window.setInterval(() => {
+  // Reconcile which nodes to subscribe; catalog rows themselves are pushed over WS.
+  reconcileTimer = window.setInterval(() => {
     void refreshE2ECatalog();
-  }, 8000);
+  }, 20000);
+}
+
+export function stopE2ECatalogLoop(): void {
+  window.clearInterval(reconcileTimer);
+  reconcileTimer = 0;
+  for (const sock of catalogSocks.values()) sock.close();
+  catalogSocks.clear();
 }
 
 export function stopE2EWatch(): void {

@@ -8,7 +8,6 @@ import MeshAskCard from "../components/MeshAskCard.vue";
 import MeshAttachQueue from "../components/MeshAttachQueue.vue";
 import MeshDiffPanel from "../components/MeshDiffPanel.vue";
 import MeshFollowups from "../components/MeshFollowups.vue";
-import MeshSettings from "../components/MeshSettings.vue";
 import MeshSlashInput from "../components/MeshSlashInput.vue";
 import MeshThinkWindow from "../components/MeshThinkWindow.vue";
 import MeshToolCallsView from "../components/MeshToolCallsView.vue";
@@ -22,16 +21,9 @@ import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft } from "../meshAgent";
-import {
-  cycleLocale,
-  localeButtonLabel,
-  localeButtonTitle,
-  localePref,
-  t,
-} from "../locale";
+import { t } from "../locale";
 import { filterNodesByOs, nodePlatforms } from "../nodeFilter";
 import { platformLabel } from "../platform";
-import { loadTheme, toggleTheme } from "../theme";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
 import { slashItems, watchSlashCatalog } from "../slash";
 import { meshTarget, threadIdOf } from "../target";
@@ -48,19 +40,16 @@ const chatKey = ref("draft");
 const creating = ref(false);
 const turnEnded = ref(false);
 let endedTimer = 0;
-const theme = ref(loadTheme());
 const navOpen = ref(typeof window !== "undefined" && window.matchMedia("(min-width: 861px)").matches);
 const openPick = ref("");
 const diffOpen = ref(false);
-const settingsOpen = ref(false);
-/** Gear opens relay settings (local node) and/or the engines×nodes health matrix. */
-const meshSettings = ref(true);
 const picksOpen = reactive({ node: false, engine: false });
 const composerGuarded = ref(false);
 let composerGuardTimer = 0;
 
-function flipTheme(): void {
-  theme.value = toggleTheme();
+function openSettings(): void {
+  void router.push({ path: "/settings/appearance", query: route.query });
+  closeNavIfMobile();
 }
 
 function isMobileNav(): boolean {
@@ -424,23 +413,23 @@ function pickEngine(name: string): void {
   picksOpen.engine = false;
 }
 
-function onHealthPick(p: { nodeId: string; engine?: string; focusMissing?: boolean }): void {
-  const next = resolveHealthPick(catalog.engines, p.nodeId, p.engine);
-  filters.node = next.node;
-  filters.engine = p.focusMissing ? "" : next.engine;
-  syncModelToEngine();
-  ensureWorkDir();
-  if (p.focusMissing) {
-    picksOpen.node = false;
-    picksOpen.engine = true;
-    navOpen.value = true;
-    syncQuery(selected.value);
-  } else if (filters.engine) {
-    openLatestSessionOrNew();
-  } else {
-    syncQuery(selected.value);
-  }
-  settingsOpen.value = false;
+function applyHealthHint(): void {
+  if (String(route.query.hint || "") !== "install") return;
+  const next = resolveHealthPick(catalog.engines, filters.node, filters.engine || undefined);
+  filters.node = next.node || filters.node;
+  filters.engine = "";
+  picksOpen.node = false;
+  picksOpen.engine = true;
+  navOpen.value = true;
+  const q = { ...pickToQuery({
+    node: filters.node,
+    engine: filters.engine,
+    model: filters.model,
+    dir: filters.dir,
+    session: selected.value?.id,
+    os: osFilter.value || undefined,
+  }) };
+  void router.replace({ path: "/", query: q });
 }
 
 function ensureWorkDir(): void {
@@ -780,6 +769,7 @@ let cursorObs: MutationObserver | null = null;
 
 onMounted(() => {
   hydrateFromQuery();
+  applyHealthHint();
   connectCatalog();
   document.addEventListener("click", onDocClick);
   window.addEventListener("mesh-link-up", onLinkUp);
@@ -831,61 +821,6 @@ onBeforeUnmount(() => {
           </svg>
           <span class="mesh-brand-word">Mesh</span>
         </div>
-        <button
-          v-if="meshSettings"
-          type="button"
-          class="ghost mesh-theme-btn"
-          :title="t('nav.nodeSettings')"
-          :aria-label="t('nav.nodeSettings')"
-          @click="settingsOpen = true"
-        >
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4" />
-            <path
-              d="M8 1.7v1.3M8 13v1.3M1.7 8h1.3M13 8h1.3M3.2 3.2l.9.9M12 12l.9.9M3.2 12.8l.9-.9M12 4l.9-.9"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="ghost mesh-theme-btn"
-          :title="theme === 'dark' ? t('nav.themeLight') : t('nav.themeDark')"
-          :aria-label="theme === 'dark' ? t('nav.themeLight') : t('nav.themeDark')"
-          @click="flipTheme"
-        >
-          <svg v-if="theme === 'dark'" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="3.1" stroke="currentColor" stroke-width="1.4" />
-            <path
-              d="M8 1.6v1.5M8 12.9v1.5M1.6 8h1.5M12.9 8h1.5M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            />
-          </svg>
-          <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="M13.2 10.2A5.4 5.4 0 0 1 5.8 2.8 6.1 6.1 0 1 0 13.2 10.2Z"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="ghost mesh-theme-btn mesh-locale-btn"
-          :title="localeButtonTitle(localePref)"
-          :aria-label="localeButtonTitle(localePref)"
-          @click="cycleLocale"
-        >
-          <span>{{ localeButtonLabel(localePref) }}</span>
-        </button>
-        <form method="post" action="/logout">
-          <button type="submit" class="ghost">{{ t("nav.signOut") }}</button>
-        </form>
         <button type="button" class="ghost mesh-nav-close" :aria-label="t('nav.closeSidebar')" @click="closeNav">
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
@@ -1019,6 +954,26 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div v-if="!sessionRows.length && !creating" class="mesh-empty">{{ t("nav.noChats") }}</div>
+      </div>
+      <div class="mesh-drawer-foot">
+        <button
+          type="button"
+          class="mesh-settings-entry"
+          :title="t('nav.settings')"
+          :aria-label="t('nav.settings')"
+          @click="openSettings"
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4" />
+            <path
+              d="M8 1.7v1.3M8 13v1.3M1.7 8h1.3M13 8h1.3M3.2 3.2l.9.9M12 12l.9.9M3.2 12.8l.9-.9M12 4l.9-.9"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>{{ t("nav.settings") }}</span>
+        </button>
       </div>
     </aside>
     <section class="mesh-chat">
@@ -1280,6 +1235,5 @@ onBeforeUnmount(() => {
         <button type="button" class="mesh-link-reload" @click="reloadPage">{{ t("link.reload") }}</button>
       </div>
     </div>
-    <MeshSettings v-model:open="settingsOpen" @pick="onHealthPick" />
   </div>
 </template>

@@ -544,7 +544,40 @@ html.dark #app {
   min-height: 0;
   overflow: auto;
   margin: 0;
-  padding: 0 8px 16px;
+  padding: 0 8px 8px;
+}
+
+.mesh-drawer-foot {
+  flex: none;
+  padding: 8px 10px 12px;
+  box-shadow: inset 0 1px 0 var(--rule);
+}
+
+.mesh-settings-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  color: var(--mute);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mesh-settings-entry:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+}
+
+.mesh-settings-entry svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 
 .mesh-time-group {
@@ -2504,16 +2537,30 @@ html.dark #app {
     max-width: min(92%, 42rem);
   }
 
-  .mesh-settings-mask {
-    padding: 0;
-    place-items: stretch;
+  .mesh-settings-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
-  .mesh-settings {
-    width: 100%;
-    max-height: none;
-    height: 100%;
-    border-radius: 0;
+  .mesh-settings-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    box-shadow: inset 0 -1px 0 var(--rule);
+  }
+
+  .mesh-settings-nav-item {
+    flex: 0 0 auto;
+    min-width: 7.5rem;
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+
+  .mesh-settings-nav-item.on {
+    box-shadow: inset 0 -2px 0 var(--signal);
+  }
+
+  .mesh-settings-nav-hint {
+    display: none;
   }
 
   .mesh-toasts {
@@ -2553,31 +2600,176 @@ html.dark #app {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 55%, var(--rule));
 }
 
-.mesh-settings-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--ink) 28%, transparent);
+.mesh-settings-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--signal) 10%, transparent), transparent 55%),
+    var(--paper);
+  color: var(--ink);
 }
 
-.mesh-settings {
-  width: min(640px, 100%);
-  max-height: min(88vh, 720px);
+.mesh-settings-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-height: 52px;
+  padding: 8px 16px;
+  box-shadow: inset 0 -1px 0 var(--rule);
+  background: color-mix(in srgb, var(--wall) 72%, transparent);
+}
+
+.mesh-settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px !important;
+}
+
+.mesh-settings-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mesh-settings-page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.mesh-settings-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+}
+
+.mesh-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
   overflow: auto;
-  background: var(--paper);
+  padding: 12px 10px;
+  background: var(--wall);
+  box-shadow: inset -1px 0 0 var(--rule);
+}
+
+.mesh-settings-nav-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
   color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--rule), 0 18px 48px color-mix(in srgb, var(--ink) 18%, transparent);
+  background: transparent;
+  box-shadow: inset 2px 0 0 transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mesh-settings-nav-item:hover {
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+}
+
+.mesh-settings-nav-item.on {
+  background: var(--signal-soft);
+  box-shadow: inset 2px 0 0 var(--signal);
+}
+
+.mesh-settings-nav-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mesh-settings-nav-hint {
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.mesh-settings-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 0 24px;
+}
+
+.mesh-settings-panel {
+  max-width: 640px;
+  padding: 8px 20px 0;
+}
+
+.mesh-settings-panel-head {
+  margin-bottom: 12px;
+}
+
+.mesh-settings-panel-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.mesh-settings-actions-stack {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.mesh-settings-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  color: var(--ink);
+  background: var(--lamp);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mesh-settings-action:hover {
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.mesh-settings-action svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.mesh-settings-action-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6em;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mesh-settings-action.is-danger {
+  color: var(--destructive);
 }
 
 .mesh-settings-pad {
-  padding: 8px 18px 18px;
+  padding: 8px 0 18px;
 }
 
 .mesh-health {
-  padding: 4px 18px 18px;
+  padding: 0;
 }
 
 .mesh-health-head h3 {
@@ -2688,21 +2880,6 @@ html.dark #app {
   color: color-mix(in srgb, var(--destructive) 75%, var(--mute));
 }
 
-.mesh-settings-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 18px 8px;
-}
-
-.mesh-settings-head h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 22px;
-  letter-spacing: -0.03em;
-}
-
 .mesh-settings-sub {
   margin: 4px 0 0;
   color: color-mix(in srgb, var(--ink) 62%, transparent);
@@ -2712,7 +2889,7 @@ html.dark #app {
 .mesh-settings-form {
   display: grid;
   gap: 12px;
-  padding: 8px 18px 18px;
+  padding: 0 0 18px;
 }
 
 .mesh-settings-form label {

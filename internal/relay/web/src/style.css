@@ -804,19 +804,41 @@ html.dark #app {
   line-height: 1.5;
 }
 
-.mesh-link-reload {
+.mesh-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
   margin-top: 6px;
+}
+
+.mesh-link-reload,
+.mesh-link-diag {
   height: 34px;
   padding: 0 14px;
-  color: var(--on-signal);
-  background: var(--signal);
   border: 0;
+  font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 
+.mesh-link-reload {
+  color: var(--on-signal);
+  background: var(--signal);
+}
+
 .mesh-link-reload:hover {
   filter: brightness(1.06);
+}
+
+.mesh-link-diag {
+  color: var(--ink);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.mesh-link-diag:hover {
+  box-shadow: inset 0 0 0 1px var(--signal);
 }
 
 .mesh-chat [data-testid="copilot-chat-input-disclaimer"] {

@@ -62,6 +62,7 @@ export const en: Record<string, string> = {
   "link.disconnected": "Disconnected; reconnecting",
   "link.copy": "Once connected, chats, directories, and live progress refresh on their own.",
   "link.reload": "Reload",
+  "link.openConnection": "Connection diagnostics",
   "link.nodeDown": "Node disconnected; reconnecting",
 
   "settings.pageTitle": "Settings",

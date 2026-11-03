@@ -61,6 +61,10 @@ function openSettings(): void {
   closeNavIfMobile();
 }
 
+function openConnectionSettings(): void {
+  void router.push({ path: "/settings/connection", query: route.query });
+}
+
 function onSettingsHotkey(ev: KeyboardEvent): void {
   if (!isOpenSettingsHotkey(ev)) return;
   ev.preventDefault();
@@ -1254,7 +1258,12 @@ onBeforeUnmount(() => {
         <span class="mesh-lamp mesh-link-lamp" aria-hidden="true"></span>
         <p class="mesh-link-title">{{ linkHint }}</p>
         <p class="mesh-link-copy">{{ t("link.copy") }}</p>
-        <button type="button" class="mesh-link-reload" @click="reloadPage">{{ t("link.reload") }}</button>
+        <div class="mesh-link-actions">
+          <button type="button" class="mesh-link-reload" @click="reloadPage">{{ t("link.reload") }}</button>
+          <button type="button" class="mesh-link-diag" @click="openConnectionSettings">
+            {{ t("link.openConnection") }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

@@ -370,7 +370,8 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 		if err != nil {
 			return protocol.Response{ID: req.ID, Error: err.Error()}
 		}
-		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(evs)}
+		// Match plaintext OpenAI history: keep the latest turns, not the full tail dump.
+		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(driver.LastTurns(evs, 20))}
 	case protocol.MethodEngines:
 		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(s.Drivers.Engines(ctx))}
 	case protocol.MethodModels:

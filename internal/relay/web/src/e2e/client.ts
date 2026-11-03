@@ -161,15 +161,16 @@ export class E2EClient {
     return held;
   }
 
-  async call(nodeID: string, method: string, params?: unknown): Promise<RPCResponse> {
+  async call(nodeID: string, method: string, params?: unknown, signal?: AbortSignal): Promise<RPCResponse> {
     return this.withNode(nodeID, async () => {
       let lastErr: unknown;
       for (let attempt = 0; attempt < 2; attempt++) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const ns = await this.ensureSession(nodeID);
         try {
           const req: RPCRequest = { id: this.nextID(), method, params };
           const env = await seal(ns.sess, utf8(JSON.stringify(req)), "rpc");
-          const ack = await this.postEnvelope(ns.base + "/rpc", env);
+          const ack = await this.postEnvelope(ns.base + "/rpc", env, signal);
           const plain = await open(ns.sess, ack);
           const resp = JSON.parse(fromUtf8(plain)) as RPCResponse;
           if (!resp.ok && resp.error) throw new Error(resp.error);
@@ -259,16 +260,15 @@ export class E2EClient {
   /**
    * Open an E2E catalog WebSocket for one node. Each WS binary message is a sealed
    * Envelope whose plaintext is a catalog busMsg (sessions/engines/…).
-   * Returns a closer; onAuth401 clears the session so the next open re-handshakes.
+   * Only handshake/seal hold the per-node lock so history/send are not blocked.
    */
   async openCatalogWS(
     nodeID: string,
     onPart: (msg: Record<string, unknown>) => void,
     onClose?: () => void,
   ): Promise<{ close: () => void; peerID: string }> {
-    return this.withNode(nodeID, async () => {
+    const primed = await this.withNode(nodeID, async () => {
       const ns = await this.ensureSession(nodeID);
-      const heldGen = ns.gen;
       const req: RPCRequest = { id: this.nextID(), method: "catalog", stream: true };
       const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
       const raw = marshalEnvelope(env);
@@ -284,27 +284,38 @@ export class E2EClient {
         host = typeof location !== "undefined" ? location.host : "";
       }
       const url = `${proto}//${host}/v1/to/${ns.peer.id}/e2e/ws`;
-      const sock = new WebSocket(url);
-      sock.binaryType = "arraybuffer";
-      let closed = false;
-      let intentional = false;
-      const close = () => {
-        intentional = true;
-        closed = true;
-        try {
-          sock.close();
-        } catch {
-          /* ignore */
-        }
-      };
-      const notifyClose = () => {
-        if (intentional) return;
-        try {
-          onClose?.();
-        } catch {
-          /* ignore */
-        }
-      };
+      return { ns, heldGen: ns.gen, raw, url };
+    });
+
+    const { ns, heldGen, raw, url } = primed;
+    const sock = new WebSocket(url);
+    sock.binaryType = "arraybuffer";
+    let closed = false;
+    let intentional = false;
+    const close = () => {
+      intentional = true;
+      closed = true;
+      try {
+        sock.close();
+      } catch {
+        /* ignore */
+      }
+    };
+    const notifyClose = () => {
+      if (intentional) return;
+      try {
+        onClose?.();
+      } catch {
+        /* ignore */
+      }
+    };
+    const failAuth = (err: unknown): never => {
+      close();
+      this.dropSession(ns.peer.id);
+      throw err instanceof Error ? err : new Error(String(err));
+    };
+
+    try {
       await new Promise<void>((resolve, reject) => {
         const t = window.setTimeout(() => reject(new Error("catalog ws timeout")), 15000);
         sock.onopen = () => {
@@ -368,15 +379,17 @@ export class E2EClient {
         };
         sock.send(raw);
       });
-      sock.onclose = () => {
-        closed = true;
-        notifyClose();
-      };
-      return { close, peerID: ns.peer.id };
-    });
+    } catch (err) {
+      failAuth(err);
+    }
+    sock.onclose = () => {
+      closed = true;
+      notifyClose();
+    };
+    return { close, peerID: ns.peer.id };
   }
 
-  private async postEnvelope(url: string, env: Envelope): Promise<Envelope> {
+  private async postEnvelope(url: string, env: Envelope, signal?: AbortSignal): Promise<Envelope> {
     const raw = marshalEnvelope(env);
     const resp = await fetch(url, {
       method: "POST",
@@ -386,6 +399,7 @@ export class E2EClient {
         Accept: CONTENT_TYPE_ENVELOPE,
       },
       body: raw,
+      signal,
     });
     const buf = new Uint8Array(await resp.arrayBuffer());
     if (resp.status >= 400) throw new Error(`http ${resp.status}: ${fromUtf8(buf)}`);

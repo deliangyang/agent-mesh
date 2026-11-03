@@ -368,7 +368,8 @@ async function onImportFile(ev: Event): Promise<void> {
     form.password = bundle.password;
     form.advertise = bundle.advertise;
     if (bundle.vault_passphrase) keyPass.value = bundle.vault_passphrase;
-    if (bundle.client_key && bundle.vault_passphrase && e2e.value) {
+    // Import vault key whenever present — local UI is never e2e, but the same browser may open the relay later.
+    if (bundle.client_key && bundle.vault_passphrase) {
       try {
         const { importVaultKeyJSON } = await import("../e2e/vault.ts");
         const { afterVaultReady } = await import("../e2e/runtime.ts");

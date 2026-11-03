@@ -154,8 +154,13 @@ function cacheLiveThread(threadId: string): void {
 
 export function bindHistoryThread(threadId: string): void {
   if (!threadId) return;
+  if (historyThread === threadId) return;
+  // Persist the previous thread's events under its own key — never stamp them onto the new id.
+  if (historyThread && historyEvents.length) {
+    historyCache.set(historyThread, historyEvents);
+  }
   historyThread = threadId;
-  cacheLiveThread(threadId);
+  historySource = "none";
 }
 
 export function pushLiveChunk(obj: LiveChunk): void {
@@ -743,7 +748,7 @@ export function expectHistory(threadId: string): void {
   chatLoad.thread = threadId;
   const cached = historyCache.get(threadId);
   if (cached && cached.length) {
-    const sameThread = historyThread === threadId;
+    const sameThread = historyThread === threadId && historySource !== "none";
     historyEvents = cached;
     historyThread = threadId;
     if (historySource === "none") historySource = "http";
@@ -752,6 +757,8 @@ export function expectHistory(threadId: string): void {
       noteAskEvents(cached, true);
       paintMessages(cached, meshAgent.messages.length === 0);
     }
+    // Cache is optimistic; always revalidate (E2E has no conversation WS bootstrap).
+    void refreshHistory(threadId, undefined, true);
     return;
   }
   chatLoad.loading = true;
@@ -812,20 +819,20 @@ export function applyHistory(evs: MeshEvent[], reset: boolean): void {
   );
 }
 
-export async function refreshHistory(threadId: string, signal?: AbortSignal): Promise<void> {
+export async function refreshHistory(threadId: string, signal?: AbortSignal, force = false): Promise<void> {
   const { node, engine, session } = parseThreadId(threadId);
   if (!session) {
     chatLoad.loading = false;
     chatLoad.thread = "";
     return;
   }
-  if (historyThread === threadId && historyEvents.length && historySource !== "none") {
+  if (!force && historyThread === threadId && historyEvents.length && historySource !== "none") {
     chatLoad.loading = false;
     return;
   }
   if (historyThread !== threadId) historySource = "none";
   chatLoad.thread = threadId;
-  chatLoad.loading = historyEvents.length === 0 || historyThread !== threadId;
+  chatLoad.loading = !force && (historyEvents.length === 0 || historyThread !== threadId);
   historyAbort?.abort();
   const ac = new AbortController();
   historyAbort = ac;
@@ -840,11 +847,16 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal): Pr
     let evs: MeshEvent[] = [];
     if (isE2EMode()) {
       const { e2eClient } = await import("./e2e/runtime.ts");
-      const resp = await e2eClient().call(node, "history", {
-        engine,
-        session_id: session,
-        tail: 8000,
-      });
+      const resp = await e2eClient().call(
+        node,
+        "history",
+        {
+          engine,
+          session_id: session,
+          tail: 8000,
+        },
+        ac.signal,
+      );
       evs = (Array.isArray(resp.body) ? resp.body : []) as MeshEvent[];
     } else {
       const q = new URLSearchParams({

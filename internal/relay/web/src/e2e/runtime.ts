@@ -37,6 +37,11 @@ export async function unlockE2E(passphrase: string): Promise<Identity> {
 
 export async function afterVaultReady(id: Identity): Promise<void> {
   client = new E2EClient(id, "");
+  if (!isE2EMode()) return;
+  // Rebuild catalog sockets under the new identity; old peers/sessions are stale.
+  const { stopE2ECatalogLoop, startE2ECatalogLoop } = await import("./sync.ts");
+  stopE2ECatalogLoop();
+  startE2ECatalogLoop();
 }
 
 export function lockE2E(): void {

@@ -20,6 +20,17 @@ describe("meshConfigIO", () => {
     assert.equal(b?.password, "p");
   });
 
+  it("parses E2E client key fields", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      vault_passphrase: "xyz",
+      client_key: { id: "abc", ed25519_seed: "x=", x25519_private: "y=" },
+    });
+    const b = parseMeshConfigBundle(raw);
+    assert.equal(b?.vault_passphrase, "xyz");
+    assert.match(b?.client_key || "", /"id":"abc"/);
+  });
+
   it("rejects empty or invalid payloads", () => {
     assert.equal(parseMeshConfigBundle("{"), null);
     assert.equal(parseMeshConfigBundle("{}"), null);

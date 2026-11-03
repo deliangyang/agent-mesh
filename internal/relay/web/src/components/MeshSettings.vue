@@ -278,9 +278,26 @@ async function onImportFile(ev: Event): Promise<void> {
       showToast(t("settings.importInvalid"), "error");
       return;
     }
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    e2e.value = isE2EMode();
     form.relay = bundle.relay;
     form.password = bundle.password;
     form.advertise = bundle.advertise;
+    if (bundle.vault_passphrase) keyPass.value = bundle.vault_passphrase;
+    if (bundle.client_key && bundle.vault_passphrase && e2e.value) {
+      try {
+        const { importVaultKeyJSON } = await import("../e2e/vault.ts");
+        const { afterVaultReady } = await import("../e2e/runtime.ts");
+        const id = await importVaultKeyJSON(bundle.client_key, bundle.vault_passphrase);
+        await afterVaultReady(id);
+        keyHint.value = id.id;
+        keyMsg.value = t("settings.keyImported");
+      } catch (err) {
+        toastError(err);
+        keyMsg.value = t("settings.keyImportFailed");
+      }
+    }
     showToast(t("settings.importLoaded"), "info");
   } catch (err) {
     toastError(err);

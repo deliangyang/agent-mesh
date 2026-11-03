@@ -208,10 +208,13 @@ onBeforeUnmount(() => {
               type="button"
               class="mesh-conn-node"
               role="listitem"
-              :title="t('settings.connOpenNode')"
-              @click="onHealthPick({ nodeId: n.id })"
+              :title="n.engineCount ? t('settings.connOpenNode') : t('settings.connOpenInstall')"
+              @click="onHealthPick({ nodeId: n.id, focusMissing: n.engineCount === 0 })"
             >
-              <div class="mesh-conn-node-name">{{ n.name }}</div>
+              <div class="mesh-conn-node-name">
+                {{ n.name }}
+                <span v-if="!n.engineCount" class="mesh-conn-node-miss">{{ t("engine.missing") }}</span>
+              </div>
               <div class="mesh-conn-node-meta">
                 <span v-if="n.platform">{{ n.platform }}</span>
                 <span>{{ t("settings.connNodeEngines", { count: n.engineCount }) }}</span>

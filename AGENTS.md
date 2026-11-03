@@ -20,7 +20,7 @@ internal/hub      local sessions → OpenAI chunks, pushed to subscribers and th
 internal/followup follow-up queue (default ~/.agent-mesh/followups)
 internal/gitdiff  workspace git diff
 internal/relay/web  web source (build output is embedded in relay)
-desktop           local node + shared Vue UI (Chrome app, or Windows Wails/WebView2 with CGO)
+desktop           local node + shared Vue UI (Chrome app, or Wails WebView2/WebKitGTK with CGO)
 deploy/supervisor sample supervisord unit for a local node
 deploy/systemd    systemd units for relay / node (written by install-*.sh)
 deploy/launchd    macOS launchd plists for relay / node
@@ -48,6 +48,7 @@ make ctl           # bin/ctl
 make web           # internal/relay/web: npm ci && npm run build
 make desktop       # local node + Chrome/Edge app window (CGO-free)
 make desktop-windows  # Windows: Wails/WebView2 shell over the same Vue UI (needs CGO)
+make desktop-linux    # Linux: Wails/WebKitGTK shell over the same Vue UI (needs CGO + gtk/webkit)
 make dist          # cross-compile release archives into dist/ (Windows zips included)
 make node-windows  # Windows tray node (icon + GUI subsystem) + ctl
 make winres        # regenerate cmd/node Windows icon/.syso + deploy/desktop/icons PNGs

@@ -580,6 +580,32 @@ html.dark #app {
   flex: none;
 }
 
+.mesh-settings-entry > span:not(.mesh-settings-link-dot) {
+  flex: 1;
+  min-width: 0;
+}
+
+.mesh-settings-link-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--mute);
+}
+
+.mesh-settings-link-dot.live {
+  background: var(--signal);
+}
+
+.mesh-settings-link-dot.connecting {
+  background: color-mix(in srgb, var(--signal) 55%, var(--mute));
+  animation: mesh-lamp 1.1s ease-in-out infinite;
+}
+
+.mesh-settings-link-dot.down {
+  background: var(--destructive);
+}
+
 .mesh-time-group {
   display: flex;
   flex-direction: column;

@@ -121,6 +121,13 @@ const linkHint = computed(() => {
   return t("link.disconnected");
 });
 
+const settingsEntryTitle = computed(() => {
+  const base = t("nav.settings");
+  if (meshLink.state === "live") return `${base} · ${t("settings.connLive")}`;
+  if (meshLink.state === "connecting") return `${base} · ${t("settings.connConnecting")}`;
+  return `${base} · ${t("settings.connDown")}`;
+});
+
 const attachConfig = {
   enabled: true,
   maxSize: 20 * 1024 * 1024,
@@ -985,8 +992,8 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="mesh-settings-entry"
-          :title="t('nav.settings')"
-          :aria-label="t('nav.settings')"
+          :title="settingsEntryTitle"
+          :aria-label="settingsEntryTitle"
           @click="openSettings"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -999,6 +1006,12 @@ onBeforeUnmount(() => {
             />
           </svg>
           <span>{{ t("nav.settings") }}</span>
+          <span
+            class="mesh-settings-link-dot"
+            :class="meshLink.state"
+            :aria-label="settingsEntryTitle"
+            role="status"
+          ></span>
         </button>
       </div>
     </aside>

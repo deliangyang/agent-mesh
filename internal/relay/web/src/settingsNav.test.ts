@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, before, describe, it } from "node:test";
 import {
   SETTINGS_NAV,
   loadLastSettingsSection,
@@ -7,12 +7,34 @@ import {
   saveLastSettingsSection,
 } from "./settingsNav.ts";
 
+const mem = new Map<string, string>();
+
+before(() => {
+  const store = {
+    getItem(key: string) {
+      return mem.has(key) ? mem.get(key)! : null;
+    },
+    setItem(key: string, value: string) {
+      mem.set(key, String(value));
+    },
+    removeItem(key: string) {
+      mem.delete(key);
+    },
+    clear() {
+      mem.clear();
+    },
+    key() {
+      return null;
+    },
+    get length() {
+      return mem.size;
+    },
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: store, configurable: true });
+});
+
 afterEach(() => {
-  try {
-    localStorage.removeItem("mesh.settings.section");
-  } catch {
-    /* ignore */
-  }
+  mem.clear();
 });
 
 describe("settingsNav", () => {

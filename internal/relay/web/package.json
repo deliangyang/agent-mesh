@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test src/*.test.ts"
+    "test": "node --experimental-strip-types --test src/*.test.ts src/e2e/*.test.ts"
   },
   "dependencies": {
     "@ag-ui/client": "^1.0.3",

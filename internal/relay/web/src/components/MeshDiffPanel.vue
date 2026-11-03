@@ -41,10 +41,19 @@ async function loadRepos(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const q = new URLSearchParams({ cwd: cwd.value, node: meshTarget.node });
-    const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
-    if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
-    const data = (await resp.json()) as { repos?: GitRepo[] };
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    let data: { repos?: GitRepo[] } = {};
+    if (isE2EMode()) {
+      const { e2eClient } = await import("../e2e/runtime.ts");
+      const resp = await e2eClient().call(meshTarget.node, "git", { cwd: cwd.value });
+      data = (resp.body || {}) as { repos?: GitRepo[] };
+    } else {
+      const q = new URLSearchParams({ cwd: cwd.value, node: meshTarget.node });
+      const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
+      if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+      data = (await resp.json()) as { repos?: GitRepo[] };
+    }
     repos.value = data.repos || [];
     if (!repos.value.length) {
       bundle.value = null;
@@ -67,10 +76,18 @@ async function loadDiff(path: string): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const q = new URLSearchParams({ repo: path, node: meshTarget.node, cwd: cwd.value });
-    const resp = await fetchJSON("/v1/openai/git/diff?" + q.toString(), { credentials: "same-origin" });
-    if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
-    bundle.value = (await resp.json()) as GitBundle;
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      const { e2eClient } = await import("../e2e/runtime.ts");
+      const resp = await e2eClient().call(meshTarget.node, "git_diff", { repo: path, cwd: cwd.value });
+      bundle.value = (resp.body || {}) as GitBundle;
+    } else {
+      const q = new URLSearchParams({ repo: path, node: meshTarget.node, cwd: cwd.value });
+      const resp = await fetchJSON("/v1/openai/git/diff?" + q.toString(), { credentials: "same-origin" });
+      if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+      bundle.value = (await resp.json()) as GitBundle;
+    }
     const first = (bundle.value.files || []).find((f) => f.patch);
     openFile.value = first?.path || "";
   } catch (err) {

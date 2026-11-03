@@ -90,7 +90,7 @@ func (s *Server) serveTunnel(ctx context.Context, relay, advertise string) error
 		Info:      info,
 		Unix:      unix,
 		Signature: s.Ident.SignBytes(msg),
-		Snapshot:  s.cachedSnapshot(ctx),
+		Snapshot:  protocol.PublicSnapshot(s.cachedSnapshot(ctx)),
 	}
 	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if err := conn.WriteJSON(hello); err != nil {
@@ -365,7 +365,8 @@ func (s *Server) pushSnapshot(snap protocol.NodeSnapshot) {
 	if conn == nil || wmu == nil {
 		return
 	}
-	raw, err := json.Marshal(snap)
+	// Relay only gets a public catalog (engines/models); sessions/paths stay off the wire.
+	raw, err := json.Marshal(protocol.PublicSnapshot(snap))
 	if err != nil {
 		return
 	}

@@ -21,6 +21,8 @@ const (
 	MethodCommands  = "commands"
 	MethodFollowups = "followups"
 	MethodChoice    = "choice"
+	MethodGit       = "git"
+	MethodGitDiff   = "git_diff"
 )
 
 // Request is an RPC request before encryption.
@@ -152,22 +154,32 @@ type HistoryParams struct {
 	Tail      int    `json:"tail,omitempty"`
 }
 
+// AttachFile is a base64 attachment for send/reply (same shape as OpenAI ChatFile).
+type AttachFile struct {
+	Name string `json:"name"`
+	MIME string `json:"mime,omitempty"`
+	Data string `json:"data"`
+}
+
 // ReplyParams appends to a session.
 type ReplyParams struct {
-	Engine    string `json:"engine"`
-	SessionID string `json:"session_id"`
-	Text      string `json:"text"`
-	Model     string `json:"model,omitempty"`
-	Watch     bool   `json:"watch,omitempty"`
+	Engine    string       `json:"engine"`
+	SessionID string       `json:"session_id"`
+	Text      string       `json:"text"`
+	Model     string       `json:"model,omitempty"`
+	Watch     bool         `json:"watch,omitempty"`
+	CWD       string       `json:"cwd,omitempty"`
+	Files     []AttachFile `json:"files,omitempty"`
 }
 
 // SendParams starts a new turn.
 type SendParams struct {
-	Engine string `json:"engine"`
-	CWD    string `json:"cwd,omitempty"`
-	Text   string `json:"text"`
-	Resume string `json:"resume,omitempty"`
-	Model  string `json:"model,omitempty"`
+	Engine string       `json:"engine"`
+	CWD    string       `json:"cwd,omitempty"`
+	Text   string       `json:"text"`
+	Resume string       `json:"resume,omitempty"`
+	Model  string       `json:"model,omitempty"`
+	Files  []AttachFile `json:"files,omitempty"`
 }
 
 // WatchParams follows progress.
@@ -198,6 +210,35 @@ type ChoiceParams struct {
 	Session string `json:"session,omitempty"`
 	CWD     string `json:"cwd,omitempty"`
 	Text    string `json:"text"`
+}
+
+// GitParams lists git repos under a workspace.
+type GitParams struct {
+	CWD string `json:"cwd"`
+}
+
+// GitDiffParams loads a working-tree diff for one repo.
+type GitDiffParams struct {
+	Repo string `json:"repo,omitempty"`
+	CWD  string `json:"cwd,omitempty"`
+}
+
+// PublicSnapshot strips session/path/follow-up content for relay directory pushes.
+// Engines (availability) and models (ids) remain; sessions, directories, and followups are cleared.
+// Empty (non-nil) slices are intentional so relay mergeSnapshot replaces prior sensitive data.
+func PublicSnapshot(snap NodeSnapshot) NodeSnapshot {
+	out := NodeSnapshot{
+		Models:    append([]Model(nil), snap.Models...),
+		Engines:   append([]EngineInfo(nil), snap.Engines...),
+		Sessions:  []Session{},
+		Dirs:      []WorkDir{},
+		Followups: []FollowQueue{},
+	}
+	for i := range out.Engines {
+		out.Engines[i].Binary = ""
+		out.Engines[i].Detail = ""
+	}
+	return out
 }
 
 // NodeInfo is public node info (no private key).

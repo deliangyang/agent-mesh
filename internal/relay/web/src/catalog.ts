@@ -191,17 +191,29 @@ function applyPart(msg: Record<string, unknown>): void {
 export function watchSession(s: Session | null): void {
   const key = sessionKey(s);
   applyCatalogBusy(Boolean(s?.busy), s?.id || "");
-  if (key === watched && ws && ws.readyState === WebSocket.OPEN) return;
+  const same = key === watched;
   watched = key;
-  if (!s || !ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(
-    JSON.stringify({
-      type: "watch",
-      node: s.node_id || "",
-      engine: s.engine,
-      session: s.id,
-    }),
-  );
+  void import("./e2e/mode.ts").then(async ({ isE2EMode }) => {
+    if (isE2EMode()) {
+      const { startE2EWatch, stopE2EWatch } = await import("./e2e/sync.ts");
+      if (!s) {
+        stopE2EWatch();
+        return;
+      }
+      startE2EWatch(s.node_id || "", s.engine, s.id);
+      return;
+    }
+    if (same && ws && ws.readyState === WebSocket.OPEN) return;
+    if (!s || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(
+      JSON.stringify({
+        type: "watch",
+        node: s.node_id || "",
+        engine: s.engine,
+        session: s.id,
+      }),
+    );
+  });
 }
 
 export function refreshCatalog(): void {
@@ -251,6 +263,12 @@ export function connectCatalog(): void {
       sock.send(JSON.stringify({ type: "refresh" }));
       window.dispatchEvent(new Event("mesh-link-up"));
     }
+    void import("./e2e/mode.ts").then(async ({ ensureMeshMode, isE2EMode }) => {
+      await ensureMeshMode();
+      if (!isE2EMode()) return;
+      const { startE2ECatalogLoop } = await import("./e2e/sync.ts");
+      startE2ECatalogLoop();
+    });
   };
   sock.onclose = () => {
     const wasLive = meshLink.state === "live";

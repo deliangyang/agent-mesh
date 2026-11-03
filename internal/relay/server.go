@@ -130,7 +130,9 @@ func mergeSnapshot(old, neu protocol.NodeSnapshot) protocol.NodeSnapshot {
 	return neu
 }
 
-// Server forwards encrypted envelopes without decrypting them. The OpenAI path aggregates live sessions in plaintext.
+// Server forwards encrypted envelopes without decrypting them.
+// OpenAI proxy routes may still pipe bytes for external tools; catalog snapshots are public-only
+// (no session paths/bodies), and ingest/history aggregation for the Web UI is disabled.
 type Server struct {
 	Listen   string
 	Dir      Directory
@@ -215,7 +217,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Info.LastSeen = time.Now().Unix()
-	s.Dir.Upsert(Record{Info: req.Info, Advertise: req.Info.Listen, Seen: time.Now(), Snapshot: req.Snapshot})
+	s.Dir.Upsert(Record{Info: req.Info, Advertise: req.Info.Listen, Seen: time.Now(), Snapshot: protocol.PublicSnapshot(req.Snapshot)})
 	s.publishCatalog()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": req.Info.ID})
 }

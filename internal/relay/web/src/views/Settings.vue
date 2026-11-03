@@ -425,7 +425,16 @@ onBeforeUnmount(() => {
             <h2>{{ t("settings.navAccount") }}</h2>
             <p class="mesh-settings-sub">{{ t("settings.navAccountHint") }}</p>
           </header>
-          <form method="post" action="/logout" class="mesh-settings-actions-stack">
+          <form
+            method="post"
+            action="/logout"
+            class="mesh-settings-actions-stack"
+            @submit="
+              () => {
+                void import('../e2e/runtime.ts').then((m) => m.lockE2E());
+              }
+            "
+          >
             <button type="submit" class="mesh-settings-action is-danger">{{ t("nav.signOut") }}</button>
           </form>
         </section>

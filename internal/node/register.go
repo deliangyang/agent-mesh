@@ -108,7 +108,7 @@ func (s *Server) registerOnce(ctx context.Context, relays []string, advertise st
 		Info:      info,
 		Unix:      unix,
 		Signature: s.Ident.SignBytes(msg),
-		Snapshot:  s.cachedSnapshot(ctx),
+		Snapshot:  protocol.PublicSnapshot(s.cachedSnapshot(ctx)),
 	}
 	raw, _ := json.Marshal(req)
 	cli := &http.Client{Timeout: 8 * time.Second}

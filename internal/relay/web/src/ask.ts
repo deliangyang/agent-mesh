@@ -235,19 +235,31 @@ export async function submitAsk(prompt: AskPrompt, picks: Record<string, string[
   meshAsk.answering = true;
   meshAsk.error = "";
   try {
-    const resp = await fetchJSON("/v1/openai/choice", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        node: meshTarget.node,
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      const { e2eClient } = await import("./e2e/runtime.ts");
+      await e2eClient().call(meshTarget.node, "choice", {
         engine: meshTarget.engine,
         session: meshTarget.session,
         cwd: meshTarget.cwd,
         text,
-      }),
-    });
-    if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+      });
+    } else {
+      const resp = await fetchJSON("/v1/openai/choice", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          node: meshTarget.node,
+          engine: meshTarget.engine,
+          session: meshTarget.session,
+          cwd: meshTarget.cwd,
+          text,
+        }),
+      });
+      if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+    }
     dismissAsk();
     return true;
   } catch (err) {

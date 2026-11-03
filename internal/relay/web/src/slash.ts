@@ -26,15 +26,30 @@ export async function loadSlashItems(node: string, engine: string, cwd: string):
   q.set("engine", engine);
   if (cwd) q.set("cwd", cwd);
   try {
-    const resp = await fetchJSON("/v1/openai/commands?" + q.toString(), { credentials: "same-origin" });
-    redirectIfUnauthorized(resp);
-    if (!resp.ok) {
-      if (token === seq) slashItems.value = [];
-      return;
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    let items: SlashItem[] = [];
+    if (isE2EMode()) {
+      const { e2eClient, hasE2EClient } = await import("./e2e/runtime.ts");
+      if (!hasE2EClient() || !node) {
+        if (token === seq) slashItems.value = [];
+        return;
+      }
+      const resp = await e2eClient().call(node, "commands", { engine, cwd });
+      const body = (resp.body || {}) as { items?: SlashItem[] };
+      items = Array.isArray(body.items) ? body.items : Array.isArray(resp.body) ? (resp.body as SlashItem[]) : [];
+    } else {
+      const resp = await fetchJSON("/v1/openai/commands?" + q.toString(), { credentials: "same-origin" });
+      redirectIfUnauthorized(resp);
+      if (!resp.ok) {
+        if (token === seq) slashItems.value = [];
+        return;
+      }
+      const body = (await resp.json()) as { items?: SlashItem[] };
+      items = Array.isArray(body.items) ? body.items : [];
     }
-    const body = (await resp.json()) as { items?: SlashItem[] };
     if (token !== seq) return;
-    slashItems.value = Array.isArray(body.items) ? body.items : [];
+    slashItems.value = items;
   } catch (err) {
     if (token === seq) slashItems.value = [];
     const text = explainError(err);

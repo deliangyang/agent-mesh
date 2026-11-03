@@ -835,9 +835,23 @@ function hideKitCursor(): void {
 let cursorObs: MutationObserver | null = null;
 
 onMounted(() => {
-  hydrateFromQuery();
-  applyHealthHint();
-  connectCatalog();
+  void (async () => {
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      const { vaultStatus } = await import("../e2e/vault.ts");
+      const { bootE2E } = await import("../e2e/runtime.ts");
+      const st = await vaultStatus();
+      if (!st.unlocked) {
+        location.href = "/login";
+        return;
+      }
+      await bootE2E();
+    }
+    hydrateFromQuery();
+    applyHealthHint();
+    connectCatalog();
+  })();
   document.addEventListener("click", onDocClick);
   window.addEventListener("keydown", onSettingsHotkey);
   window.addEventListener("mesh-link-up", onLinkUp);

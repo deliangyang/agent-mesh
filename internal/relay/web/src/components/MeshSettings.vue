@@ -50,6 +50,12 @@ const testing = ref(false);
 const saving = ref(false);
 const local = ref(false);
 const importEl = ref<HTMLInputElement | null>(null);
+const e2e = ref(false);
+const keyHint = ref("");
+const keyPass = ref("");
+const keyNew = ref("");
+const keyBusy = ref(false);
+const keyMsg = ref("");
 
 const fullMatrix = computed(() => buildHealthMatrix(catalog.nodes, catalog.engines));
 const osFilter = computed(() => resolveHealthOsFilter(String(route.query.os || "")));
@@ -94,7 +100,17 @@ function pickCell(nodeId: string, engine: string, cell: string): void {
 async function load(): Promise<void> {
   loading.value = true;
   local.value = false;
+  e2e.value = false;
+  keyMsg.value = "";
   try {
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    e2e.value = isE2EMode();
+    if (e2e.value) {
+      const { vaultStatus } = await import("../e2e/vault.ts");
+      const st = await vaultStatus();
+      keyHint.value = st.idHint || "";
+    }
     const resp = await fetchJSON("/v1/openai/mesh", { credentials: "same-origin" }, 8000);
     if (!resp.ok) return;
     const st = (await resp.json()) as MeshSettingsState;
@@ -109,6 +125,59 @@ async function load(): Promise<void> {
     /* relay / non-node: health matrix only */
   } finally {
     loading.value = false;
+  }
+}
+
+async function exportKey(): Promise<void> {
+  try {
+    const { exportUnlockedKeyJSON } = await import("../e2e/vault.ts");
+    const raw = exportUnlockedKeyJSON();
+    await navigator.clipboard.writeText(raw);
+    keyMsg.value = t("settings.keyExported");
+  } catch (err) {
+    toastError(err);
+  }
+}
+
+async function importKey(): Promise<void> {
+  if (!keyPass.value) {
+    keyMsg.value = t("login.keyRequired");
+    return;
+  }
+  keyBusy.value = true;
+  try {
+    const raw = await navigator.clipboard.readText();
+    const { importVaultKeyJSON } = await import("../e2e/vault.ts");
+    const { afterVaultReady } = await import("../e2e/runtime.ts");
+    const id = await importVaultKeyJSON(raw, keyPass.value);
+    await afterVaultReady(id);
+    keyHint.value = id.id;
+    keyMsg.value = t("settings.keyImported");
+  } catch (err) {
+    toastError(err);
+    keyMsg.value = t("settings.keyImportFailed");
+  } finally {
+    keyBusy.value = false;
+  }
+}
+
+async function changeKeyPass(): Promise<void> {
+  if (!keyPass.value || !keyNew.value) {
+    keyMsg.value = t("login.keyRequired");
+    return;
+  }
+  keyBusy.value = true;
+  try {
+    const { changeVaultPassphrase } = await import("../e2e/vault.ts");
+    await changeVaultPassphrase(keyPass.value, keyNew.value);
+    keyPass.value = "";
+    keyNew.value = "";
+    keyMsg.value = t("settings.keyPassChanged");
+  } catch (err) {
+    toastError(err);
+    keyMsg.value = t("settings.keyPassFailed");
+  } finally {
+    keyBusy.value = false;
   }
 }
 
@@ -238,64 +307,88 @@ onMounted(() => {
         <p class="mesh-settings-sub">{{ t("settings.sub") }}</p>
       </header>
       <div v-if="loading" class="mesh-settings-status mesh-settings-pad">{{ t("settings.loading") }}</div>
-      <form v-else-if="local" class="mesh-settings-form" @submit.prevent="save">
-        <label>
-          <span>{{ t("settings.relayUrl") }}</span>
-          <input
-            v-model="form.relay"
-            type="url"
-            placeholder="https://mesh.example.com"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </label>
-        <label>
-          <span>{{ t("settings.relayPassword") }}</span>
-          <input v-model="form.password" type="password" :placeholder="t('settings.passwordPlaceholder')" autocomplete="off" />
-        </label>
-        <label>
-          <span>{{ t("settings.advertise") }}</span>
-          <input
-            v-model="form.advertise"
-            type="url"
-            placeholder="http://LAN-IP:7700 (optional)"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </label>
+      <template v-else>
+        <section v-if="e2e" class="mesh-settings-form mesh-settings-pad" :aria-label="t('settings.keyTitle')">
+          <h3>{{ t("settings.keyTitle") }}</h3>
+          <p class="mesh-settings-sub">{{ t("settings.keySub") }}</p>
+          <p v-if="keyHint" class="mesh-settings-status">{{ t("settings.keyId") }}: {{ keyHint }}</p>
+          <label>
+            <span>{{ t("login.keyPassphrase") }}</span>
+            <input v-model="keyPass" type="password" autocomplete="off" />
+          </label>
+          <label>
+            <span>{{ t("settings.keyNewPass") }}</span>
+            <input v-model="keyNew" type="password" autocomplete="off" />
+          </label>
+          <p v-if="keyMsg" class="mesh-settings-status">{{ keyMsg }}</p>
+          <div class="mesh-settings-actions">
+            <button type="button" class="ghost" :disabled="keyBusy" @click="exportKey">{{ t("settings.keyExport") }}</button>
+            <button type="button" class="ghost" :disabled="keyBusy" @click="importKey">{{ t("settings.keyImport") }}</button>
+            <button type="button" class="mesh-settings-save" :disabled="keyBusy" @click="changeKeyPass">
+              {{ t("settings.keyChangePass") }}
+            </button>
+          </div>
+        </section>
 
-        <div class="mesh-settings-status" :class="{ ok: linked, bad: !linked && !!linkError }">
-          <span v-if="linked">{{ t("settings.linked") }}</span>
-          <span v-else-if="linkError">{{ linkError }}</span>
-          <span v-else>{{ t("settings.direct") }}</span>
-        </div>
+        <form v-if="local" class="mesh-settings-form" @submit.prevent="save">
+          <label>
+            <span>{{ t("settings.relayUrl") }}</span>
+            <input
+              v-model="form.relay"
+              type="url"
+              placeholder="https://mesh.example.com"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label>
+            <span>{{ t("settings.relayPassword") }}</span>
+            <input v-model="form.password" type="password" :placeholder="t('settings.passwordPlaceholder')" autocomplete="off" />
+          </label>
+          <label>
+            <span>{{ t("settings.advertise") }}</span>
+            <input
+              v-model="form.advertise"
+              type="url"
+              placeholder="http://LAN-IP:7700 (optional)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
 
-        <div class="mesh-settings-actions">
-          <button type="button" class="ghost" :disabled="testing || saving" @click="testLink">
-            {{ testing ? t("settings.testing") : t("settings.test") }}
-          </button>
-          <button type="submit" class="mesh-settings-save" :disabled="saving || testing">
-            {{ saving ? t("settings.saving") : t("settings.save") }}
-          </button>
-        </div>
-        <div class="mesh-settings-actions mesh-settings-io">
-          <button type="button" class="ghost" :disabled="testing || saving" @click="exportConfig">
-            {{ t("settings.exportConfig") }}
-          </button>
-          <button type="button" class="ghost" :disabled="testing || saving" @click="pickImport">
-            {{ t("settings.importConfig") }}
-          </button>
-          <input
-            ref="importEl"
-            type="file"
-            accept="application/json,.json"
-            class="mesh-settings-file"
-            @change="onImportFile"
-          />
-        </div>
-        <p class="mesh-settings-hotkey-hint">{{ t("settings.importHint") }}</p>
-      </form>
-      <div v-else class="mesh-settings-status mesh-settings-pad">{{ t("settings.relayRemoteOnly") }}</div>
+          <div class="mesh-settings-status" :class="{ ok: linked, bad: !linked && !!linkError }">
+            <span v-if="linked">{{ t("settings.linked") }}</span>
+            <span v-else-if="linkError">{{ linkError }}</span>
+            <span v-else>{{ t("settings.direct") }}</span>
+          </div>
+
+          <div class="mesh-settings-actions">
+            <button type="button" class="ghost" :disabled="testing || saving" @click="testLink">
+              {{ testing ? t("settings.testing") : t("settings.test") }}
+            </button>
+            <button type="submit" class="mesh-settings-save" :disabled="saving || testing">
+              {{ saving ? t("settings.saving") : t("settings.save") }}
+            </button>
+          </div>
+          <div class="mesh-settings-actions mesh-settings-io">
+            <button type="button" class="ghost" :disabled="testing || saving" @click="exportConfig">
+              {{ t("settings.exportConfig") }}
+            </button>
+            <button type="button" class="ghost" :disabled="testing || saving" @click="pickImport">
+              {{ t("settings.importConfig") }}
+            </button>
+            <input
+              ref="importEl"
+              type="file"
+              accept="application/json,.json"
+              class="mesh-settings-file"
+              @change="onImportFile"
+            />
+          </div>
+          <p class="mesh-settings-hotkey-hint">{{ t("settings.importHint") }}</p>
+        </form>
+        <div v-else-if="!e2e" class="mesh-settings-status mesh-settings-pad">{{ t("settings.relayRemoteOnly") }}</div>
+      </template>
     </template>
 
     <section v-else-if="showHealth" class="mesh-health" :aria-label="t('settings.health')">

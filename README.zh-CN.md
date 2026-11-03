@@ -141,11 +141,14 @@ export OPENAI_API_KEY=mesh
 
 ### 信任边界
 
-中继只路由 `From` / `To`。应用层用 Ed25519 + X25519 封包。直连模式（`--direct`）不走中继，加密相同。密钥在 `~/.agent-mesh/`，权限 0600。
+- **ctl / Envelope RPC**：中继只路由 `From` / `To`，不解 `Ciphertext`。应用层 Ed25519 + X25519。`--direct` 不走中继，加密相同。
+- **经中继的 Web UI**：浏览器持有口令封装的 `client.key`，对话走同一套 Envelope；中继不聚合明文 history/ingest，目录快照不含会话路径与正文。
+- **本机 node / desktop UI**：仍用明文 OpenAI 兼容面（localhost 信任）。
+- 密钥在 `~/.agent-mesh/`（0600）；浏览器密钥匣在 IndexedDB。
 
 ### OpenAI 兼容接口
 
-节点和中继都提供 `/v1/models` 和 `/v1/chat/completions`，以及 `/v1/openai/*`（sessions、history、stream、directories、commands、followups、choice、git）。
+节点和中继仍提供 `/v1/models` 和 `/v1/chat/completions`，以及 `/v1/openai/*`（给外部工具与本机 UI）。经中继的 Web 对话改走 Envelope RPC，不再依赖明文 history/ingest。
 
 ### 桌面和无窗口
 

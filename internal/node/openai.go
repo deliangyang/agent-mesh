@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"agent-mesh/internal/driver"
 	"agent-mesh/internal/followup"
@@ -52,24 +51,11 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChat)
 }
 
+// pushIngestChunk used to push plaintext OpenAI chunks to the relay.
+// Web E2E streams via Envelope RPC instead; never send session plaintext to the relay.
 func (s *Server) pushIngestChunk(chunk openai.Chunk) bool {
-	raw, err := json.Marshal(chunk)
-	if err != nil {
-		return false
-	}
-	s.mu.Lock()
-	conn, wmu := s.tunConn.conn, s.tunConn.wmu
-	s.mu.Unlock()
-	if conn == nil || wmu == nil {
-		return false
-	}
-	wmu.Lock()
-	defer wmu.Unlock()
-	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err := conn.WriteJSON(protocol.TunnelFrame{Path: "/v1/openai/ingest", Body: raw}); err != nil {
-		return false
-	}
-	return true
+	_ = chunk
+	return false
 }
 
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
@@ -437,6 +423,39 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, bundle)
+}
+
+func (s *Server) dispatchGit(ctx context.Context, req protocol.Request) protocol.Response {
+	var p protocol.GitParams
+	_ = json.Unmarshal(req.Params, &p)
+	if strings.TrimSpace(p.CWD) == "" {
+		return protocol.Response{ID: req.ID, Error: "cwd is required"}
+	}
+	rows, err := gitdiff.List(ctx, p.CWD)
+	if err != nil {
+		return protocol.Response{ID: req.ID, Error: err.Error()}
+	}
+	if rows == nil {
+		rows = []gitdiff.Repo{}
+	}
+	return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(map[string]any{"repos": rows})}
+}
+
+func (s *Server) dispatchGitDiff(ctx context.Context, req protocol.Request) protocol.Response {
+	var p protocol.GitDiffParams
+	_ = json.Unmarshal(req.Params, &p)
+	repo := strings.TrimSpace(p.Repo)
+	if repo == "" {
+		repo = strings.TrimSpace(p.CWD)
+	}
+	if repo == "" {
+		return protocol.Response{ID: req.ID, Error: "repo is required"}
+	}
+	bundle, err := gitdiff.Diff(ctx, repo)
+	if err != nil {
+		return protocol.Response{ID: req.ID, Error: err.Error()}
+	}
+	return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(bundle)}
 }
 
 func (s *Server) dispatchChoice(ctx context.Context, req protocol.Request) protocol.Response {

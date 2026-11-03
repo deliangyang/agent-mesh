@@ -73,7 +73,7 @@ func TestPipeHasStarted(t *testing.T) {
 	}
 }
 
-func TestTunnelIngestPublishes(t *testing.T) {
+func TestTunnelIngestIgnored(t *testing.T) {
 	s := New("unused", NewMemory(), nil)
 	id, ch := s.ingest.subscribe()
 	defer s.ingest.unsubscribe(id)
@@ -85,10 +85,7 @@ func TestTunnelIngestPublishes(t *testing.T) {
 	s.applyTunnelIngest(raw)
 	select {
 	case got := <-ch:
-		if got.Mesh.Session != "s1" {
-			t.Fatalf("%#v", got)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("ingest did not reach subscribers")
+		t.Fatalf("ingest must not publish plaintext: %#v", got)
+	case <-time.After(200 * time.Millisecond):
 	}
 }

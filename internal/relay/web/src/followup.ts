@@ -96,6 +96,52 @@ export function applyFollowups(msg: Record<string, unknown>): void {
   paint();
 }
 
+async function fetchFollowFile(action: string, extra: Record<string, string> = {}): Promise<FollowFile> {
+  const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+  await ensureMeshMode();
+  if (isE2EMode()) {
+    const { e2eClient } = await import("./e2e/runtime.ts");
+    const resp = await e2eClient().call(meshTarget.node, "followups", {
+      action,
+      engine: meshTarget.engine,
+      session: meshTarget.session,
+      cwd: meshTarget.cwd,
+      ...extra,
+    });
+    return (resp.body || {}) as FollowFile;
+  }
+  if (action === "list" || action === "") {
+    const resp = await fetchJSON("/v1/openai/followups?" + query().toString(), {
+      credentials: "same-origin",
+    });
+    redirectIfUnauthorized(resp);
+    if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+    return (await resp.json()) as FollowFile;
+  }
+  if (action === "delete") {
+    const q = query();
+    if (extra.id) q.set("id", extra.id);
+    const resp = await fetchJSON("/v1/openai/followups?" + q.toString(), {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload({ id: extra.id || "" })),
+    });
+    redirectIfUnauthorized(resp);
+    if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+    return (await resp.json()) as FollowFile;
+  }
+  const resp = await fetchJSON("/v1/openai/followups", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload(extra)),
+  });
+  redirectIfUnauthorized(resp);
+  if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
+  return (await resp.json()) as FollowFile;
+}
+
 export async function loadFollowups(): Promise<void> {
   if (!meshTarget.engine || !meshTarget.session) {
     paint();
@@ -103,12 +149,7 @@ export async function loadFollowups(): Promise<void> {
   }
   const token = ++seq;
   try {
-    const resp = await fetchJSON("/v1/openai/followups?" + query().toString(), {
-      credentials: "same-origin",
-    });
-    redirectIfUnauthorized(resp);
-    if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
-    const body = (await resp.json()) as FollowFile;
+    const body = await fetchFollowFile("list");
     if (token !== seq) return;
     remember(body);
     paint();
@@ -120,15 +161,6 @@ export async function loadFollowups(): Promise<void> {
   }
 }
 
-async function applyFile(resp: Response): Promise<void> {
-  redirectIfUnauthorized(resp);
-  if (!resp.ok) throw new Error((await resp.text()) || "http " + resp.status);
-  const body = (await resp.json()) as FollowFile;
-  remember(body);
-  paint();
-  meshFollow.error = "";
-}
-
 async function flushLocals(): Promise<void> {
   if (!meshTarget.engine || !meshTarget.session) return;
   const locals = localsOf();
@@ -136,13 +168,10 @@ async function flushLocals(): Promise<void> {
   meshFollow.items = meshFollow.items.filter((it) => !it.id.startsWith("local-"));
   for (const it of locals) {
     try {
-      const resp = await fetchJSON("/v1/openai/followups", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload({ text: it.text })),
-      });
-      await applyFile(resp);
+      const body = await fetchFollowFile("push", { text: it.text });
+      remember(body);
+      paint();
+      meshFollow.error = "";
     } catch (err) {
       meshFollow.items = meshFollow.items.concat([it]);
       meshFollow.error = err instanceof Error ? err.message : String(err);
@@ -164,13 +193,10 @@ export async function pushFollowup(text: string): Promise<void> {
       ]);
       return;
     }
-    const resp = await fetchJSON("/v1/openai/followups", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload({ text: value })),
-    });
-    await applyFile(resp);
+    const body = await fetchFollowFile("push", { text: value });
+    remember(body);
+    paint();
+    meshFollow.error = "";
   } catch (err) {
     meshFollow.error = err instanceof Error ? err.message : String(err);
     meshFollow.items = meshFollow.items.concat([
@@ -189,15 +215,10 @@ export async function dropFollowup(id: string): Promise<void> {
     return;
   }
   try {
-    const q = query();
-    q.set("id", id);
-    const resp = await fetchJSON("/v1/openai/followups?" + q.toString(), {
-      method: "DELETE",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload({ id })),
-    });
-    await applyFile(resp);
+    const body = await fetchFollowFile("delete", { id });
+    remember(body);
+    paint();
+    meshFollow.error = "";
   } catch (err) {
     meshFollow.error = err instanceof Error ? err.message : String(err);
     toastError(err);

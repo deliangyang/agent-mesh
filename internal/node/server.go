@@ -15,6 +15,7 @@ import (
 	"agent-mesh/internal/e2e"
 	"agent-mesh/internal/hub"
 	"agent-mesh/internal/i18n"
+	"agent-mesh/internal/openai"
 	"agent-mesh/internal/protocol"
 	meshweb "agent-mesh/internal/relay/web"
 
@@ -309,6 +310,10 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 		return s.dispatchFollowups(ctx, req)
 	case protocol.MethodChoice:
 		return s.dispatchChoice(ctx, req)
+	case protocol.MethodGit:
+		return s.dispatchGit(ctx, req)
+	case protocol.MethodGitDiff:
+		return s.dispatchGitDiff(ctx, req)
 	default:
 		return protocol.Response{ID: req.ID, Error: "unknown method"}
 	}
@@ -331,7 +336,11 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Reply(ctx, p.SessionID, p.Text, driver.CLIModel(p.Model, p.Engine))
+		text, err := applyRPCFiles(p.Text, p.CWD, p.Files)
+		if err != nil {
+			return nil, err
+		}
+		return d.Reply(ctx, p.SessionID, text, driver.CLIModel(p.Model, p.Engine))
 	case protocol.MethodSend:
 		var p protocol.SendParams
 		_ = json.Unmarshal(req.Params, &p)
@@ -339,10 +348,25 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Send(ctx, p.CWD, p.Text, p.Resume, driver.CLIModel(p.Model, p.Engine))
+		text, err := applyRPCFiles(p.Text, p.CWD, p.Files)
+		if err != nil {
+			return nil, err
+		}
+		return d.Send(ctx, p.CWD, text, p.Resume, driver.CLIModel(p.Model, p.Engine))
 	default:
 		return nil, fmt.Errorf("method %s is not a stream", req.Method)
 	}
+}
+
+func applyRPCFiles(text, cwd string, files []protocol.AttachFile) (string, error) {
+	if len(files) == 0 {
+		return text, nil
+	}
+	rows := make([]openai.ChatFile, 0, len(files))
+	for _, f := range files {
+		rows = append(rows, openai.ChatFile{Name: f.Name, MIME: f.MIME, Data: f.Data})
+	}
+	return openai.ApplyFiles(cwd, text, rows)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

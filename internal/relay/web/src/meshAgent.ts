@@ -363,22 +363,28 @@ export class MeshAgent extends AbstractAgent {
           meshLive.session = "";
           meshLive.title = Array.from(text.replace(/\s+/g, " ").trim()).slice(0, 48).join("");
         }
-        const resp = await fetchJSON("/v1/chat/completions", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: ac.signal,
-        }, 0);
-        redirectIfUnauthorized(resp);
-        if (!resp.ok) {
-          throw new Error(await failBody(resp));
-        }
-        const ctype = resp.headers.get("content-type") || "";
+        const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+        await ensureMeshMode();
+        const useE2E = isE2EMode();
         let queued = false;
-        if (ctype.includes("application/json") && !ctype.includes("text/event-stream")) {
-          const data = (await resp.json()) as { queued?: boolean };
-          queued = Boolean(data && data.queued);
+        let resp: Response | null = null;
+        if (!useE2E) {
+          resp = await fetchJSON("/v1/chat/completions", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: ac.signal,
+          }, 0);
+          redirectIfUnauthorized(resp);
+          if (!resp.ok) {
+            throw new Error(await failBody(resp));
+          }
+          const ctype = resp.headers.get("content-type") || "";
+          if (ctype.includes("application/json") && !ctype.includes("text/event-stream")) {
+            const data = (await resp.json()) as { queued?: boolean };
+            queued = Boolean(data && data.queued);
+          }
         }
         let textId = "";
         let toolId = "";
@@ -565,7 +571,7 @@ export class MeshAgent extends AbstractAgent {
           }
           return stop();
         };
-        // Listen on catalog WS in parallel so a dropped SSE can hand off without gaps.
+        // Listen on catalog WS / E2E watch in parallel so a dropped SSE can hand off without gaps.
         if (session) bindLiveWatch(session, engine, node);
         let stopLive = () => {};
         const liveDone = new Promise<void>((resolve) => {
@@ -587,7 +593,37 @@ export class MeshAgent extends AbstractAgent {
           }
           ac.signal.addEventListener("abort", finishLive, { once: true });
         });
-        if (!queued) {
+        if (useE2E) {
+          const { e2eClient } = await import("./e2e/runtime.ts");
+          const { eventToChunk } = await import("./e2e/chunk.ts");
+          const c = e2eClient();
+          const method = session ? "reply" : "send";
+          const params = session
+            ? {
+                engine,
+                session_id: session,
+                text,
+                model,
+                cwd: meshTarget.cwd || "",
+                files: payload.files,
+                watch: true,
+              }
+            : {
+                engine,
+                cwd: meshTarget.cwd || "",
+                text,
+                model,
+                files: payload.files,
+              };
+          try {
+            for await (const ev of c.stream(node, method, params, ac.signal)) {
+              if (feed(eventToChunk(ev))) break;
+            }
+          } catch (err) {
+            if (ac.signal.aborted) throw err;
+            sseDropped = true;
+          }
+        } else if (!queued && resp) {
           try {
             await readSSE(resp, feed, ac.signal);
           } catch (err) {
@@ -799,20 +835,33 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal): Pr
   }
   const gen = ++historyGen;
   try {
-    const q = new URLSearchParams({
-      node,
-      engine,
-      session,
-      tail: "8000",
-      turns: "20",
-    });
-    const resp = await fetchJSON("/v1/openai/history?" + q.toString(), {
-      credentials: "same-origin",
-      signal: ac.signal,
-    });
-    redirectIfUnauthorized(resp);
-    if (!resp.ok) throw new Error("http " + resp.status);
-    const evs = (await resp.json()) as MeshEvent[];
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    let evs: MeshEvent[] = [];
+    if (isE2EMode()) {
+      const { e2eClient } = await import("./e2e/runtime.ts");
+      const resp = await e2eClient().call(node, "history", {
+        engine,
+        session_id: session,
+        tail: 8000,
+      });
+      evs = (Array.isArray(resp.body) ? resp.body : []) as MeshEvent[];
+    } else {
+      const q = new URLSearchParams({
+        node,
+        engine,
+        session,
+        tail: "8000",
+        turns: "20",
+      });
+      const resp = await fetchJSON("/v1/openai/history?" + q.toString(), {
+        credentials: "same-origin",
+        signal: ac.signal,
+      });
+      redirectIfUnauthorized(resp);
+      if (!resp.ok) throw new Error("http " + resp.status);
+      evs = (await resp.json()) as MeshEvent[];
+    }
     if (gen !== historyGen) return;
     if (historySource === "ws" && historyThread === threadId && historyEvents.length) {
       chatLoad.loading = false;

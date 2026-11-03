@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"agent-mesh/internal/e2e"
-	"agent-mesh/internal/openai"
 	"agent-mesh/internal/protocol"
 
 	"github.com/gorilla/websocket"
@@ -294,7 +293,7 @@ func (s *Server) handleNodeTunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Info.LastSeen = time.Now().Unix()
-	s.Dir.Upsert(Record{Info: req.Info, Advertise: req.Info.Listen, Seen: time.Now(), Snapshot: req.Snapshot})
+	s.Dir.Upsert(Record{Info: req.Info, Advertise: req.Info.Listen, Seen: time.Now(), Snapshot: protocol.PublicSnapshot(req.Snapshot)})
 	s.publishCatalog()
 	t := s.tunnels.bind(req.Info.ID, conn)
 	defer s.tunnels.unbind(req.Info.ID, t)
@@ -353,14 +352,8 @@ func (s *Server) handleNodeTunnel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) applyTunnelIngest(raw json.RawMessage) {
-	if s.ingest == nil || len(raw) == 0 {
-		return
-	}
-	var chunk openai.Chunk
-	if json.Unmarshal(raw, &chunk) != nil {
-		return
-	}
-	s.ingest.publish(chunk)
+	// Ignore plaintext session chunks from older nodes; Web E2E uses Envelope streams.
+	_ = raw
 }
 
 func (s *Server) applyNodeSnapshot(id string, raw json.RawMessage) {
@@ -368,6 +361,6 @@ func (s *Server) applyNodeSnapshot(id string, raw json.RawMessage) {
 	if json.Unmarshal(raw, &snap) != nil {
 		return
 	}
-	s.Dir.SetSnapshot(id, snap)
+	s.Dir.SetSnapshot(id, protocol.PublicSnapshot(snap))
 	s.publishCatalog()
 }

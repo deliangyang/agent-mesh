@@ -40,6 +40,7 @@ docs/i18n.md      Accept-Language + embedded locale catalogs
 
 - The relay only routes Envelope `From` / `To` and cannot decrypt `Ciphertext`.
 - Clients may use `--direct` or go through the relay; application encryption is the same.
+- Relay-hosted Web UI uses Envelope RPC with a passphrase-wrapped browser `client.key`; it must not rely on plaintext `/v1/openai/history` or ingest. Local node/desktop UI may keep the OpenAI plaintext surface.
 - Node identity and client keys live in `~/.agent-mesh/` (`node.key` / `client.key`) at mode 0600. Do not commit keys, passwords, or `.env`.
 
 ## Build and test
@@ -73,7 +74,7 @@ Run a single Go package with `go test ./internal/driver ./internal/relay`. Do no
 
 ## Protocol
 
-Node RPC (`internal/protocol`): `list` `status` `history` `watch` `reply` `send` `health` `info` `engines` `models` `commands` `followups` `choice`.
+Node RPC (`internal/protocol`): `list` `status` `history` `watch` `reply` `send` `health` `info` `engines` `models` `commands` `followups` `choice` `git` `git_diff`.
 
 Common streaming `Event.Type` values: `user` `assistant` `delta` `thinking` `tool_call` `tool_result` `ask` `title`. `ask` `Text` is JSON (`driver.AskPrompt`).
 

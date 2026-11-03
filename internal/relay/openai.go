@@ -129,13 +129,9 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 }
 
 func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
-	var chunk openai.Chunk
-	if err := json.NewDecoder(r.Body).Decode(&chunk); err != nil {
-		i18n.Error(w, r, http.StatusBadRequest, "http.badJSON")
-		return
-	}
-	s.ingest.publish(chunk)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	// Session plaintext must not land on the relay; Web E2E uses Envelope streams instead.
+	io.Copy(io.Discard, r.Body)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleOpenMesh answers the desktop settings probe; relay itself is not a local node.
@@ -222,22 +218,9 @@ func (s *Server) handleOpenWS(w http.ResponseWriter, r *http.Request) {
 					_ = write(part)
 				}
 			case "watch":
+				// Do not pull plaintext history onto the relay; browser E2E loads history via Envelope RPC.
 				finger := s.sessionFinger(msg.Node, msg.Engine, msg.Session)
 				s.catalogs.setWatch(cid, msg.Node, msg.Engine, msg.Session, finger)
-				go func(node, engine, session string) {
-					ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-					defer cancel()
-					evs, err := s.loadHistory(ctx, node, engine, session)
-					if err != nil {
-						s.Log.Debug("history", "node", node, "session", session, "err", err)
-						return
-					}
-					added, reset := s.catalogs.commitEvents(cid, evs)
-					if !reset && len(added) == 0 {
-						return
-					}
-					_ = write(BusMsg{Type: "conversation", NodeID: node, Engine: engine, Session: session, Events: added, Reset: reset})
-				}(msg.Node, msg.Engine, msg.Session)
 			}
 		}
 	}()

@@ -141,11 +141,14 @@ The sidebar lists nodes, engines, and sessions. A new chat is a `send`; an exist
 
 ### Privacy boundary
 
-The relay routes `From` / `To` only. Application payloads are sealed with Ed25519 + X25519. Direct mode (`--direct`) skips the relay and still uses the same encryption. Keys live in `~/.agent-mesh/` at mode 0600.
+- **ctl / Envelope RPC**: the relay routes `From` / `To` only and cannot decrypt `Ciphertext`. Application crypto is Ed25519 + X25519. `--direct` skips the relay with the same encryption.
+- **Web UI via relay**: the browser holds a passphrase-wrapped `client.key` and uses the same Envelope path; the relay does not aggregate plaintext history/ingest, and directory snapshots omit session paths and bodies.
+- **Local node / desktop UI**: still uses the plaintext OpenAI-compatible surface (localhost trust).
+- Keys live in `~/.agent-mesh/` (mode 0600); the browser vault is in IndexedDB.
 
 ### OpenAI-compatible API
 
-Both node and relay expose `/v1/models` and `/v1/chat/completions`, plus `/v1/openai/*` for sessions, history, stream, directories, commands, followups, choice, and git.
+Node and relay still expose `/v1/models` and `/v1/chat/completions`, plus `/v1/openai/*` for external tools and the local UI. The relay-hosted Web chat uses Envelope RPC instead of plaintext history/ingest.
 
 ### Desktop and headless
 

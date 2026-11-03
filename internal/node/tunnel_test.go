@@ -1,13 +1,10 @@
 package node
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -81,7 +78,7 @@ func TestRelayModelsViaTunnel(t *testing.T) {
 	}
 }
 
-func TestIngestViaTunnel(t *testing.T) {
+func TestIngestViaTunnelDisabled(t *testing.T) {
 	ident, err := e2e.Generate()
 	if err != nil {
 		t.Fatal(err)
@@ -90,64 +87,10 @@ func TestIngestViaTunnel(t *testing.T) {
 	set.Register(stubDriver{})
 	nodeSrv := New(ident, "unused", "box", set, nil)
 
-	relaySrv := relay.New("unused", relay.NewMemory(), nil)
-	relayTS := httptest.NewServer(relaySrv.Handler())
-	defer relayTS.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = nodeSrv.serveTunnel(ctx, relayTS.URL, "http://192.0.2.1:1") }()
-
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(relayTS.URL + "/v1/nodes")
-		if err != nil {
-			t.Fatal(err)
-		}
-		var rows []struct {
-			ID string `json:"id"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&rows)
-		resp.Body.Close()
-		if len(rows) == 1 {
-			break
-		}
-		time.Sleep(40 * time.Millisecond)
-	}
-
-	got := make(chan string, 1)
-	go func() {
-		resp, err := http.Get(relayTS.URL + "/v1/openai/events")
-		if err != nil {
-			return
-		}
-		defer resp.Body.Close()
-		r := bufio.NewReader(resp.Body)
-		for {
-			line, err := r.ReadString('\n')
-			if err != nil {
-				if err != io.EOF {
-					return
-				}
-				return
-			}
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "data:") {
-				got <- strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-				return
-			}
-		}
-	}()
-	time.Sleep(80 * time.Millisecond)
-	nodeSrv.Hub.Broadcast(openai.FromEvent("id1", "stub", ident.ID, "box", protocol.Event{
+	chunk := openai.FromEvent("id1", "stub", ident.ID, "box", protocol.Event{
 		Type: "assistant", Text: "via-tunnel", Session: "s1", Engine: "stub",
-	}))
-	select {
-	case raw := <-got:
-		if !strings.Contains(raw, "s1") {
-			t.Fatalf("%s", raw)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("tunnel ingest did not reach the relay")
+	})
+	if nodeSrv.pushIngestChunk(chunk) {
+		t.Fatal("pushIngestChunk must not send plaintext to the relay")
 	}
 }

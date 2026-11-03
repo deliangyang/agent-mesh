@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, before, describe, it } from "node:test";
 import {
   SETTINGS_NAV,
+  adjacentSettingsSection,
   loadLastSettingsSection,
   resolveSettingsSection,
   saveLastSettingsSection,
@@ -57,5 +58,11 @@ describe("settingsNav", () => {
     assert.equal(loadLastSettingsSection(), "appearance");
     saveLastSettingsSection("health");
     assert.equal(loadLastSettingsSection(), "health");
+  });
+
+  it("moves to the adjacent settings module and wraps", () => {
+    assert.equal(adjacentSettingsSection("appearance", 1), "connection");
+    assert.equal(adjacentSettingsSection("account", 1), "appearance");
+    assert.equal(adjacentSettingsSection("appearance", -1), "account");
   });
 });

@@ -13,6 +13,7 @@ import {
 } from "../locale";
 import {
   SETTINGS_NAV,
+  adjacentSettingsSection,
   loadLastSettingsSection,
   resolveSettingsSection,
   saveLastSettingsSection,
@@ -64,11 +65,22 @@ function onHealthPick(p: { nodeId: string; engine?: string; focusMissing?: boole
 }
 
 function onKey(ev: KeyboardEvent): void {
-  if (ev.key !== "Escape") return;
-  const t = ev.target as HTMLElement | null;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-  ev.preventDefault();
-  goHome();
+  const el = ev.target as HTMLElement | null;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    goHome();
+    return;
+  }
+  if (ev.key === "ArrowDown" || ev.key === "j") {
+    ev.preventDefault();
+    openSection(adjacentSettingsSection(section.value, 1));
+    return;
+  }
+  if (ev.key === "ArrowUp" || ev.key === "k") {
+    ev.preventDefault();
+    openSection(adjacentSettingsSection(section.value, -1));
+  }
 }
 
 watch(

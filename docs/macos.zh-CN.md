@@ -87,4 +87,6 @@ mesh-ctl list --direct http://127.0.0.1:7700 --engine claude --all
 4. launchd plist 保持用户级（`~/Library/LaunchAgents`），节点无需 root。
 5. 在 Release 页为每个 tarball 附上 `SHA256`。
 
+Linux 桌面若有 StatusNotifier（GNOME 扩展、KDE 等），且设置了 `DISPLAY` / `WAYLAND_DISPLAY`，`mesh-node` 会通过纯 Go D-Bus 注册托盘图标（打开 / 退出）；没有 watcher 时仍会像 macOS 一样先打开一次界面。
+
 Windows 托盘 zip 见 [Windows](windows.zh-CN.md)。

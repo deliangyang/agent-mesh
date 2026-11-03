@@ -315,6 +315,19 @@ mesh_find_file() {
   return 1
 }
 
+mesh_find_dir() {
+  dir="$1"
+  shift
+  for name in "$@"; do
+    found="$(find "$dir" -type d -name "$name" 2>/dev/null | head -n 1 || true)"
+    if [ -n "$found" ]; then
+      echo "$found"
+      return 0
+    fi
+  done
+  return 1
+}
+
 mesh_random() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 12
@@ -495,6 +508,18 @@ mesh_desktop_dir() {
   fi
 }
 
+mesh_hicolor_dir() {
+  if [ -n "${AGENT_MESH_ICONS_DIR:-}" ]; then
+    echo "$AGENT_MESH_ICONS_DIR"
+    return
+  fi
+  if mesh_is_root; then
+    echo "/usr/share/icons/hicolor"
+  else
+    echo "${HOME}/.local/share/icons/hicolor"
+  fi
+}
+
 mesh_app_dir() {
   if [ -n "${AGENT_MESH_APP_DIR:-}" ]; then
     echo "$AGENT_MESH_APP_DIR"
@@ -505,6 +530,26 @@ mesh_app_dir() {
   else
     echo "${HOME}/Applications"
   fi
+}
+
+# Resolve shipped multi-size icons (release bundle, checkout, or LIB_DIR copy).
+mesh_icon_src_dir() {
+  if [ -n "${AGENT_MESH_ICON_SRC:-}" ] && [ -d "${AGENT_MESH_ICON_SRC}/16x16/apps" ]; then
+    echo "$AGENT_MESH_ICON_SRC"
+    return 0
+  fi
+  if [ -d "${LIB_DIR}/icons/16x16/apps" ]; then
+    echo "${LIB_DIR}/icons"
+    return 0
+  fi
+  if [ -n "${AGENT_MESH_SCRIPT_DIR:-}" ]; then
+    cand="${AGENT_MESH_SCRIPT_DIR}/../deploy/desktop/icons"
+    if [ -d "${cand}/16x16/apps" ]; then
+      CDPATH= cd -- "$cand" && pwd
+      return 0
+    fi
+  fi
+  return 1
 }
 
 mesh_write_systemd_unit() {
@@ -585,13 +630,11 @@ EOF
   echo "$domain" >"${STATE_DIR}/.${role}.launchd-domain" 2>/dev/null || true
 }
 
-mesh_write_linux_desktop() {
-  dir="$(mesh_desktop_dir)"
-  mkdir -p "$dir"
-  icon="${LIB_DIR}/agent-mesh.svg"
-  mkdir -p "$LIB_DIR"
-  cat >"$icon" <<'EOF'
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+mesh_write_svg_icon() {
+  dest="$1"
+  mkdir -p "$(dirname "$dest")"
+  cat >"$dest" <<'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512">
   <rect width="32" height="32" rx="7" fill="#1E2B27"/>
   <path d="M16 9 L9.2 21.2 H22.8 Z" fill="none" stroke="#7FBEAD" stroke-width="1.6" stroke-linejoin="round"/>
   <circle cx="16" cy="9" r="2.4" fill="#E3EBE6"/>
@@ -599,6 +642,170 @@ mesh_write_linux_desktop() {
   <circle cx="22.8" cy="21.2" r="2.4" fill="#7FBEAD"/>
 </svg>
 EOF
+}
+
+# Write Freedesktop hicolor PNG sizes when no prebuilt icons are available.
+mesh_generate_png_icons() {
+  dest_root="$1"
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "$dest_root" <<'PY'
+import os, struct, sys, zlib
+
+root = sys.argv[1]
+sizes = (16, 24, 32, 48, 64, 128, 256, 512)
+ink = (0x1E, 0x2B, 0x27, 0xFF)
+signal = (0x7F, 0xBE, 0xAD, 0xFF)
+paper = (0xE3, 0xEB, 0xE6, 0xFF)
+
+
+def in_round_rect(x, y, w, h, r):
+    if r < 1:
+        return True
+    if r <= x < w - r:
+        return 0 <= y < h
+    if r <= y < h - r:
+        return 0 <= x < w
+    cx = cy = r
+    if x >= w - r and y < r:
+        cx, cy = w - r, r
+    elif x < r and y >= h - r:
+        cx, cy = r, h - r
+    elif x >= w - r and y >= h - r:
+        cx, cy = w - r, h - r
+    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+
+def draw(size):
+    scale = 4 if size < 128 else 1
+    big = size * scale
+    px = bytearray(big * big * 4)
+    rr = big * 7 / 32
+
+    def setp(x, y, c):
+        if 0 <= x < big and 0 <= y < big:
+            i = (y * big + x) * 4
+            px[i:i + 4] = bytes(c)
+
+    for y in range(big):
+        for x in range(big):
+            if in_round_rect(x + 0.5, y + 0.5, big, big, rr):
+                setp(x, y, ink)
+    s = float(big)
+    pts = ((s * 16 / 32, s * 9 / 32), (s * 9.2 / 32, s * 21.2 / 32), (s * 22.8 / 32, s * 21.2 / 32))
+    stroke = max(1.0, s * 1.6 / 32)
+    cr = s * 2.4 / 32
+
+    def stroke_line(a, b):
+        x0, y0 = a
+        x1, y1 = b
+        n = int(abs(x1 - x0) + abs(y1 - y0)) * 2 + 1
+        hw = stroke / 2
+        for i in range(n + 1):
+            t = i / n
+            cx = x0 + (x1 - x0) * t
+            cy = y0 + (y1 - y0) * t
+            for y in range(int(cy - hw - 1), int(cy + hw + 2)):
+                for x in range(int(cx - hw - 1), int(cx + hw + 2)):
+                    if (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= hw * hw:
+                        setp(x, y, signal)
+
+    stroke_line(pts[0], pts[1])
+    stroke_line(pts[1], pts[2])
+    stroke_line(pts[2], pts[0])
+    for i, (cx, cy) in enumerate(pts):
+        col = paper if i == 0 else signal
+        for y in range(int(cy - cr - 1), int(cy + cr + 2)):
+            for x in range(int(cx - cr - 1), int(cx + cr + 2)):
+                if (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= cr * cr:
+                    setp(x, y, col)
+    if scale == 1:
+        return bytes(px)
+    out = bytearray(size * size * 4)
+    area = scale * scale
+    for y in range(size):
+        for x in range(size):
+            r = g = b = a = 0
+            for dy in range(scale):
+                for dx in range(scale):
+                    i = ((y * scale + dy) * big + (x * scale + dx)) * 4
+                    r += px[i]
+                    g += px[i + 1]
+                    b += px[i + 2]
+                    a += px[i + 3]
+            j = (y * size + x) * 4
+            out[j:j + 4] = bytes((r // area, g // area, b // area, a // area))
+    return bytes(out)
+
+
+def write_png(path, size, raw):
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    rows = b"".join(b"\x00" + raw[i * size * 4:(i + 1) * size * 4] for i in range(size))
+    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
+    data = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b"")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
+
+
+for size in sizes:
+    write_png(os.path.join(root, f"{size}x{size}", "apps", "agent-mesh.png"), size, draw(size))
+print(root)
+PY
+}
+
+mesh_install_desktop_icons() {
+  mkdir -p "$LIB_DIR"
+  hicolor="$(mesh_hicolor_dir)"
+  mkdir -p "$hicolor"
+  src=""
+  if src="$(mesh_icon_src_dir)"; then
+    :
+  else
+    src="${LIB_DIR}/icons"
+    mkdir -p "$src"
+    mesh_generate_png_icons "$src" || true
+  fi
+  mesh_write_svg_icon "${LIB_DIR}/agent-mesh.svg"
+  if [ -f "${src}/scalable/apps/agent-mesh.svg" ]; then
+    cp "${src}/scalable/apps/agent-mesh.svg" "${LIB_DIR}/agent-mesh.svg"
+  fi
+  for size in 16 24 32 48 64 128 256 512; do
+    png="${src}/${size}x${size}/apps/agent-mesh.png"
+    if [ -f "$png" ]; then
+      mkdir -p "${LIB_DIR}/icons/${size}x${size}/apps"
+      cp "$png" "${LIB_DIR}/icons/${size}x${size}/apps/agent-mesh.png"
+      # Some machines have root-owned size dirs under ~/.local/share/icons; skip those.
+      if mkdir -p "${hicolor}/${size}x${size}/apps" 2>/dev/null; then
+        cp "$png" "${hicolor}/${size}x${size}/apps/agent-mesh.png" 2>/dev/null || true
+      fi
+    fi
+  done
+  mkdir -p "${LIB_DIR}/icons/scalable/apps"
+  cp "${LIB_DIR}/agent-mesh.svg" "${LIB_DIR}/icons/scalable/apps/agent-mesh.svg"
+  if mkdir -p "${hicolor}/scalable/apps" 2>/dev/null; then
+    cp "${LIB_DIR}/agent-mesh.svg" "${hicolor}/scalable/apps/agent-mesh.svg" 2>/dev/null || true
+  fi
+  # Prefer a concrete high-res PNG so launchers that ignore icon themes still look sharp.
+  if [ -f "${LIB_DIR}/icons/256x256/apps/agent-mesh.png" ]; then
+    cp "${LIB_DIR}/icons/256x256/apps/agent-mesh.png" "${LIB_DIR}/agent-mesh.png"
+  elif [ -f "${LIB_DIR}/icons/512x512/apps/agent-mesh.png" ]; then
+    cp "${LIB_DIR}/icons/512x512/apps/agent-mesh.png" "${LIB_DIR}/agent-mesh.png"
+  fi
+  if [ -z "${AGENT_MESH_ICONS_DIR:-}" ] && command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "$hicolor" 2>/dev/null || true
+  fi
+}
+
+mesh_write_linux_desktop() {
+  dir="$(mesh_desktop_dir)"
+  mkdir -p "$dir" "$LIB_DIR"
+  mesh_install_desktop_icons
+  icon="${LIB_DIR}/agent-mesh.png"
+  if [ ! -f "$icon" ]; then
+    icon="${LIB_DIR}/agent-mesh.svg"
+  fi
   cat >"${dir}/agent-mesh.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -789,8 +996,15 @@ mesh_uninstall() {
   fi
   if [ "$role" = node ]; then
     rm -f "${BIN_DIR}/mesh-node" "${BIN_DIR}/agent-mesh" \
-      "${LIB_DIR}/run-node" "${LIB_DIR}/run-desktop" "${LIB_DIR}/agent-mesh.svg"
+      "${LIB_DIR}/run-node" "${LIB_DIR}/run-desktop" \
+      "${LIB_DIR}/agent-mesh.svg" "${LIB_DIR}/agent-mesh.png"
+    rm -rf "${LIB_DIR}/icons"
     rm -f "$(mesh_desktop_dir)/agent-mesh.desktop"
+    hicolor="$(mesh_hicolor_dir)"
+    for size in 16 24 32 48 64 128 256 512; do
+      rm -f "${hicolor}/${size}x${size}/apps/agent-mesh.png"
+    done
+    rm -f "${hicolor}/scalable/apps/agent-mesh.svg"
     rm -rf "$(mesh_app_dir)/Agent Mesh.app"
   fi
   echo "removed ${role} binaries and services"
@@ -830,6 +1044,13 @@ mesh_install_bins_from() {
     if [ "$WITH_DESKTOP" -eq 1 ] && [ -n "$gui" ]; then
       install -m 0755 "$gui" "${BIN_DIR}/agent-mesh"
       echo "installed ${BIN_DIR}/agent-mesh"
+    fi
+    # Multi-size launcher icons shipped next to binaries in the release archive.
+    icons="$(mesh_find_dir "$src" icons || true)"
+    if [ -n "$icons" ] && [ -d "${icons}/16x16/apps" ]; then
+      mkdir -p "$LIB_DIR" "${LIB_DIR}/icons"
+      cp -a "$icons"/. "${LIB_DIR}/icons/"
+      echo "installed ${LIB_DIR}/icons"
     fi
   fi
 }

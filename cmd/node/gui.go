@@ -35,3 +35,16 @@ func waitHealth(uiURL string) {
 		time.Sleep(80 * time.Millisecond)
 	}
 }
+
+// existingNodeHealthy reports whether a node is already serving UI at uiURL.
+func existingNodeHealthy(uiURL string) bool {
+	cli := &http.Client{Timeout: 300 * time.Millisecond}
+	url := strings.TrimRight(uiURL, "/") + "/healthz"
+	resp, err := cli.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode == http.StatusOK
+}

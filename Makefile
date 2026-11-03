@@ -27,7 +27,7 @@ ctl:
 # Node is a GUI/tray app (-H windowsgui): double-click keeps it running.
 WINNODEFLAGS ?= -trimpath -ldflags "-s -w -H windowsgui"
 winres:
-	cd scripts/winres && go run .
+	go run ./scripts/winres
 node-windows:
 	mkdir -p bin
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(WINNODEFLAGS) -o bin/mesh-node-windows-amd64.exe ./cmd/node

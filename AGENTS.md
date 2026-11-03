@@ -50,7 +50,7 @@ make desktop       # local node + Chrome/Edge app window (CGO-free)
 make desktop-windows  # Windows: Wails/WebView2 shell over the same Vue UI (needs CGO)
 make dist          # cross-compile release archives into dist/ (Windows zips included)
 make node-windows  # Windows tray node (icon + GUI subsystem) + ctl
-make winres        # regenerate cmd/node Windows icon/.syso
+make winres        # regenerate cmd/node Windows icon/.syso + deploy/desktop/icons PNGs
 make setup         # one-shot toolchain, build, and ~/.agent-mesh config
 make supervisor    # restart the local node with deploy/supervisor
 ```

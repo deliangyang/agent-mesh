@@ -66,6 +66,8 @@ run_install() {
     AGENT_MESH_UNIT_DIR="${TMP}/systemd" \
     AGENT_MESH_LAUNCHD_DIR="${TMP}/launchd" \
     AGENT_MESH_DESKTOP_DIR="${TMP}/applications" \
+    AGENT_MESH_ICONS_DIR="${TMP}/icons/hicolor" \
+    AGENT_MESH_ICON_SRC="${ROOT}/deploy/desktop/icons" \
     AGENT_MESH_APP_DIR="${TMP}/Applications" \
     sh "${ROOT}/scripts/install-${role}.sh" --no-start "$@"
 }
@@ -100,6 +102,10 @@ assert_grep 'MESH_RELAY=https://mesh.example.com' "${STATE_NODE}/node.env"
 assert_file "${TMP}/systemd/agent-mesh-node.service"
 assert_file "${TMP}/applications/agent-mesh.desktop"
 assert_grep 'run-desktop' "${TMP}/applications/agent-mesh.desktop"
+assert_grep 'agent-mesh.png' "${TMP}/applications/agent-mesh.desktop"
+assert_file "${PREFIX_NODE}/lib/agent-mesh/agent-mesh.png"
+assert_file "${PREFIX_NODE}/lib/agent-mesh/icons/256x256/apps/agent-mesh.png"
+assert_file "${TMP}/icons/hicolor/256x256/apps/agent-mesh.png"
 gui_out="$("${PREFIX_NODE}/lib/agent-mesh/run-desktop")"
 [ "$gui_out" = "gui" ] || fail "run-desktop should exec the window binary, got: ${gui_out}"
 

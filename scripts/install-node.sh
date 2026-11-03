@@ -14,6 +14,7 @@ load_install_lib() {
       if [ -f "${_dir}/install-lib.sh" ]; then
         # shellcheck disable=SC1091
         . "${_dir}/install-lib.sh"
+        AGENT_MESH_SCRIPT_DIR="$_dir"
         return
       fi
       ;;

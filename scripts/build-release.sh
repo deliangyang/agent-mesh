@@ -62,12 +62,16 @@ build_one() {
   if [ "$goos" = "$host_os" ] && [ "$goarch" = "$host_arch" ] && [ -f "$ROOT/bin/agent-mesh${ext}" ]; then
     cp "$ROOT/bin/agent-mesh${ext}" "${work}/agent-mesh${ext}"
   fi
+  if [ -d "$ROOT/deploy/desktop/icons/16x16/apps" ]; then
+    cp -a "$ROOT/deploy/desktop/icons" "$work/icons"
+  fi
 
   relay_files="mesh-relay${ext} README.md"
   node_files="mesh-node${ext} mesh-ctl${ext} README.md"
   all_files="mesh-node${ext} mesh-relay${ext} mesh-ctl${ext} README.md"
   [ -f "$work/LICENSE" ] && relay_files="${relay_files} LICENSE" && node_files="${node_files} LICENSE" && all_files="${all_files} LICENSE"
   [ -f "$work/agent-mesh${ext}" ] && node_files="${node_files} agent-mesh${ext}" && all_files="${all_files} agent-mesh${ext}"
+  [ -d "$work/icons" ] && node_files="${node_files} icons" && all_files="${all_files} icons"
 
   if [ "$goos" = windows ]; then
     pack_files "${OUT}/agent-mesh-relay_${VERSION}_${plat}.zip" "$work" $relay_files

@@ -1,0 +1,11 @@
+package meshicon
+
+// SVG is the scalable Agent Mesh mark (viewBox 0 0 32 32).
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512">
+  <rect width="32" height="32" rx="7" fill="#1E2B27"/>
+  <path d="M16 9 L9.2 21.2 H22.8 Z" fill="none" stroke="#7FBEAD" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="16" cy="9" r="2.4" fill="#E3EBE6"/>
+  <circle cx="9.2" cy="21.2" r="2.4" fill="#7FBEAD"/>
+  <circle cx="22.8" cy="21.2" r="2.4" fill="#7FBEAD"/>
+</svg>
+`

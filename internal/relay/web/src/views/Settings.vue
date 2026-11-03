@@ -11,6 +11,7 @@ import {
   localePref,
   t,
 } from "../locale";
+import { buildPlatformGroups } from "../platformGroups";
 import {
   SETTINGS_NAV,
   adjacentSettingsSection,
@@ -28,6 +29,11 @@ const navEl = ref<HTMLElement | null>(null);
 
 const section = computed(() => resolveSettingsSection(String(route.params.section || "")));
 const diag = computed(() => buildConnectionDiag(meshLink, catalog));
+const platformGroups = computed(() => buildPlatformGroups(catalog.nodes, catalog.engines));
+const sectionTitle = computed(() => {
+  const item = SETTINGS_NAV.find((n) => n.id === section.value);
+  return item ? t(item.labelKey) : t("settings.pageTitle");
+});
 
 function scrollActiveNav(): void {
   void nextTick(() => {
@@ -130,6 +136,7 @@ onBeforeUnmount(() => {
         <span>{{ t("settings.backHome") }}</span>
       </button>
       <h1 class="mesh-settings-page-title">{{ t("settings.pageTitle") }}</h1>
+      <p class="mesh-settings-page-section" aria-live="polite">{{ sectionTitle }}</p>
     </header>
 
     <div class="mesh-settings-layout">
@@ -248,6 +255,48 @@ onBeforeUnmount(() => {
             </button>
             <button type="button" class="mesh-settings-action" @click="reloadPage">
               {{ t("link.reload") }}
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="section === 'platforms'" class="mesh-settings-panel" :aria-label="t('settings.navPlatforms')">
+          <header class="mesh-settings-panel-head">
+            <h2>{{ t("settings.navPlatforms") }}</h2>
+            <p class="mesh-settings-sub">{{ t("settings.navPlatformsHint") }}</p>
+          </header>
+          <div v-if="!platformGroups.length" class="mesh-settings-status">{{ t("settings.platEmpty") }}</div>
+          <div v-else class="mesh-plat-list" role="list">
+            <article v-for="g in platformGroups" :key="g.osKey" class="mesh-plat-group" role="listitem">
+              <header class="mesh-plat-head">
+                <h3 class="mesh-plat-os">{{ g.label }}</h3>
+                <p class="mesh-plat-summary">
+                  <span>{{ t("settings.platNodes", { count: g.nodeCount }) }}</span>
+                  <span>{{ t("settings.platOk", { count: g.ok }) }}</span>
+                  <span v-if="g.miss" class="mesh-plat-miss">{{ t("settings.platMiss", { count: g.miss }) }}</span>
+                </p>
+              </header>
+              <div class="mesh-plat-nodes">
+                <button
+                  v-for="n in g.nodes"
+                  :key="n.id"
+                  type="button"
+                  class="mesh-plat-node"
+                  :title="n.miss ? t('settings.platOpenInstall') : t('settings.platOpenNode')"
+                  @click="onHealthPick({ nodeId: n.id, focusMissing: n.miss > 0 && n.ok === 0 })"
+                >
+                  <span class="mesh-plat-node-name">{{ n.name }}</span>
+                  <span class="mesh-plat-node-meta">
+                    <span v-if="n.platform">{{ n.platform }}</span>
+                    <span>{{ t("settings.platOk", { count: n.ok }) }}</span>
+                    <span v-if="n.miss" class="mesh-plat-miss">{{ t("settings.platMiss", { count: n.miss }) }}</span>
+                  </span>
+                </button>
+              </div>
+            </article>
+          </div>
+          <div class="mesh-settings-actions-stack">
+            <button type="button" class="mesh-settings-action" @click="openSection('health')">
+              {{ t("settings.platOpenHealth") }}
             </button>
           </div>
         </section>

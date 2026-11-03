@@ -2690,6 +2690,18 @@ html.dark #app {
   letter-spacing: -0.03em;
 }
 
+.mesh-settings-page-section {
+  margin: 0 0 0 auto;
+  padding-left: 12px;
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
 .mesh-settings-layout {
   flex: 1;
   min-height: 0;
@@ -2726,6 +2738,11 @@ html.dark #app {
 
 .mesh-settings-nav-item:hover {
   background: color-mix(in srgb, var(--paper) 55%, transparent);
+}
+
+.mesh-settings-nav-item:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
 }
 
 .mesh-settings-nav-item.on {
@@ -2816,6 +2833,90 @@ html.dark #app {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.45;
+  color: var(--mute);
+}
+
+.mesh-plat-list {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 16px;
+}
+
+.mesh-plat-group {
+  margin: 0;
+  padding: 0 0 4px;
+  box-shadow: inset 0 -1px 0 var(--rule);
+}
+
+.mesh-plat-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 0 0 8px;
+}
+
+.mesh-plat-os {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.mesh-plat-summary {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.mesh-plat-miss {
+  color: var(--destructive);
+}
+
+.mesh-plat-nodes {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+
+.mesh-plat-node {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  color: var(--ink);
+  background: var(--lamp);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mesh-plat-node:hover {
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.mesh-plat-node:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+
+.mesh-plat-node-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mesh-plat-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
   color: var(--mute);
 }
 

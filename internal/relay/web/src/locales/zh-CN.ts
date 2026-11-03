@@ -83,6 +83,7 @@ export const zhCN: Record<string, string> = {
   "settings.connNodeList": "节点列表",
   "settings.connNodeEngines": "{count} 个引擎",
   "settings.connOpenNode": "在聊天中打开此节点",
+  "settings.connOpenInstall": "打开此节点的安装提示",
   "settings.navRelay": "中继",
   "settings.navRelayHint": "将本机连接到中继",
   "settings.navHealth": "引擎健康",

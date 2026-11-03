@@ -232,3 +232,22 @@ func TestSPAPublicPaths(t *testing.T) {
 		t.Fatal("chat page must not be anonymous")
 	}
 }
+
+func TestWebPWAStaticFiles(t *testing.T) {
+	srv := New("unused", NewMemory(), nil)
+	srv.Password = "secret"
+	srv.Web = true
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	for _, path := range []string{"/manifest.webmanifest", "/sw.js"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s want 200 got %d", path, resp.StatusCode)
+		}
+	}
+}

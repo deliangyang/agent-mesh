@@ -158,4 +158,6 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.Handle("GET /assets/", fileServer)
 	mux.Handle("GET /favicon.svg", fileServer)
+	mux.Handle("GET /manifest.webmanifest", fileServer)
+	mux.Handle("GET /sw.js", fileServer)
 }

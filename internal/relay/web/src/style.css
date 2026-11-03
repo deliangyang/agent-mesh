@@ -599,7 +599,7 @@ html.dark #app {
 
 .mesh-settings-link-dot.connecting {
   background: color-mix(in srgb, var(--signal) 55%, var(--mute));
-  animation: mesh-lamp 1.1s ease-in-out infinite;
+  animation: mesh-breathe 1.7s ease-in-out infinite;
 }
 
 .mesh-settings-link-dot.down {

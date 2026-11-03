@@ -58,6 +58,14 @@ async function openCatalogSock(nodeID: string): Promise<void> {
 export function startE2ECatalogLoop(): void {
   if (!isE2EMode()) return;
   window.clearInterval(reconcileTimer);
+  const c = e2eClient();
+  c.onSessionDrop = (nodeID) => {
+    const sock = catalogSocks.get(nodeID);
+    if (sock) {
+      sock.close();
+      catalogSocks.delete(nodeID);
+    }
+  };
   void refreshE2ECatalog();
   // Reconcile which nodes to subscribe; catalog rows themselves are pushed over WS.
   reconcileTimer = window.setInterval(() => {

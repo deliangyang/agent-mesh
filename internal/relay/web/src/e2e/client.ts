@@ -54,6 +54,7 @@ type NodeSession = {
   peer: PublicIdentity;
   sess: Session;
   base: string;
+  gen: number;
 };
 
 export class E2EClient {
@@ -62,7 +63,12 @@ export class E2EClient {
   private byNode = new Map<string, NodeSession>();
   /** In-flight handshakes coalesced per node so parallel catalog/watch calls share one session. */
   private handshakes = new Map<string, Promise<NodeSession>>();
+  /** Serialize sealed outbound work per node so seal/handshake cannot interleave badly. */
+  private tails = new Map<string, Promise<unknown>>();
   private reqSeq = 0;
+  private genSeq = 0;
+  /** Optional hook: sync.ts closes/reopens catalog sockets when a session is dropped. */
+  onSessionDrop: ((nodeID: string) => void) | null = null;
 
   constructor(ident: Identity, relay = "") {
     this.ident = ident;
@@ -74,10 +80,34 @@ export class E2EClient {
     return `w${this.reqSeq}-${Date.now()}`;
   }
 
+  private async withNode<T>(nodeID: string, fn: () => Promise<T>): Promise<T> {
+    const key = nodeID || "*";
+    const prev = this.tails.get(key) || Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    this.tails.set(
+      key,
+      prev.then(() => gate).catch(() => gate),
+    );
+    await prev.catch(() => {});
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
   private dropSession(nodeID: string): void {
     const cur = this.byNode.get(nodeID);
     if (cur) this.byNode.delete(cur.peer.id);
     this.byNode.delete(nodeID);
+    try {
+      this.onSessionDrop?.(cur?.peer.id || nodeID);
+    } catch {
+      /* ignore */
+    }
   }
 
   async nodes(): Promise<NodeRow[]> {
@@ -118,79 +148,74 @@ export class E2EClient {
     const { env, state } = await beginHandshake(this.ident, peer);
     const ack = await this.postEnvelope(base + "/handshake", env);
     const sess = await finishHandshake(this.ident, peer, state, ack);
-    const held: NodeSession = { peer, sess, base };
+    this.genSeq += 1;
+    const held: NodeSession = { peer, sess, base, gen: this.genSeq };
     this.byNode.set(peer.id, held);
     return held;
   }
 
   async call(nodeID: string, method: string, params?: unknown): Promise<RPCResponse> {
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const ns = await this.ensureSession(nodeID);
-      try {
-        const req: RPCRequest = { id: this.nextID(), method, params };
-        const env = await seal(ns.sess, utf8(JSON.stringify(req)), "rpc");
-        const ack = await this.postEnvelope(ns.base + "/rpc", env);
-        const plain = await open(ns.sess, ack);
-        const resp = JSON.parse(fromUtf8(plain)) as RPCResponse;
-        if (!resp.ok && resp.error) throw new Error(resp.error);
-        return resp;
-      } catch (err) {
-        lastErr = err;
-        const msg = err instanceof Error ? err.message : String(err);
-        // Stale session after a racing handshake (node keeps only the latest per client).
-        if (attempt === 0 && /\bhttp 401\b/.test(msg)) {
-          this.dropSession(ns.peer.id);
-          continue;
+    return this.withNode(nodeID, async () => {
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const ns = await this.ensureSession(nodeID);
+        try {
+          const req: RPCRequest = { id: this.nextID(), method, params };
+          const env = await seal(ns.sess, utf8(JSON.stringify(req)), "rpc");
+          const ack = await this.postEnvelope(ns.base + "/rpc", env);
+          const plain = await open(ns.sess, ack);
+          const resp = JSON.parse(fromUtf8(plain)) as RPCResponse;
+          if (!resp.ok && resp.error) throw new Error(resp.error);
+          return resp;
+        } catch (err) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          if (attempt === 0 && /\bhttp 401\b/.test(msg)) {
+            this.dropSession(ns.peer.id);
+            continue;
+          }
+          throw err;
         }
-        throw err;
       }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+    });
   }
 
   async *stream(nodeID: string, method: string, params?: unknown, signal?: AbortSignal): AsyncGenerator<MeshEvent> {
-    const ns = await this.ensureSession(nodeID);
-    const req: RPCRequest = { id: this.nextID(), method, stream: true, params };
-    const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
-    const raw = marshalEnvelope(env);
-    const resp = await fetch(ns.base + "/stream", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": CONTENT_TYPE_ENVELOPE,
-        Accept: CONTENT_TYPE_ENVELOPE_STREAM,
-      },
-      body: raw,
-      signal,
-    });
-    if (!resp.ok) {
-      const t = await resp.text();
-      // One retry after clearing a stale session (same race as call()).
-      if (resp.status === 401) {
-        this.dropSession(ns.peer.id);
-        const ns2 = await this.ensureSession(nodeID);
-        const env2 = await seal(ns2.sess, utf8(JSON.stringify({ ...req, id: this.nextID() })), "stream");
-        const raw2 = marshalEnvelope(env2);
-        const resp2 = await fetch(ns2.base + "/stream", {
+    const started = await this.withNode(nodeID, async () => {
+      const openOnce = async (): Promise<{ ns: NodeSession; resp: Response }> => {
+        const ns = await this.ensureSession(nodeID);
+        const req: RPCRequest = { id: this.nextID(), method, stream: true, params };
+        const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
+        const raw = marshalEnvelope(env);
+        const resp = await fetch(ns.base + "/stream", {
           method: "POST",
           credentials: "same-origin",
           headers: {
             "Content-Type": CONTENT_TYPE_ENVELOPE,
             Accept: CONTENT_TYPE_ENVELOPE_STREAM,
           },
-          body: raw2,
+          body: raw,
           signal,
         });
-        if (!resp2.ok) {
-          throw new Error(`stream http ${resp2.status}: ${await resp2.text()}`);
+        return { ns, resp };
+      };
+      let { ns, resp } = await openOnce();
+      if (!resp.ok) {
+        const t = await resp.text();
+        if (resp.status === 401) {
+          this.dropSession(ns.peer.id);
+          ({ ns, resp } = await openOnce());
+          if (!resp.ok) {
+            throw new Error(`stream http ${resp.status}: ${await resp.text()}`);
+          }
+          return { ns, resp };
         }
-        yield* this.readStream(ns2, resp2);
-        return;
+        throw new Error(`stream http ${resp.status}: ${t}`);
       }
-      throw new Error(`stream http ${resp.status}: ${t}`);
-    }
-    yield* this.readStream(ns, resp);
+      return { ns, resp };
+    });
+    yield* this.readStream(started.ns, started.resp);
   }
 
   private async *readStream(ns: NodeSession, resp: Response): AsyncGenerator<MeshEvent> {
@@ -233,66 +258,103 @@ export class E2EClient {
     nodeID: string,
     onPart: (msg: Record<string, unknown>) => void,
   ): Promise<{ close: () => void; peerID: string }> {
-    const ns = await this.ensureSession(nodeID);
-    const req: RPCRequest = { id: this.nextID(), method: "catalog", stream: true };
-    const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
-    const raw = marshalEnvelope(env);
-    const base = this.relay || (typeof location !== "undefined" ? location.origin : "");
-    const proto = base.startsWith("https") || (typeof location !== "undefined" && location.protocol === "https:") ? "wss:" : "ws:";
-    let host = "";
-    try {
-      host = base ? new URL(base).host : location.host;
-    } catch {
-      host = typeof location !== "undefined" ? location.host : "";
-    }
-    const url = `${proto}//${host}/v1/to/${ns.peer.id}/e2e/ws`;
-    const sock = new WebSocket(url);
-    sock.binaryType = "arraybuffer";
-    let closed = false;
-    const close = () => {
-      closed = true;
+    return this.withNode(nodeID, async () => {
+      const ns = await this.ensureSession(nodeID);
+      const heldGen = ns.gen;
+      const req: RPCRequest = { id: this.nextID(), method: "catalog", stream: true };
+      const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
+      const raw = marshalEnvelope(env);
+      const base = this.relay || (typeof location !== "undefined" ? location.origin : "");
+      const proto =
+        base.startsWith("https") || (typeof location !== "undefined" && location.protocol === "https:")
+          ? "wss:"
+          : "ws:";
+      let host = "";
       try {
-        sock.close();
+        host = base ? new URL(base).host : location.host;
       } catch {
-        /* ignore */
+        host = typeof location !== "undefined" ? location.host : "";
       }
-    };
-    await new Promise<void>((resolve, reject) => {
-      const t = window.setTimeout(() => reject(new Error("catalog ws timeout")), 15000);
-      sock.onopen = () => {
-        window.clearTimeout(t);
-        resolve();
-      };
-      sock.onerror = () => {
-        window.clearTimeout(t);
-        reject(new Error("catalog ws error"));
-      };
-    });
-    sock.send(raw);
-    sock.onmessage = (ev) => {
-      if (closed) return;
-      void (async () => {
+      const url = `${proto}//${host}/v1/to/${ns.peer.id}/e2e/ws`;
+      const sock = new WebSocket(url);
+      sock.binaryType = "arraybuffer";
+      let closed = false;
+      const close = () => {
+        closed = true;
         try {
-          const buf =
-            ev.data instanceof ArrayBuffer
-              ? new Uint8Array(ev.data)
-              : ev.data instanceof Blob
-                ? new Uint8Array(await ev.data.arrayBuffer())
-                : null;
-          if (!buf) return;
-          const fe = unmarshalEnvelope(buf);
-          const plain = await open(ns.sess, fe);
-          const msg = JSON.parse(fromUtf8(plain)) as Record<string, unknown>;
-          onPart(msg);
+          sock.close();
         } catch {
-          /* decrypt / parse — drop */
+          /* ignore */
         }
-      })();
-    };
-    sock.onclose = () => {
-      closed = true;
-    };
-    return { close, peerID: ns.peer.id };
+      };
+      await new Promise<void>((resolve, reject) => {
+        const t = window.setTimeout(() => reject(new Error("catalog ws timeout")), 15000);
+        sock.onopen = () => {
+          window.clearTimeout(t);
+          resolve();
+        };
+        sock.onerror = () => {
+          window.clearTimeout(t);
+          reject(new Error("catalog ws error"));
+        };
+      });
+      // Fail fast if the node rejects the sealed subscribe (401 decrypt/no session).
+      await new Promise<void>((resolve, reject) => {
+        const t = window.setTimeout(() => reject(new Error("catalog ws no data")), 12000);
+        sock.onmessage = (ev) => {
+          window.clearTimeout(t);
+          void (async () => {
+            try {
+              const buf =
+                ev.data instanceof ArrayBuffer
+                  ? new Uint8Array(ev.data)
+                  : ev.data instanceof Blob
+                    ? new Uint8Array(await ev.data.arrayBuffer())
+                    : null;
+              if (!buf) return;
+              const fe = unmarshalEnvelope(buf);
+              const plain = await open(ns.sess, fe);
+              const msg = JSON.parse(fromUtf8(plain)) as Record<string, unknown>;
+              onPart(msg);
+              resolve();
+              sock.onmessage = (later) => {
+                if (closed) return;
+                void (async () => {
+                  try {
+                    const cur = this.byNode.get(ns.peer.id);
+                    if (!cur || cur.gen !== heldGen) return;
+                    const b =
+                      later.data instanceof ArrayBuffer
+                        ? new Uint8Array(later.data)
+                        : later.data instanceof Blob
+                          ? new Uint8Array(await later.data.arrayBuffer())
+                          : null;
+                    if (!b) return;
+                    const frame = unmarshalEnvelope(b);
+                    const pt = await open(ns.sess, frame);
+                    onPart(JSON.parse(fromUtf8(pt)) as Record<string, unknown>);
+                  } catch {
+                    /* drop */
+                  }
+                })();
+              };
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error(String(err)));
+            }
+          })();
+        };
+        sock.onclose = () => {
+          window.clearTimeout(t);
+          closed = true;
+          reject(new Error("catalog ws closed before first frame"));
+        };
+        sock.send(raw);
+      });
+      sock.onclose = () => {
+        closed = true;
+      };
+      return { close, peerID: ns.peer.id };
+    });
   }
 
   private async postEnvelope(url: string, env: Envelope): Promise<Envelope> {

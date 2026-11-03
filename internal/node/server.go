@@ -32,7 +32,7 @@ type Server struct {
 	Log     *slog.Logger
 
 	mu       sync.Mutex
-	sessions map[string]*e2e.Session
+	sessions map[string][]*e2e.Session // peer client id → recent sessions (newest first)
 	snap     protocol.NodeSnapshot
 	snapRaw  []byte
 	tunConn  tunnelConn
@@ -64,7 +64,7 @@ func New(ident *e2e.Identity, listen, name string, drivers *driver.Set, log *slo
 		Name:     name,
 		Drivers:  drivers,
 		Log:      log,
-		sessions: make(map[string]*e2e.Session),
+		sessions: make(map[string][]*e2e.Session),
 		follow:   newFollowRuns(),
 		turns:    newTurnCancels(),
 		snap:     protocol.NodeSnapshot{Followups: []protocol.FollowQueue{}},
@@ -159,21 +159,44 @@ func (s *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	s.sessions[sess.PeerID] = sess
+	s.rememberSession(sess)
 	s.mu.Unlock()
 	if err := e2e.WriteEnvelope(w, http.StatusOK, ack, bin); err != nil {
 		s.Log.Debug("handshake write", "err", err)
 	}
 }
 
-func (s *Server) sessionOf(env e2e.Envelope) (*e2e.Session, error) {
+const maxSessionsPerPeer = 4
+
+// rememberSession keeps the newest handshakes per client so a racing catalog WS
+// and watch stream that finished handshake in different orders can both decrypt.
+func (s *Server) rememberSession(sess *e2e.Session) {
+	list := s.sessions[sess.PeerID]
+	next := make([]*e2e.Session, 0, maxSessionsPerPeer)
+	next = append(next, sess)
+	for _, old := range list {
+		if old == nil || old.Expired() || old.ID == sess.ID {
+			continue
+		}
+		next = append(next, old)
+		if len(next) >= maxSessionsPerPeer {
+			break
+		}
+	}
+	s.sessions[sess.PeerID] = next
+}
+
+func (s *Server) sessionsFor(peerID string) []*e2e.Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	sess := s.sessions[env.From]
-	if sess == nil || sess.Expired() {
-		return nil, fmt.Errorf("no session")
+	list := s.sessions[peerID]
+	out := make([]*e2e.Session, 0, len(list))
+	for _, sess := range list {
+		if sess != nil && !sess.Expired() {
+			out = append(out, sess)
+		}
 	}
-	return sess, nil
+	return out
 }
 
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
@@ -300,12 +323,20 @@ func (s *Server) decodeRequest(r *http.Request) (e2e.Envelope, *e2e.Session, pro
 	if err != nil {
 		return env, nil, req, fmt.Errorf("bad envelope")
 	}
-	sess, err := s.sessionOf(env)
-	if err != nil {
-		return env, nil, req, err
+	cands := s.sessionsFor(env.From)
+	if len(cands) == 0 {
+		return env, nil, req, fmt.Errorf("no session")
 	}
-	plain, err := sess.Open(env)
-	if err != nil {
+	var sess *e2e.Session
+	var plain []byte
+	for _, cand := range cands {
+		pt, err := cand.Open(env)
+		if err == nil {
+			sess, plain = cand, pt
+			break
+		}
+	}
+	if sess == nil {
 		return env, nil, req, fmt.Errorf("decrypt")
 	}
 	if err := json.Unmarshal(plain, &req); err != nil {

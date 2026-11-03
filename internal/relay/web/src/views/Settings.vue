@@ -156,6 +156,7 @@ onBeforeUnmount(() => {
               <span class="mesh-settings-action-mark">{{ localeButtonLabel(localePref) }}</span>
               <span>{{ localeButtonTitle(localePref) }}</span>
             </button>
+            <p class="mesh-settings-hotkey-hint">{{ t("settings.hotkeyOpen") }}</p>
           </div>
         </section>
 

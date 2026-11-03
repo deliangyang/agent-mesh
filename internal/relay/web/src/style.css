@@ -2764,6 +2764,13 @@ html.dark #app {
   color: var(--destructive);
 }
 
+.mesh-settings-hotkey-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mute);
+}
+
 .mesh-settings-pad {
   padding: 8px 0 18px;
 }

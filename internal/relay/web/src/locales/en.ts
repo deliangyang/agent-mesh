@@ -105,6 +105,7 @@ export const en: Record<string, string> = {
   "settings.platOpenNode": "Open this node in chat",
   "settings.platOpenInstall": "Open install hints for this node",
   "settings.platOpenHealth": "Open engine health matrix",
+  "settings.platInstallTitle": "Install on {os}",
   "settings.navRelay": "Relay",
   "settings.navRelayHint": "Link this node to a relay",
   "settings.navHealth": "Engine health",

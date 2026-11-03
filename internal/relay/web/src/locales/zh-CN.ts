@@ -105,6 +105,7 @@ export const zhCN: Record<string, string> = {
   "settings.platOpenNode": "在聊天中打开此节点",
   "settings.platOpenInstall": "打开此节点的安装提示",
   "settings.platOpenHealth": "打开引擎健康矩阵",
+  "settings.platInstallTitle": "在 {os} 上安装",
   "settings.navRelay": "中继",
   "settings.navRelayHint": "将本机连接到中继",
   "settings.navHealth": "引擎健康",

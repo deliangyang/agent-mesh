@@ -2989,6 +2989,34 @@ html.dark #app {
   color: var(--mute);
 }
 
+.mesh-plat-installs {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--signal) 6%, var(--lamp));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 28%, var(--rule));
+}
+
+.mesh-plat-install-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.mesh-plat-install-list {
+  margin: 0;
+  padding: 0 0 0 1.1em;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.mesh-plat-install-list li::marker {
+  color: var(--mute);
+}
+
 .mesh-conn-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

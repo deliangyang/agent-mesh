@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildPlatformGroups } from "./platformGroups.ts";
+import { buildPlatformGroups, missingEnginesOnOs } from "./platformGroups.ts";
 
 describe("buildPlatformGroups", () => {
   it("returns empty when there are no nodes", () => {
@@ -31,9 +31,11 @@ describe("buildPlatformGroups", () => {
     assert.equal(groups[0].ok, 1);
     assert.equal(groups[0].miss, 1);
     assert.equal(groups[0].nodes[0].platform, "Linux/amd64");
+    assert.deepEqual(groups[0].missingEngines, [{ name: "cursor", title: "cursor" }]);
     assert.equal(groups[1].label, "macOS");
     assert.equal(groups[1].ok, 1);
     assert.equal(groups[1].miss, 0);
+    assert.deepEqual(groups[1].missingEngines, []);
     assert.equal(groups[3].label, "Unknown");
     assert.equal(groups[3].ok, 0);
   });
@@ -48,5 +50,26 @@ describe("buildPlatformGroups", () => {
     );
     assert.equal(groups[0].ok, 1);
     assert.equal(groups[0].miss, 0);
+  });
+
+  it("lists distinct missing engines for an OS across nodes", () => {
+    const nodes = [
+      { id: "a", name: "a", os: "linux" },
+      { id: "b", name: "b", os: "linux" },
+      { id: "c", name: "c", os: "darwin" },
+    ];
+    const engines = [
+      { name: "claude", title: "Claude", node_id: "a", available: false },
+      { name: "claude", title: "Claude", node_id: "b", available: false },
+      { name: "cursor", node_id: "a", available: false },
+      { name: "pi", node_id: "c", available: false },
+      { name: "codex", node_id: "a", available: true },
+    ];
+    assert.deepEqual(missingEnginesOnOs(nodes, engines, "linux"), [
+      { name: "claude", title: "Claude" },
+      { name: "cursor", title: "cursor" },
+    ]);
+    assert.deepEqual(missingEnginesOnOs(nodes, engines, "darwin"), [{ name: "pi", title: "pi" }]);
+    assert.deepEqual(missingEnginesOnOs(nodes, engines, "windows"), []);
   });
 });

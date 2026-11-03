@@ -22,6 +22,11 @@ export type PlatformNodeRow = {
   miss: number;
 };
 
+export type PlatformMissingEngine = {
+  name: string;
+  title: string;
+};
+
 export type PlatformGroup = {
   osKey: string;
   label: string;
@@ -29,6 +34,8 @@ export type PlatformGroup = {
   ok: number;
   miss: number;
   nodes: PlatformNodeRow[];
+  /** Distinct unavailable engines across nodes in this OS bucket. */
+  missingEngines: PlatformMissingEngine[];
 };
 
 function osKeyOf(n: Pick<NodeInfo, "os"> | null | undefined): string {
@@ -61,6 +68,26 @@ function sortOsKeys(a: string, b: string): number {
   const rb = ib >= 0 ? ib : b === "unknown" ? 1000 : 500 + b.localeCompare(a);
   if (ra !== rb) return ra - rb;
   return a.localeCompare(b);
+}
+
+/** Distinct engines reported unavailable on nodes matching osKey. */
+export function missingEnginesOnOs(
+  nodes: NodeInfo[],
+  engines: EngineRow[],
+  osKey: string,
+): PlatformMissingEngine[] {
+  const nodeIds = new Set(
+    (nodes || []).filter((n) => osKeyOf(n) === osKey).map((n) => n.id),
+  );
+  if (!nodeIds.size) return [];
+  const byName = new Map<string, PlatformMissingEngine>();
+  for (const e of engines || []) {
+    if (!e.name || !e.node_id || !nodeIds.has(e.node_id)) continue;
+    if (e.available) continue;
+    if (byName.has(e.name)) continue;
+    byName.set(e.name, { name: e.name, title: e.title || e.name });
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Group catalog nodes by OS for multi-platform coverage in Settings. */
@@ -99,6 +126,7 @@ export function buildPlatformGroups(nodes: NodeInfo[], engines: EngineRow[]): Pl
       ok,
       miss,
       nodes: list,
+      missingEngines: missingEnginesOnOs(nodes, engines, key),
     };
   });
 }

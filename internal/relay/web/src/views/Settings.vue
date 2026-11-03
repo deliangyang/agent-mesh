@@ -11,6 +11,7 @@ import {
   localePref,
   t,
 } from "../locale";
+import { formatEngineInstall } from "../engineInstall";
 import { buildPlatformGroups } from "../platformGroups";
 import {
   SETTINGS_NAV,
@@ -42,7 +43,15 @@ const SHORTCUT_SCOPES: { id: ShortcutScope; labelKey: string }[] = [
 
 const section = computed(() => resolveSettingsSection(String(route.params.section || "")));
 const diag = computed(() => buildConnectionDiag(meshLink, catalog));
-const platformGroups = computed(() => buildPlatformGroups(catalog.nodes, catalog.engines));
+const platformGroups = computed(() =>
+  buildPlatformGroups(catalog.nodes, catalog.engines).map((g) => ({
+    ...g,
+    installs: g.missingEngines.map((e) => ({
+      name: e.name,
+      text: formatEngineInstall(e, g.osKey === "unknown" ? "" : g.osKey),
+    })),
+  })),
+);
 const sectionTitle = computed(() => {
   const item = SETTINGS_NAV.find((n) => n.id === section.value);
   return item ? t(item.labelKey) : t("settings.pageTitle");
@@ -329,7 +338,7 @@ onBeforeUnmount(() => {
                   type="button"
                   class="mesh-plat-node"
                   :title="n.miss ? t('settings.platOpenInstall') : t('settings.platOpenNode')"
-                  @click="onHealthPick({ nodeId: n.id, focusMissing: n.miss > 0 && n.ok === 0 })"
+                  @click="onHealthPick({ nodeId: n.id, focusMissing: n.miss > 0 })"
                 >
                   <span class="mesh-plat-node-name">{{ n.name }}</span>
                   <span class="mesh-plat-node-meta">
@@ -338,6 +347,12 @@ onBeforeUnmount(() => {
                     <span v-if="n.miss" class="mesh-plat-miss">{{ t("settings.platMiss", { count: n.miss }) }}</span>
                   </span>
                 </button>
+              </div>
+              <div v-if="g.installs.length" class="mesh-plat-installs" :aria-label="t('settings.platInstallTitle', { os: g.label })">
+                <h4 class="mesh-plat-install-title">{{ t("settings.platInstallTitle", { os: g.label }) }}</h4>
+                <ul class="mesh-plat-install-list">
+                  <li v-for="row in g.installs" :key="g.osKey + row.name">{{ row.text }}</li>
+                </ul>
               </div>
             </article>
           </div>

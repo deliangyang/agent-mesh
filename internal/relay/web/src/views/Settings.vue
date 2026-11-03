@@ -87,9 +87,27 @@ function goHome(): void {
   void router.push({ path: "/", query: route.query });
 }
 
-function openSection(id: SettingsSection): void {
+function settingsQuery(extra?: Record<string, string | undefined>): Record<string, string> {
+  const q: Record<string, string> = {};
+  for (const [k, v] of Object.entries(route.query)) {
+    if (typeof v === "string" && v) q[k] = v;
+  }
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) q[k] = v;
+      else delete q[k];
+    }
+  }
+  return q;
+}
+
+function openSection(id: SettingsSection, extra?: Record<string, string | undefined>): void {
   saveLastSettingsSection(id);
-  void router.replace({ path: `/settings/${id}`, query: route.query });
+  void router.replace({ path: `/settings/${id}`, query: settingsQuery(extra) });
+}
+
+function openHealthForOs(osKey: string): void {
+  openSection("health", { os: osKey === "unknown" ? undefined : osKey });
 }
 
 function flipTheme(): void {
@@ -357,8 +375,17 @@ onBeforeUnmount(() => {
             </article>
           </div>
           <div class="mesh-settings-actions-stack">
-            <button type="button" class="mesh-settings-action" @click="openSection('health')">
+            <button type="button" class="mesh-settings-action" @click="openSection('health', { os: undefined })">
               {{ t("settings.platOpenHealth") }}
+            </button>
+            <button
+              v-for="g in platformGroups.filter((x) => x.nodeCount)"
+              :key="'health-' + g.osKey"
+              type="button"
+              class="mesh-settings-action"
+              @click="openHealthForOs(g.osKey)"
+            >
+              {{ t("settings.platOpenHealthOs", { os: g.label }) }}
             </button>
           </div>
         </section>

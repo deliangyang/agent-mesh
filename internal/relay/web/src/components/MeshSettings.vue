@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { catalog } from "../catalog";
-import { buildHealthMatrix } from "../healthMatrix";
+import {
+  buildHealthMatrix,
+  filterHealthMatrix,
+  healthOsLabel,
+  listHealthOsOptions,
+  resolveHealthOsFilter,
+} from "../healthMatrix";
 import { fetchJSON } from "../http";
 import { t } from "../locale";
 import { showToast, toastError } from "../toast";
@@ -27,6 +34,9 @@ const emit = defineEmits<{
   pick: [payload: { nodeId: string; engine?: string; focusMissing?: boolean }];
 }>();
 
+const route = useRoute();
+const router = useRouter();
+
 const form = reactive({
   relay: "",
   password: "",
@@ -39,9 +49,23 @@ const testing = ref(false);
 const saving = ref(false);
 const local = ref(false);
 
-const matrix = computed(() => buildHealthMatrix(catalog.nodes, catalog.engines));
+const fullMatrix = computed(() => buildHealthMatrix(catalog.nodes, catalog.engines));
+const osFilter = computed(() => resolveHealthOsFilter(String(route.query.os || "")));
+const matrix = computed(() => filterHealthMatrix(fullMatrix.value, osFilter.value));
+const osOptions = computed(() => listHealthOsOptions(fullMatrix.value));
 const showRelay = computed(() => props.section === "relay");
 const showHealth = computed(() => props.section === "health");
+
+function setOsFilter(osKey: string): void {
+  const q: Record<string, string> = {};
+  for (const [k, v] of Object.entries(route.query)) {
+    if (typeof v === "string" && v) q[k] = v;
+  }
+  const next = resolveHealthOsFilter(osKey);
+  if (next) q.os = next;
+  else delete q.os;
+  void router.replace({ path: route.path, query: q });
+}
 
 function cellLabel(cell: string): string {
   if (cell === "ok") return t("settings.healthOk");
@@ -225,7 +249,30 @@ onMounted(() => {
         <p class="mesh-settings-sub">{{ t("settings.healthSub") }}</p>
       </header>
       <p class="mesh-health-hint">{{ t("settings.healthHint") }}</p>
-      <div v-if="!matrix.rows.length" class="mesh-settings-status">{{ t("settings.healthEmpty") }}</div>
+      <div v-if="osOptions.length > 1" class="mesh-health-os" role="toolbar" :aria-label="t('settings.healthOsFilter')">
+        <button
+          type="button"
+          class="mesh-health-os-chip"
+          :class="{ on: !osFilter }"
+          @click="setOsFilter('')"
+        >
+          {{ t("settings.healthOsAll") }}
+        </button>
+        <button
+          v-for="opt in osOptions"
+          :key="opt.osKey"
+          type="button"
+          class="mesh-health-os-chip"
+          :class="{ on: osFilter === opt.osKey }"
+          @click="setOsFilter(opt.osKey)"
+        >
+          {{ healthOsLabel(opt.osKey) }}
+          <span class="mesh-health-os-count">{{ opt.count }}</span>
+        </button>
+      </div>
+      <div v-if="!matrix.rows.length" class="mesh-settings-status">
+        {{ osFilter ? t("settings.healthOsEmpty", { os: healthOsLabel(osFilter) }) : t("settings.healthEmpty") }}
+      </div>
       <div v-else class="mesh-health-scroll">
         <table class="mesh-health-table">
           <thead>

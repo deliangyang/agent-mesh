@@ -8,6 +8,8 @@ export type HealthMatrixRow = {
   nodeId: string;
   nodeName: string;
   platform: string;
+  /** Normalized GOOS bucket (linux/darwin/windows/…/unknown). */
+  osKey: string;
   cells: HealthCell[];
 };
 
@@ -17,6 +19,70 @@ export type HealthMatrix = {
   engineNames: string[];
   rows: HealthMatrixRow[];
 };
+
+export type HealthOsOption = {
+  osKey: string;
+  count: number;
+};
+
+const OS_ORDER = ["linux", "darwin", "windows", "freebsd", "openbsd", "netbsd", "unknown"];
+
+const OS_LABEL: Record<string, string> = {
+  darwin: "macOS",
+  windows: "Windows",
+  linux: "Linux",
+  freebsd: "FreeBSD",
+  openbsd: "OpenBSD",
+  netbsd: "NetBSD",
+  unknown: "Unknown",
+};
+
+function osKeyOf(n: Pick<NodeInfo, "os"> | null | undefined): string {
+  const raw = (n?.os || "").trim().toLowerCase();
+  return raw || "unknown";
+}
+
+/** Display label for an OS filter chip. */
+export function healthOsLabel(osKey: string): string {
+  return OS_LABEL[osKey] || osKey;
+}
+
+/** Normalize ?os= query into a known filter key, or "" for all. */
+export function resolveHealthOsFilter(raw: string | undefined | null): string {
+  const id = (raw || "").trim().toLowerCase();
+  if (!id || id === "all" || id === "*") return "";
+  return id;
+}
+
+/** Distinct OS keys present in the matrix, stable order. */
+export function listHealthOsOptions(matrix: HealthMatrix): HealthOsOption[] {
+  const counts = new Map<string, number>();
+  for (const row of matrix.rows || []) {
+    const key = row.osKey || "unknown";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([osKey, count]) => ({ osKey, count }))
+    .sort((a, b) => {
+      const ia = OS_ORDER.indexOf(a.osKey);
+      const ib = OS_ORDER.indexOf(b.osKey);
+      const ra = ia >= 0 ? ia : 500;
+      const rb = ib >= 0 ? ib : 500;
+      if (ra !== rb) return ra - rb;
+      return a.osKey.localeCompare(b.osKey);
+    });
+}
+
+/** Keep rows for one OS; empty osKey returns the full matrix. */
+export function filterHealthMatrix(matrix: HealthMatrix, osKey: string): HealthMatrix {
+  const key = resolveHealthOsFilter(osKey);
+  if (!key) return matrix;
+  return {
+    titles: matrix.titles,
+    engineNames: matrix.engineNames,
+    rows: (matrix.rows || []).filter((r) => r.osKey === key),
+  };
+}
 
 /** Build a nodes × engines availability matrix from the live catalog. */
 export function buildHealthMatrix(nodes: NodeInfo[], engines: EngineRow[]): HealthMatrix {
@@ -52,6 +118,7 @@ export function buildHealthMatrix(nodes: NodeInfo[], engines: EngineRow[]): Heal
       nodeId: n.id,
       nodeName: n.name || n.id,
       platform: platformLabel(n),
+      osKey: osKeyOf(n),
       cells,
     };
   });

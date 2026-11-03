@@ -3161,6 +3161,51 @@ html.dark #app {
   color: var(--mute);
 }
 
+.mesh-health-os {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.mesh-health-os-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  color: var(--ink);
+  background: var(--lamp);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mesh-health-os-chip:hover {
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.mesh-health-os-chip.on {
+  background: var(--signal-soft);
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.mesh-health-os-chip:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+
+.mesh-health-os-count {
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.mesh-health-os-chip.on .mesh-health-os-count {
+  color: var(--ink);
+}
+
 .mesh-health-node {
   display: block;
   width: 100%;

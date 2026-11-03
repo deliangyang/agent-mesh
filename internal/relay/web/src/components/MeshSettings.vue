@@ -11,6 +11,7 @@ import {
 } from "../healthMatrix";
 import { fetchJSON } from "../http";
 import { t } from "../locale";
+import { buildMeshConfigBundle, meshConfigFilename, parseMeshConfigBundle } from "../meshConfigIO";
 import { showToast, toastError } from "../toast";
 
 export type MeshSettingsState = {
@@ -48,6 +49,7 @@ const loading = ref(false);
 const testing = ref(false);
 const saving = ref(false);
 const local = ref(false);
+const importEl = ref<HTMLInputElement | null>(null);
 
 const fullMatrix = computed(() => buildHealthMatrix(catalog.nodes, catalog.engines));
 const osFilter = computed(() => resolveHealthOsFilter(String(route.query.os || "")));
@@ -179,6 +181,43 @@ async function save(): Promise<void> {
   }
 }
 
+function exportConfig(): void {
+  const bundle = buildMeshConfigBundle(form);
+  const blob = new Blob([JSON.stringify(bundle, null, 2) + "\n"], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = meshConfigFilename();
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(t("settings.exportDone"), "info");
+}
+
+function pickImport(): void {
+  importEl.value?.click();
+}
+
+async function onImportFile(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const bundle = parseMeshConfigBundle(raw);
+    if (!bundle) {
+      showToast(t("settings.importInvalid"), "error");
+      return;
+    }
+    form.relay = bundle.relay;
+    form.password = bundle.password;
+    form.advertise = bundle.advertise;
+    showToast(t("settings.importLoaded"), "info");
+  } catch (err) {
+    toastError(err);
+  }
+}
+
 watch(
   () => props.section,
   (sec) => {
@@ -239,6 +278,22 @@ onMounted(() => {
             {{ saving ? t("settings.saving") : t("settings.save") }}
           </button>
         </div>
+        <div class="mesh-settings-actions mesh-settings-io">
+          <button type="button" class="ghost" :disabled="testing || saving" @click="exportConfig">
+            {{ t("settings.exportConfig") }}
+          </button>
+          <button type="button" class="ghost" :disabled="testing || saving" @click="pickImport">
+            {{ t("settings.importConfig") }}
+          </button>
+          <input
+            ref="importEl"
+            type="file"
+            accept="application/json,.json"
+            class="mesh-settings-file"
+            @change="onImportFile"
+          />
+        </div>
+        <p class="mesh-settings-hotkey-hint">{{ t("settings.importHint") }}</p>
       </form>
       <div v-else class="mesh-settings-status mesh-settings-pad">{{ t("settings.relayRemoteOnly") }}</div>
     </template>

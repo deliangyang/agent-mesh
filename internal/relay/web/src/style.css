@@ -3338,6 +3338,21 @@ html.dark #app {
   margin-top: 4px;
 }
 
+.mesh-settings-io {
+  justify-content: flex-start;
+}
+
+.mesh-settings-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
 .mesh-settings-save {
   padding: 8px 14px;
   border: 0;

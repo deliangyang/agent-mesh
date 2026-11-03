@@ -41,11 +41,12 @@ type Response struct {
 	Body  json.RawMessage `json:"body,omitempty"`
 }
 
-// AttachFile is an inbox attachment referenced from a user turn.
+// AttachFile is a chat attachment: path-based (history / MESH_ATTACH) or inline base64 (send/reply).
 type AttachFile struct {
-	Path string `json:"path"`
-	MIME string `json:"mime,omitempty"`
+	Path string `json:"path,omitempty"`
 	Name string `json:"name,omitempty"`
+	MIME string `json:"mime,omitempty"`
+	Data string `json:"data,omitempty"`
 }
 
 // Event is streaming progress.
@@ -152,13 +153,6 @@ type HistoryParams struct {
 	Engine    string `json:"engine"`
 	SessionID string `json:"session_id"`
 	Tail      int    `json:"tail,omitempty"`
-}
-
-// AttachFile is a base64 attachment for send/reply (same shape as OpenAI ChatFile).
-type AttachFile struct {
-	Name string `json:"name"`
-	MIME string `json:"mime,omitempty"`
-	Data string `json:"data"`
 }
 
 // ReplyParams appends to a session.

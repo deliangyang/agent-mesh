@@ -149,7 +149,7 @@ export OPENAI_API_KEY=mesh
 
 ### 桌面和无窗口
 
-`make desktop` 编译本机客户端：界面和中继是同一套 Vue（`internal/relay/web`）。节点自己提供这套界面和 `/v1`，网页操作不依赖中继。`-headless` 只跑节点 HTTP。Linux 上没有 `DISPLAY` / `WAYLAND_DISPLAY` 时会自动改走无窗口。
+`make desktop` 编译本机客户端：默认用 Chrome/Edge 应用窗口打开与中继同一套 Vue（`internal/relay/web`，无 CGO）。`make desktop-windows` / `make desktop-linux` 则链接 Wails 原生壳（WebView2 / WebKitGTK），再导航到本机节点地址（Wails AssetServer 不支持 WebSocket）。节点自己提供界面和 `/v1`，网页操作不依赖中继。`-headless` 只跑节点 HTTP。Linux 上没有 `DISPLAY` / `WAYLAND_DISPLAY` 时会自动改走无窗口。
 
 ## 从源码构建
 

@@ -1,4 +1,4 @@
-.PHONY: all binaries web node relay ctl desktop desktop-windows test supervisor setup dist node-windows winres
+.PHONY: all binaries web node relay ctl desktop desktop-windows desktop-linux test supervisor setup dist node-windows winres
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOFLAGS ?= -trimpath -ldflags "-s -w"
@@ -39,13 +39,19 @@ desktop: web
 	mkdir -p bin
 	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/agent-mesh ./desktop
 
-# Windows WebView2 shell (Wails). Requires CGO + a C compiler on Windows (e.g. mingw/zig).
+# Native Wails shells. Require CGO + platform webview (WebView2 / WebKitGTK).
 # Vue still talks HTTP/WS to the local node; the webview only hosts that origin.
 # Tags match https://v2.wails.io/docs/guides/manual-builds/ (desktop,production).
 DESKTOP_WIN_LDFLAGS ?= -s -w -H windowsgui
 desktop-windows: web
 	mkdir -p bin
 	CGO_ENABLED=1 go build -trimpath -tags desktop,production -ldflags "$(DESKTOP_WIN_LDFLAGS)" -o bin/agent-mesh.exe ./desktop
+
+# Linux WebKitGTK shell (Wails). Needs gtk3 + webkit2gtk (4.0 or 4.1) development packages.
+DESKTOP_LINUX_LDFLAGS ?= -s -w
+desktop-linux: web
+	mkdir -p bin
+	CGO_ENABLED=1 go build -trimpath -tags desktop,production -ldflags "$(DESKTOP_LINUX_LDFLAGS)" -o bin/agent-mesh ./desktop
 
 setup:
 	./scripts/setup.sh

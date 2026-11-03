@@ -1,4 +1,4 @@
-//go:build !windows || !cgo
+//go:build (!windows && !linux) || !cgo
 
 package main
 
@@ -14,7 +14,8 @@ import (
 )
 
 // runGUI starts the local node and opens the shared Vue UI in a Chrome/Edge app window.
-// Used on non-Windows builds, and on Windows when CGO is disabled (no Wails/WebView2 link).
+// Used when CGO is off, or on platforms without a Wails shell (macOS). Windows/Linux with
+// CGO use run_*_wails.go instead.
 func runGUI(app *App) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

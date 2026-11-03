@@ -16,6 +16,6 @@
     "productName": "Agent Mesh",
     "productVersion": "0.0.0",
     "copyright": "",
-    "comments": "Local node shell: WebView2 hosts the shared Vue UI over the node HTTP API"
+    "comments": "Local node shell: WebView2/WebKitGTK hosts the shared Vue UI over the node HTTP API"
   }
 }

@@ -3,6 +3,7 @@ import { CopilotChat, CopilotChatUserMessage, useDefaultRenderTool } from "@copi
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { catalog, connectCatalog, meshLink, refreshCatalog, watchSession } from "../catalog";
+import { meshAsk } from "../ask";
 import MeshAskCard from "../components/MeshAskCard.vue";
 import MeshAttachQueue from "../components/MeshAttachQueue.vue";
 import MeshDiffPanel from "../components/MeshDiffPanel.vue";
@@ -15,7 +16,7 @@ import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
-import { capsAllowDiff, capsAllowFollowups, capsBadges, engineCaps } from "../engineCaps";
+import { capsAllowDiff, capsAllowFollowups, capsBadges, engineCaps, showAskChrome } from "../engineCaps";
 import { formatEngineInstall } from "../engineInstall";
 import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
@@ -141,6 +142,8 @@ const selectedCaps = computed(() => engineCaps(catalog.engines, filters.node, fi
 const showDiff = computed(() => capsAllowDiff(selectedCaps.value));
 
 const showFollowups = computed(() => capsAllowFollowups(selectedCaps.value));
+
+const showAsk = computed(() => showAskChrome(selectedCaps.value, Boolean(meshAsk.prompt)));
 
 const platformOptions = computed(() => nodePlatforms(catalog.nodes));
 
@@ -1227,7 +1230,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <MeshAskCard />
+              <MeshAskCard v-if="showAsk" />
               <MeshFollowups
                 v-if="showFollowups"
                 :running="composerBusy(slot)"

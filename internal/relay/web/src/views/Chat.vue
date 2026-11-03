@@ -25,6 +25,7 @@ import { t } from "../locale";
 import { filterNodesByOs, nodePlatforms } from "../nodeFilter";
 import { platformLabel } from "../platform";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
+import { isOpenSettingsHotkey } from "../settingsHotkey";
 import { slashItems, watchSlashCatalog } from "../slash";
 import { meshTarget, threadIdOf } from "../target";
 import { clearAttachJobs, onComposerUploadFailed, uploadComposerFile } from "../attachUpload";
@@ -50,6 +51,12 @@ let composerGuardTimer = 0;
 function openSettings(): void {
   void router.push({ path: "/settings", query: route.query });
   closeNavIfMobile();
+}
+
+function onSettingsHotkey(ev: KeyboardEvent): void {
+  if (!isOpenSettingsHotkey(ev)) return;
+  ev.preventDefault();
+  openSettings();
 }
 
 function isMobileNav(): boolean {
@@ -772,6 +779,7 @@ onMounted(() => {
   applyHealthHint();
   connectCatalog();
   document.addEventListener("click", onDocClick);
+  window.addEventListener("keydown", onSettingsHotkey);
   window.addEventListener("mesh-link-up", onLinkUp);
   hideKitCursor();
   cursorObs = new MutationObserver(hideKitCursor);
@@ -781,6 +789,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", onDocClick);
+  window.removeEventListener("keydown", onSettingsHotkey);
   window.removeEventListener("mesh-link-up", onLinkUp);
   window.clearTimeout(copiedTimer);
   window.clearTimeout(endedTimer);

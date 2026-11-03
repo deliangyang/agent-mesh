@@ -68,6 +68,7 @@ export const en: Record<string, string> = {
   "settings.backHome": "Back to chat",
   "settings.navAppearance": "Appearance",
   "settings.navAppearanceHint": "Theme and language",
+  "settings.hotkeyOpen": "Shortcut: Ctrl+, (⌘+, on Mac) opens Settings from chat.",
   "settings.navRelay": "Relay",
   "settings.navRelayHint": "Link this node to a relay",
   "settings.navHealth": "Engine health",

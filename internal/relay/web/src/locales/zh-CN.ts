@@ -68,6 +68,7 @@ export const zhCN: Record<string, string> = {
   "settings.backHome": "返回聊天",
   "settings.navAppearance": "外观",
   "settings.navAppearanceHint": "主题与语言",
+  "settings.hotkeyOpen": "快捷键：在聊天页按 Ctrl+,（Mac 为 ⌘+,）打开设置。",
   "settings.navRelay": "中继",
   "settings.navRelayHint": "将本机连接到中继",
   "settings.navHealth": "引擎健康",

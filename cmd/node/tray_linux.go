@@ -31,6 +31,7 @@ const (
     <property name="Title" type="s" access="read"/>
     <property name="Status" type="s" access="read"/>
     <property name="IconName" type="s" access="read"/>
+    <property name="IconPixmap" type="a(iiay)" access="read"/>
     <property name="ItemIsMenu" type="b" access="read"/>
     <property name="Menu" type="o" access="read"/>
   </interface>
@@ -259,15 +260,17 @@ func runLinuxTray(ctx context.Context, cancel context.CancelFunc, uiURL string) 
 		return err
 	}
 
+	pixmaps := meshTrayIconPixmaps()
 	sniProps := map[string]map[string]*prop.Prop{
 		sniIface: {
-			"Category":   {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitTrue},
-			"Id":         {Value: "agent-mesh-node", Writable: false, Emit: prop.EmitTrue},
-			"Title":      {Value: "Agent Mesh", Writable: false, Emit: prop.EmitTrue},
-			"Status":     {Value: "Active", Writable: false, Emit: prop.EmitTrue},
-			"IconName":   {Value: "utilities-terminal", Writable: false, Emit: prop.EmitTrue},
-			"ItemIsMenu": {Value: false, Writable: false, Emit: prop.EmitTrue},
-			"Menu":       {Value: dbus.ObjectPath(menuPath), Writable: false, Emit: prop.EmitTrue},
+			"Category":    {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitTrue},
+			"Id":          {Value: "agent-mesh-node", Writable: false, Emit: prop.EmitTrue},
+			"Title":       {Value: "Agent Mesh", Writable: false, Emit: prop.EmitTrue},
+			"Status":      {Value: "Active", Writable: false, Emit: prop.EmitTrue},
+			"IconName":    {Value: "", Writable: false, Emit: prop.EmitTrue},
+			"IconPixmap":  {Value: pixmaps, Writable: false, Emit: prop.EmitTrue},
+			"ItemIsMenu":  {Value: false, Writable: false, Emit: prop.EmitTrue},
+			"Menu":        {Value: dbus.ObjectPath(menuPath), Writable: false, Emit: prop.EmitTrue},
 		},
 	}
 	if _, err := prop.Export(conn, sniPath, sniProps); err != nil {

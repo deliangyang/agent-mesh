@@ -8,6 +8,8 @@ export type SettingsNavItem = {
   hintKey: string;
 };
 
+const LAST_KEY = "mesh.settings.section";
+
 export const SETTINGS_NAV: SettingsNavItem[] = [
   { id: "appearance", labelKey: "settings.navAppearance", hintKey: "settings.navAppearanceHint" },
   { id: "relay", labelKey: "settings.navRelay", hintKey: "settings.navRelayHint" },
@@ -19,4 +21,20 @@ export function resolveSettingsSection(raw: string | undefined | null): Settings
   const id = (raw || "").trim().toLowerCase();
   if (id === "appearance" || id === "relay" || id === "health" || id === "account") return id;
   return "appearance";
+}
+
+export function loadLastSettingsSection(): SettingsSection {
+  try {
+    return resolveSettingsSection(localStorage.getItem(LAST_KEY));
+  } catch {
+    return "appearance";
+  }
+}
+
+export function saveLastSettingsSection(section: SettingsSection): void {
+  try {
+    localStorage.setItem(LAST_KEY, section);
+  } catch {
+    /* ignore quota */
+  }
 }

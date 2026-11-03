@@ -1,14 +1,7 @@
-/* Agent Mesh offline shell: cache static assets only. Never cache /v1, /login, /logout. */
-const CACHE = "mesh-static-v1";
+/* Agent Mesh offline shell: cache static assets only. Never cache /v1, /login, /logout.
+ * Bump CACHE (and src/swCache.ts MESH_SW_CACHE_VERSION) when hashed assets must invalidate. */
+const CACHE = "mesh-static-v2";
 const PRECACHE = ["/", "/index.html", "/manifest.webmanifest", "/favicon.svg"];
-
-function pathnameOf(url) {
-  try {
-    return new URL(url, self.location.origin).pathname;
-  } catch {
-    return "/";
-  }
-}
 
 function isAPI(pathname) {
   const p = pathname.split("?")[0] || "/";

@@ -791,6 +791,7 @@ html.dark #app {
 }
 
 .mesh-chat-main {
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -808,6 +809,24 @@ html.dark #app {
   height: 100%;
   width: 100%;
   max-width: 100%;
+}
+
+.mesh-workspace-center {
+  position: absolute;
+  inset: 24px 24px 132px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  width: auto;
+  pointer-events: none;
+}
+
+.mesh-workspace-center .mesh-welcome {
+  width: min(560px, 92%);
+  padding: 0;
+  pointer-events: auto;
 }
 
 .mesh-link-veil {

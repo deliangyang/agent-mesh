@@ -288,6 +288,10 @@ const threadId = computed(() => {
 });
 
 const isDraftChat = computed(() => chatKey.value === "draft" || chatKey.value.startsWith("draft-"));
+const draftStarted = ref(false);
+const showWorkspacePicker = computed(
+  () => isDraftChat.value && !draftStarted.value && !meshLive.session && !meshLive.streaming,
+);
 const chatThreadId = computed(() => (isDraftChat.value ? chatKey.value : threadId.value || undefined));
 
 const chatTitle = computed(() => {
@@ -740,6 +744,7 @@ watchFollowups();
 
 watch(chatKey, () => {
   clearAttachJobs();
+  draftStarted.value = false;
 });
 
 watch(
@@ -826,6 +831,7 @@ function onComposerSubmit(
     slot.onUpdateModelValue("");
     return;
   }
+  draftStarted.value = true;
   slot.onSubmitMessage(text);
 }
 
@@ -1137,6 +1143,62 @@ onBeforeUnmount(() => {
       </div>
       <MeshDiffPanel v-if="showDiff" :open="diffOpen" @close="diffOpen = false" />
       <div class="mesh-chat-main">
+        <div v-if="showWorkspacePicker" class="mesh-workspace-center">
+          <div class="mesh-welcome">
+            <h1>{{ t("chat.welcome") }}</h1>
+            <p>{{ welcomeHint }}</p>
+                <div class="mesh-workspace-pick">
+                  <button
+                    type="button"
+                    class="mesh-workspace-btn"
+                    :class="{ open: dirOpen }"
+                    :title="filters.dir || t('chat.pickDir')"
+                    :aria-expanded="dirOpen"
+                    @click.stop="toggleDirBrowser"
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h3.1l1.2 1.5h4.3A1.2 1.2 0 0 1 13.5 5.7v6.1A1.2 1.2 0 0 1 12.3 13H3.7A1.2 1.2 0 0 1 2.5 11.8V4.2Z"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                    <span>{{ filters.dir || t("chat.pickDir") }}</span>
+                  </button>
+                  <div v-if="dirOpen" class="mesh-dir-panel" @click.stop>
+                    <form class="mesh-dir-form" @submit.prevent="browseDir(dirPath)">
+                      <button type="button" class="mesh-dir-up" :disabled="!dirListing?.parent" @click="browseParent">
+                        ..
+                      </button>
+                      <input v-model="dirPath" :placeholder="t('chat.dirManual')" autocomplete="off" spellcheck="false" />
+                      <button type="submit">{{ t("chat.go") }}</button>
+                    </form>
+                    <div class="mesh-dir-list" role="listbox" :aria-label="t('chat.pickDir')">
+                      <button
+                        v-for="d in dirListing?.dirs || []"
+                        :key="d.path"
+                        type="button"
+                        class="mesh-dir-item"
+                        :title="d.path"
+                        @click="enterDir(d.path)"
+                      >
+                        {{ d.name }}
+                      </button>
+                      <div v-if="dirLoading" class="mesh-pop-empty">{{ t("chat.loading") }}</div>
+                      <div v-else-if="!dirListing?.dirs?.length" class="mesh-pop-empty">{{ t("chat.noSubdirs") }}</div>
+                      <div v-if="dirError" class="mesh-dir-error">{{ dirError }}</div>
+                    </div>
+                    <div class="mesh-dir-foot">
+                      <span class="mesh-dir-current">{{ dirListing?.path || dirPath }}</span>
+                      <button type="button" class="mesh-dir-use" :disabled="!dirListing?.path && !dirPath.trim()" @click="useDir">
+                        {{ t("chat.useDir") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+          </div>
+        </div>
         <CopilotChat
           :key="chatKey"
           agent-id="default"
@@ -1144,62 +1206,6 @@ onBeforeUnmount(() => {
           :attachments="attachConfig"
           :labels="labels"
         >
-          <template #welcome-message>
-            <div class="mesh-welcome">
-              <h1>{{ t("chat.welcome") }}</h1>
-              <p>{{ welcomeHint }}</p>
-              <div v-if="isDraftChat" class="mesh-workspace-pick">
-                <button
-                  type="button"
-                  class="mesh-workspace-btn"
-                  :class="{ open: dirOpen }"
-                  :title="filters.dir || t('chat.pickDir')"
-                  :aria-expanded="dirOpen"
-                  @click.stop="toggleDirBrowser"
-                >
-                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path
-                      d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h3.1l1.2 1.5h4.3A1.2 1.2 0 0 1 13.5 5.7v6.1A1.2 1.2 0 0 1 12.3 13H3.7A1.2 1.2 0 0 1 2.5 11.8V4.2Z"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                  <span>{{ filters.dir || t("chat.pickDir") }}</span>
-                </button>
-                <div v-if="dirOpen" class="mesh-dir-panel" @click.stop>
-                  <form class="mesh-dir-form" @submit.prevent="browseDir(dirPath)">
-                    <button type="button" class="mesh-dir-up" :disabled="!dirListing?.parent" @click="browseParent">
-                      ..
-                    </button>
-                    <input v-model="dirPath" :placeholder="t('chat.dirManual')" autocomplete="off" spellcheck="false" />
-                    <button type="submit">{{ t("chat.go") }}</button>
-                  </form>
-                  <div class="mesh-dir-list" role="listbox" :aria-label="t('chat.pickDir')">
-                    <button
-                      v-for="d in dirListing?.dirs || []"
-                      :key="d.path"
-                      type="button"
-                      class="mesh-dir-item"
-                      :title="d.path"
-                      @click="enterDir(d.path)"
-                    >
-                      {{ d.name }}
-                    </button>
-                    <div v-if="dirLoading" class="mesh-pop-empty">{{ t("chat.loading") }}</div>
-                    <div v-else-if="!dirListing?.dirs?.length" class="mesh-pop-empty">{{ t("chat.noSubdirs") }}</div>
-                    <div v-if="dirError" class="mesh-dir-error">{{ dirError }}</div>
-                  </div>
-                  <div class="mesh-dir-foot">
-                    <span class="mesh-dir-current">{{ dirListing?.path || dirPath }}</span>
-                    <button type="button" class="mesh-dir-use" :disabled="!dirListing?.path && !dirPath.trim()" @click="useDir">
-                      {{ t("chat.useDir") }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
           <template #reasoning-message>
             <div class="mesh-reason-skip" hidden></div>
           </template>

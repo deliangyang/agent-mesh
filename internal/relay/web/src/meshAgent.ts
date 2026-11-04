@@ -9,6 +9,7 @@ import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
 import { chatModelOf } from "./chatModel";
+import { loadStoredHistory, saveStoredHistory } from "./historyStore";
 import { resolveModelPref } from "./modelPrefs";
 import { chunkFingerprint, nextPiece, rememberChunk } from "./liveDedup";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
@@ -147,6 +148,7 @@ function bindLiveWatch(sessionId: string, engine: string, node: string): void {
 function cacheLiveThread(threadId: string): void {
   if (!threadId || !historyEvents.length) return;
   historyCache.set(threadId, historyEvents);
+  saveStoredHistory(threadId, historyEvents);
   if (!meshLive.session) return;
   const parsed = threadId.includes("|") ? parseThreadId(threadId) : { node: "", engine: "", session: "" };
   const real = [parsed.node || meshTarget.node, parsed.engine || meshTarget.engine, meshLive.session].join("|");
@@ -765,7 +767,15 @@ export function resetDraft(): void {
 export function expectHistory(threadId: string): void {
   if (!threadId) return;
   chatLoad.thread = threadId;
-  const cached = historyCache.get(threadId);
+  let cached = historyCache.get(threadId);
+  if (!cached || !cached.length) {
+    // Repaint a previously opened session from disk before any network call.
+    const stored = loadStoredHistory(threadId);
+    if (stored && stored.length) {
+      cached = stored;
+      historyCache.set(threadId, stored);
+    }
+  }
   if (cached && cached.length) {
     const sameThread = historyThread === threadId && historySource !== "none";
     historyEvents = cached;
@@ -827,6 +837,7 @@ export function applyHistory(evs: MeshEvent[], reset: boolean): void {
   historySource = "ws";
   historyThread = thread;
   if (thread) historyCache.set(thread, historyEvents);
+  if (thread && reset) saveStoredHistory(thread, historyEvents);
   paintMessages(historyEvents, reset && meshAgent.messages.length === 0);
   putFlags(
     flagsAfterEvents(
@@ -912,6 +923,7 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal, for
     historyThread = threadId;
     historySource = "http";
     historyCache.set(threadId, historyEvents);
+    saveStoredHistory(threadId, historyEvents);
     paintMessages(historyEvents, meshAgent.messages.length === 0);
   } catch (err) {
     if (ac.signal.aborted || gen !== historyGen) return;

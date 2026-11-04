@@ -201,12 +201,16 @@ export function applyNodeCatalogPart(nodeID: string, msg: Record<string, unknown
     return;
   }
   if (msg.type === "sessions") {
+    // One node's snapshot is authoritative for its own rows, but merge fields
+    // (title/cwd/updated_at) with what is already on screen so a scan that
+    // temporarily omits them does not hide the session.
     const keep = catalog.sessions.filter((s) => (s.node_id || "") !== nid);
+    const prev = catalog.sessions.filter((s) => (s.node_id || "") === nid);
     const incoming = ((msg.sessions as Session[]) || []).map((s) => ({
       ...s,
       node_id: s.node_id || nid,
     }));
-    catalog.sessions = sortSessions([...keep, ...incoming]);
+    catalog.sessions = sortSessions([...keep, ...mergeSessionRows(prev, incoming, true, [])]);
     syncWatchedBusy();
     return;
   }

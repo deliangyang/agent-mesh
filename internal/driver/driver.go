@@ -168,6 +168,41 @@ func (s *Set) Models(ctx context.Context, engine string) ([]protocol.Model, erro
 	return out, nil
 }
 
+// ListAllFailed lists sessions from every enabled engine and names the engines
+// whose List failed. Callers that publish a full snapshot can keep those
+// engines' previous rows instead of dropping them.
+func (s *Set) ListAllFailed(ctx context.Context, all bool) ([]protocol.Session, []string) {
+	ds := s.snapshot()
+	results := make([][]protocol.Session, len(ds))
+	failed := make([]string, len(ds))
+	var wg sync.WaitGroup
+	for i, d := range ds {
+		if !s.Enabled(d.Name()) {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, d Driver) {
+			defer wg.Done()
+			rows, err := d.List(ctx, all)
+			if err != nil {
+				failed[i] = d.Name()
+				return
+			}
+			results[i] = rows
+		}(i, d)
+	}
+	wg.Wait()
+	out := []protocol.Session{}
+	names := []string{}
+	for i, rows := range results {
+		out = append(out, rows...)
+		if failed[i] != "" {
+			names = append(names, failed[i])
+		}
+	}
+	return out, names
+}
+
 // ListAll lists sessions from every enabled engine.
 func (s *Set) ListAll(ctx context.Context, engine string, all bool) ([]protocol.Session, error) {
 	ds := s.snapshot()
@@ -190,27 +225,8 @@ func (s *Set) ListAll(ctx context.Context, engine string, all bool) ([]protocol.
 		}
 		return []protocol.Session{}, nil
 	}
-	results := make([][]protocol.Session, len(ds))
-	var wg sync.WaitGroup
-	for i, d := range ds {
-		if !s.Enabled(d.Name()) {
-			continue
-		}
-		wg.Add(1)
-		go func(i int, d Driver) {
-			defer wg.Done()
-			rows, err := d.List(ctx, all)
-			if err == nil {
-				results[i] = rows
-			}
-		}(i, d)
-	}
-	wg.Wait()
-	out := []protocol.Session{}
-	for _, rows := range results {
-		out = append(out, rows...)
-	}
-	return out, nil
+	rows, _ := s.ListAllFailed(ctx, all)
+	return rows, nil
 }
 
 // DirsOf collects workspaces from sessions.

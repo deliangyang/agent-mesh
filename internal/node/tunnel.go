@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -243,12 +244,13 @@ func (w *tunnelRW) send(f protocol.TunnelFrame) error {
 	return w.conn.WriteJSON(f)
 }
 
-func (s *Server) snapshot(ctx context.Context) protocol.NodeSnapshot {
+// snapshot scans every engine. failed names the engines whose List failed, so
+// the caller can keep their previous rows instead of publishing a short list.
+func (s *Server) snapshot(ctx context.Context) (snap protocol.NodeSnapshot, failed []string) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	snap := protocol.NodeSnapshot{}
 	if s.Drivers == nil {
-		return snap
+		return snap, nil
 	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -265,10 +267,7 @@ func (s *Server) snapshot(ctx context.Context) protocol.NodeSnapshot {
 	}()
 	go func() {
 		defer wg.Done()
-		rows, err := s.Drivers.ListAll(ctx, "", true)
-		if err != nil {
-			return
-		}
+		rows, broken := s.Drivers.ListAllFailed(ctx, true)
 		if rows == nil {
 			rows = []protocol.Session{}
 		}
@@ -279,6 +278,7 @@ func (s *Server) snapshot(ctx context.Context) protocol.NodeSnapshot {
 		mu.Lock()
 		snap.Sessions = rows
 		snap.Dirs = dirs
+		failed = broken
 		mu.Unlock()
 	}()
 	go func() {
@@ -295,7 +295,44 @@ func (s *Server) snapshot(ctx context.Context) protocol.NodeSnapshot {
 		mu.Unlock()
 	}()
 	wg.Wait()
-	return snap
+	return snap, failed
+}
+
+// keepFailedSessions replaces a failed engine's freshly scanned (empty) rows
+// with its last known rows, so one slow engine cannot wipe the whole list.
+func keepFailedSessions(snap *protocol.NodeSnapshot, prev protocol.NodeSnapshot, failed []string) {
+	if len(failed) == 0 {
+		return
+	}
+	bad := make(map[string]bool, len(failed))
+	for _, name := range failed {
+		bad[name] = true
+	}
+	rows := make([]protocol.Session, 0, len(snap.Sessions)+len(prev.Sessions))
+	for _, sess := range snap.Sessions {
+		if !bad[sess.Engine] {
+			rows = append(rows, sess)
+		}
+	}
+	for _, sess := range prev.Sessions {
+		if bad[sess.Engine] {
+			rows = append(rows, sess)
+		}
+	}
+	snap.Sessions = rows
+}
+
+// sortSnapshotSessions keeps the snapshot byte-stable across scans; engine
+// Lists walk maps, so their row order is otherwise random and every scan
+// republishes the whole catalog.
+func sortSnapshotSessions(snap *protocol.NodeSnapshot) {
+	sort.SliceStable(snap.Sessions, func(i, j int) bool {
+		if snap.Sessions[i].Engine != snap.Sessions[j].Engine {
+			return snap.Sessions[i].Engine < snap.Sessions[j].Engine
+		}
+		return snap.Sessions[i].ID < snap.Sessions[j].ID
+	})
+	snap.Dirs = driver.DirsOf(snap.Sessions)
 }
 
 func (s *Server) cachedSnapshot(ctx context.Context) protocol.NodeSnapshot {
@@ -321,7 +358,11 @@ func (s *Server) refreshSnapshot(ctx context.Context) {
 	s.mu.Lock()
 	prev := s.snap
 	s.mu.Unlock()
-	snap := s.snapshot(ctx)
+	snap, failed := s.snapshot(ctx)
+	// A failed engine scan returns no rows; keeping its last rows avoids a reset
+	// snapshot that silently clears that engine's sessions on every web client.
+	keepFailedSessions(&snap, prev, failed)
+	sortSnapshotSessions(&snap)
 	s.mu.Lock()
 	snap.Followups = s.snap.Followups
 	raw, _ := json.Marshal(snap)

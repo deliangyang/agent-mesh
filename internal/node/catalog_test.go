@@ -3,8 +3,10 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,62 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
+// flakyDriver fails List on demand so the snapshot can be checked against a
+// scan that silently lost one engine.
+type flakyDriver struct {
+	stubDriver
+	fail bool
+	rows []protocol.Session
+}
+
+func (d *flakyDriver) Name() string { return "flaky" }
+
+func (d *flakyDriver) List(ctx context.Context, all bool) ([]protocol.Session, error) {
+	if d.fail {
+		return nil, errors.New("engine scan failed")
+	}
+	return d.rows, nil
+}
+
+func sessionIDs(rows []protocol.Session) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.ID)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func TestSnapshotKeepsSessionsOfFailedEngine(t *testing.T) {
+	ident, err := e2e.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &flakyDriver{rows: []protocol.Session{{Engine: "flaky", ID: "f1", Title: "keep"}}}
+	set := driver.NewSet()
+	set.Register(d)
+	srv := New(ident, "unused", "test", set, nil)
+	ctx := context.Background()
+
+	srv.refreshSnapshot(ctx)
+	if got := sessionIDs(srv.peekSnapshot().Sessions); !slices.Equal(got, []string{"f1"}) {
+		t.Fatalf("sessions = %v", got)
+	}
+
+	d.fail = true
+	srv.refreshSnapshot(ctx)
+	if got := sessionIDs(srv.peekSnapshot().Sessions); !slices.Equal(got, []string{"f1"}) {
+		t.Fatalf("failed engine dropped its sessions: %v", got)
+	}
+
+	d.fail = false
+	d.rows = nil
+	srv.refreshSnapshot(ctx)
+	if got := srv.peekSnapshot().Sessions; len(got) != 0 {
+		t.Fatalf("removed sessions survived: %v", got)
+	}
+}
 
 func TestLocalModelID(t *testing.T) {
 	ident, err := e2e.Generate()

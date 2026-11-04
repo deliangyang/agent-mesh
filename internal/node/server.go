@@ -394,9 +394,40 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 		return s.dispatchGit(ctx, req)
 	case protocol.MethodGitDiff:
 		return s.dispatchGitDiff(ctx, req)
+	case protocol.MethodStop:
+		return s.dispatchStop(ctx, req)
 	default:
 		return protocol.Response{ID: req.ID, Error: "unknown method"}
 	}
+}
+
+func (s *Server) dispatchStop(ctx context.Context, req protocol.Request) protocol.Response {
+	var p protocol.StopParams
+	_ = json.Unmarshal(req.Params, &p)
+	if p.Engine == "" {
+		return protocol.Response{ID: req.ID, Error: "engine is required"}
+	}
+	key := turnKey(p.Engine, p.SessionID, p.CWD)
+	stopped := false
+	if s.turns != nil {
+		stopped = s.turns.stop(key)
+		if !stopped && p.SessionID != "" && p.CWD != "" {
+			stopped = s.turns.stop(turnKey(p.Engine, "", p.CWD))
+		}
+	}
+	interrupted := false
+	if d, err := s.Drivers.Get(p.Engine); err == nil {
+		if hit, ok := d.(interface {
+			Interrupt(ctx context.Context, sessionID string) error
+		}); ok && p.SessionID != "" {
+			if err := hit.Interrupt(ctx, p.SessionID); err == nil {
+				interrupted = true
+			}
+		}
+	}
+	return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(map[string]any{
+		"ok": true, "stopped": stopped, "interrupted": interrupted,
+	})}
 }
 
 func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-chan protocol.Event, error) {
@@ -422,7 +453,9 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Reply(ctx, p.SessionID, text, s.cliModelFor(p.Model, p.Engine))
+		return s.runTrackedStream(ctx, p.Engine, p.SessionID, p.CWD, func(runCtx context.Context) (<-chan protocol.Event, error) {
+			return d.Reply(runCtx, p.SessionID, text, s.cliModelFor(p.Model, p.Engine))
+		})
 	case protocol.MethodSend:
 		var p protocol.SendParams
 		_ = json.Unmarshal(req.Params, &p)
@@ -434,10 +467,63 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
-		return d.Send(ctx, p.CWD, text, p.Resume, s.cliModelFor(p.Model, p.Engine))
+		return s.runTrackedStream(ctx, p.Engine, p.Resume, p.CWD, func(runCtx context.Context) (<-chan protocol.Event, error) {
+			return d.Send(runCtx, p.CWD, text, p.Resume, s.cliModelFor(p.Model, p.Engine))
+		})
 	default:
 		return nil, fmt.Errorf("method %s is not a stream", req.Method)
 	}
+}
+
+// runTrackedStream keeps the engine alive if the HTTP client drops, and registers
+// the turn so MethodStop / POST /v1/openai/stop can cancel it (same as handleChat).
+func (s *Server) runTrackedStream(
+	ctx context.Context,
+	engine, session, cwd string,
+	start func(context.Context) (<-chan protocol.Event, error),
+) (<-chan protocol.Event, error) {
+	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	handle := &turnHandle{cancel: stop}
+	var turnIDs []string
+	bind := func(sid string) {
+		if s.turns == nil {
+			return
+		}
+		key := turnKey(engine, sid, cwd)
+		for _, k := range turnIDs {
+			if k == key {
+				return
+			}
+		}
+		s.turns.register(key, handle)
+		turnIDs = append(turnIDs, key)
+	}
+	bind(session)
+	ch, err := start(runCtx)
+	if err != nil {
+		stop()
+		for _, k := range turnIDs {
+			s.turns.clear(k, handle)
+		}
+		return nil, err
+	}
+	out := make(chan protocol.Event)
+	go func() {
+		defer close(out)
+		defer stop()
+		defer func() {
+			for _, k := range turnIDs {
+				s.turns.clear(k, handle)
+			}
+		}()
+		for ev := range ch {
+			if ev.Session != "" {
+				bind(ev.Session)
+			}
+			out <- ev
+		}
+	}()
+	return out, nil
 }
 
 // cliModelFor normalizes Vue catalog ids (nodeID/engine/name) the same way as handleChat.

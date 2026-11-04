@@ -693,7 +693,21 @@ export async function stopRemoteTurn(): Promise<void> {
   heldBusy = false;
   meshLive.streaming = false;
   meshLive.thinking = false;
+  const session = meshTarget.session || meshLive.session || "";
+  const cwd = meshTarget.cwd || "";
+  const node = meshTarget.node || "";
   try {
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    if (isE2EMode()) {
+      const { e2eClient } = await import("./e2e/runtime.ts");
+      await e2eClient().call(node, "stop", {
+        engine,
+        session_id: session,
+        cwd,
+      });
+      return;
+    }
     await fetchJSON(
       "/v1/openai/stop",
       {
@@ -702,9 +716,9 @@ export async function stopRemoteTurn(): Promise<void> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           engine,
-          session: meshTarget.session || meshLive.session || "",
-          cwd: meshTarget.cwd || "",
-          node: meshTarget.node || "",
+          session,
+          cwd,
+          node,
         }),
       },
       8000,

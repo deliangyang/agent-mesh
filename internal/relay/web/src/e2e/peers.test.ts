@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, before, describe, it } from "node:test";
-import { clearNodePeers, listNodePeers, peerByID, saveNodePeers } from "./peers.ts";
+import { clearNodePeers, listNodePeers, peerByID, removeNodePeer, saveNodePeers } from "./peers.ts";
 
 const mem = new Map<string, string>();
 
@@ -42,8 +42,17 @@ describe("peers", () => {
         sign_pub: "AQID",
         x25519_pub: "BAUG",
       },
+      {
+        id: "n2",
+        name: "other",
+        sign_pub: "AAAA",
+        x25519_pub: "BBBB",
+      },
     ]);
     assert.equal(peerByID("n1")?.name, "box");
+    assert.equal(listNodePeers().length, 2);
+    removeNodePeer("n1");
+    assert.equal(peerByID("n1"), undefined);
     assert.equal(listNodePeers().length, 1);
     clearNodePeers();
     assert.equal(listNodePeers().length, 0);

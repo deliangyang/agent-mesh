@@ -74,7 +74,7 @@ Run a single Go package with `go test ./internal/driver ./internal/relay`. Do no
 
 ## Protocol
 
-Node RPC (`internal/protocol`): `list` `status` `history` `watch` `reply` `send` `health` `info` `engines` `models` `commands` `followups` `choice` `git` `git_diff` `catalog`.
+Node RPC (`internal/protocol`): `list` `status` `history` `watch` `reply` `send` `health` `info` `engines` `models` `commands` `followups` `choice` `git` `git_diff` `catalog` `stop`.
 
 Relay Web E2E catalog: browser opens `GET /v1/to/{id}/e2e/ws`, sends a sealed `catalog` stream request, receives sealed busMsg frames (sessions/engines/…); relay only bridges ciphertext.
 

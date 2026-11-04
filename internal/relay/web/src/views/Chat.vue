@@ -163,12 +163,23 @@ async function probeGitRepos(): Promise<void> {
   }
   const seq = ++gitProbeSeq;
   try {
-    const q = new URLSearchParams({ cwd, node });
-    const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
-    if (!resp.ok) throw new Error("git probe failed");
-    const data = (await resp.json()) as { repos?: GitRepo[] };
+    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
+    await ensureMeshMode();
+    let repos: GitRepo[] = [];
+    if (isE2EMode()) {
+      const { e2eClient } = await import("../e2e/runtime.ts");
+      const resp = await e2eClient().call(node, "git", { cwd });
+      const body = (resp.body || {}) as { repos?: GitRepo[] };
+      repos = body.repos || [];
+    } else {
+      const q = new URLSearchParams({ cwd, node });
+      const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
+      if (!resp.ok) throw new Error("git probe failed");
+      const data = (await resp.json()) as { repos?: GitRepo[] };
+      repos = data.repos || [];
+    }
     if (seq !== gitProbeSeq) return;
-    gitRepos.value = data.repos || [];
+    gitRepos.value = repos;
   } catch {
     if (seq !== gitProbeSeq) return;
     gitRepos.value = [];

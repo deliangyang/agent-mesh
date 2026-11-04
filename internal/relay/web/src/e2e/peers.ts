@@ -42,6 +42,12 @@ export function peerByID(id: string): NodeRow | undefined {
   return rows.find((n) => n.id === id);
 }
 
+export function removeNodePeer(id: string): void {
+  if (!id) return;
+  memory = listNodePeers().filter((n) => n.id !== id);
+  writeStore(memory);
+}
+
 export function clearNodePeers(): void {
   memory = [];
   try {

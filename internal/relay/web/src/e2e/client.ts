@@ -10,7 +10,7 @@ import {
   type Envelope,
 } from "./frame.ts";
 import { parseNodePublic, type Identity, type PublicIdentity } from "./identity.ts";
-import { listNodePeers, peerByID, saveNodePeers } from "./peers.ts";
+import { listNodePeers, peerByID, removeNodePeer, saveNodePeers } from "./peers.ts";
 import { beginHandshake, finishHandshake, open, seal, sessionExpired, type HandshakeState, type Session } from "./session.ts";
 
 export type NodeRow = {
@@ -135,13 +135,13 @@ export class E2EClient {
     return pending;
   }
 
-  private async handshake(nodeID: string): Promise<NodeSession> {
+  private async handshake(nodeID: string, refreshed = false): Promise<NodeSession> {
     const cached = nodeID ? this.byNode.get(nodeID) : undefined;
     if (cached && !sessionExpired(cached.sess)) return cached;
 
     // Prefer plaintext pubs cached from /v1/nodes (settings Nodes panel); refresh if missing.
     let row = nodeID ? peerByID(nodeID) : listNodePeers()[0];
-    if (!row || row.sign_pub == null || row.x25519_pub == null) {
+    if (!row || row.sign_pub == null || row.x25519_pub == null || refreshed) {
       const rows = await this.nodes();
       row = rows.find((n) => n.id === nodeID) || (!nodeID ? rows[0] : undefined);
     }
@@ -150,15 +150,24 @@ export class E2EClient {
     const raced = this.byNode.get(row.id);
     if (raced && !sessionExpired(raced.sess)) return raced;
 
-    const peer = parseNodePublic(row);
-    const base = `${this.relay}/v1/to/${peer.id}`;
-    const { env, state } = await beginHandshake(this.ident, peer);
-    const ack = await this.postEnvelope(base + "/handshake", env);
-    const sess = await finishHandshake(this.ident, peer, state, ack);
-    this.genSeq += 1;
-    const held: NodeSession = { peer, sess, base, gen: this.genSeq };
-    this.byNode.set(peer.id, held);
-    return held;
+    try {
+      const peer = parseNodePublic(row);
+      const base = `${this.relay}/v1/to/${peer.id}`;
+      const { env, state } = await beginHandshake(this.ident, peer);
+      const ack = await this.postEnvelope(base + "/handshake", env);
+      const sess = await finishHandshake(this.ident, peer, state, ack);
+      this.genSeq += 1;
+      const held: NodeSession = { peer, sess, base, gen: this.genSeq };
+      this.byNode.set(peer.id, held);
+      return held;
+    } catch (err) {
+      // Stale pubs (node rekeyed) — drop cache and retry once from /v1/nodes.
+      if (!refreshed) {
+        removeNodePeer(row.id);
+        return this.handshake(nodeID, true);
+      }
+      throw err;
+    }
   }
 
   async call(nodeID: string, method: string, params?: unknown, signal?: AbortSignal): Promise<RPCResponse> {

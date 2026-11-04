@@ -24,6 +24,7 @@ const (
 	MethodGit       = "git"
 	MethodGitDiff   = "git_diff"
 	MethodCatalog   = "catalog" // encrypted push of node catalog parts (sessions/engines/…)
+	MethodStop      = "stop"    // cancel an in-flight send/reply turn
 )
 
 // Request is an RPC request before encryption.
@@ -205,6 +206,13 @@ type ChoiceParams struct {
 	Session string `json:"session,omitempty"`
 	CWD     string `json:"cwd,omitempty"`
 	Text    string `json:"text"`
+}
+
+// StopParams cancels an in-flight engine turn (E2E equivalent of POST /v1/openai/stop).
+type StopParams struct {
+	Engine    string `json:"engine"`
+	SessionID string `json:"session_id,omitempty"`
+	CWD       string `json:"cwd,omitempty"`
 }
 
 // GitParams lists git repos under a workspace.

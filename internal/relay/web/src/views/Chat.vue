@@ -233,7 +233,7 @@ function sessionStamp(s: Session): number {
 
 function sessionListable(s: Session): boolean {
   if (selected.value && selected.value.id === s.id && selected.value.engine === s.engine) return true;
-  if (s.busy || sessionStreaming(s)) return true;
+  if (s.active || s.busy || sessionStreaming(s)) return true;
   return !!(s.title || "").trim();
 }
 
@@ -339,7 +339,9 @@ function reloadPage(): void {
 
 function sessionStreaming(s: Session | null): boolean {
   if (!s) return false;
-  if (s.busy) return true;
+  // The node clears active the moment its turn's stream closes; trust it over
+  // the driver's file-mtime busy flag (which can lag by minutes).
+  if (s.active) return true;
   if (!meshLive.streaming) return false;
   if (meshLive.session) return s.id === meshLive.session;
   if (creating.value && !s.id) return true;
@@ -784,8 +786,10 @@ function removeComposerAttach(id: string, rows: { id?: string }[]): void {
 }
 
 function composerBusy(slot: { isRunning?: boolean }): boolean {
-  if (slot.isRunning) return true;
-  return chatStreaming.value;
+  // CopilotKit can leave isRunning set after a failed/aborted run; trust the
+  // node's active flag plus our own stream before queueing a follow-up.
+  if (chatStreaming.value) return true;
+  return Boolean(slot.isRunning && meshLive.streaming);
 }
 
 function stopTurn(slot: { onStop?: () => void }): void {
@@ -1046,7 +1050,7 @@ onBeforeUnmount(() => {
             }"
             @click="openSession(s)"
           >
-            <span v-if="sessionStreaming(s)" class="mesh-lamp" aria-hidden="true"></span>
+            <span v-if="s.active || s.busy || sessionStreaming(s)" class="mesh-lamp" aria-hidden="true"></span>
             <span class="mesh-thread-name">{{ s.title || t("nav.untitled") }}</span>
           </button>
         </div>

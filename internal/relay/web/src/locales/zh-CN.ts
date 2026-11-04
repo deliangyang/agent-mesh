@@ -246,6 +246,12 @@ export const zhCN: Record<string, string> = {
   "ask.chooseThis": "确认选择",
   "ask.pleaseChoose": "请选择",
   "ask.pickFirst": "请先选择一个选项",
+  "ask.recommended": "推荐",
+  "ask.customPlaceholder": "或直接输入你的答案…",
+  "ask.planHeader": "计划",
+  "ask.planPrompt": "批准这个计划吗？",
+  "ask.planApprove": "批准",
+  "ask.planKeep": "继续规划",
 
   "followups.label": "待发送",
   "followups.stop": "停止",

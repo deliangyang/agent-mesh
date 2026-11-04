@@ -54,6 +54,15 @@ func (t *turnCancels) clear(key string, h *turnHandle) {
 	t.mu.Unlock()
 }
 
+func (t *turnCancels) active(key string) bool {
+	if key == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.m[key] != nil
+}
+
 func (t *turnCancels) stop(key string) bool {
 	if key == "" {
 		return false

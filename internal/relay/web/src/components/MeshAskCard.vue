@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { dismissAsk, meshAsk, submitAsk } from "../ask";
 import { t } from "../locale";
 
 const picks = reactive<Record<string, string[]>>({});
+const note = ref("");
 
 watch(
   () => meshAsk.prompt,
   (prompt) => {
     for (const key of Object.keys(picks)) delete picks[key];
+    note.value = "";
     if (!prompt) return;
     for (const q of prompt.questions) {
       picks[q.id || q.prompt] = [];
@@ -20,6 +22,7 @@ watch(
 const ready = computed(() => {
   const prompt = meshAsk.prompt;
   if (!prompt) return false;
+  if (note.value.trim()) return true;
   return prompt.questions.every((q) => (picks[q.id || q.prompt] || []).length > 0);
 });
 
@@ -45,7 +48,7 @@ function toggle(qkey: string, id: string, multi: boolean): void {
 
 async function confirm(): Promise<void> {
   if (!meshAsk.prompt || !ready.value || meshAsk.answering) return;
-  await submitAsk(meshAsk.prompt, { ...picks });
+  await submitAsk(meshAsk.prompt, { ...picks }, note.value);
 }
 
 function onKey(ev: KeyboardEvent): void {
@@ -74,24 +77,36 @@ onBeforeUnmount(() => {
     <div v-if="meshAsk.prompt.title" class="mesh-ask-title">{{ meshAsk.prompt.title }}</div>
     <div v-for="q in meshAsk.prompt.questions" :key="keyOf(q)" class="mesh-ask-q">
       <p>{{ q.prompt }}</p>
+      <pre v-if="q.detail" class="mesh-ask-detail">{{ q.detail }}</pre>
       <button
         v-for="opt in q.options"
         :key="opt.id"
         type="button"
         class="mesh-ask-opt"
-        :class="{ on: chosen(keyOf(q), opt.id) }"
+        :class="{ on: chosen(keyOf(q), opt.id), 'is-recommended': opt.recommended }"
         :aria-pressed="chosen(keyOf(q), opt.id)"
         @click="toggle(keyOf(q), opt.id, !!q.multi)"
       >
         <span class="mesh-ask-mark" aria-hidden="true"></span>
         <span class="mesh-ask-opt-body">
-          <span class="mesh-ask-opt-label">{{ opt.label }}</span>
+          <span class="mesh-ask-opt-label">
+            {{ opt.label }}
+            <span v-if="opt.recommended" class="mesh-ask-rec">{{ t("ask.recommended") }}</span>
+          </span>
           <span v-if="opt.hint" class="mesh-ask-opt-hint">{{ opt.hint }}</span>
         </span>
       </button>
     </div>
     <div class="mesh-ask-bar">
       <p v-if="meshAsk.error" class="mesh-ask-err">{{ meshAsk.error }}</p>
+      <input
+        v-model="note"
+        class="mesh-ask-input"
+        type="text"
+        :placeholder="t('ask.customPlaceholder')"
+        autocomplete="off"
+        @keydown.enter.prevent="confirm"
+      />
       <button type="button" class="mesh-ask-go" :disabled="!ready || meshAsk.answering" @click="confirm">
         {{ meshAsk.answering ? t("ask.submitting") : t("ask.chooseThis") }}
       </button>

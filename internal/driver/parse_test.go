@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -789,5 +790,26 @@ func TestParseJSONLAssistantKeepsMarkdownTable(t *testing.T) {
 	})
 	if len(evs) != 1 || evs[0].Text != text {
 		t.Fatalf("table %#v", evs)
+	}
+}
+
+func TestAskFromPlanTool(t *testing.T) {
+	ev, ok := AskFromTool("ExitPlanMode", map[string]any{"plan": "1. read the code\n2. fix the bug"}, "p1")
+	if !ok || ev.Type != "ask" {
+		t.Fatalf("event %#v ok=%v", ev, ok)
+	}
+	var p AskPrompt
+	if err := json.Unmarshal([]byte(ev.Text), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != "plan" || len(p.Questions) != 1 {
+		t.Fatalf("prompt %#v", p)
+	}
+	q := p.Questions[0]
+	if !strings.Contains(q.Detail, "fix the bug") {
+		t.Fatalf("detail %q", q.Detail)
+	}
+	if len(q.Options) < 2 || !q.Options[0].Recommended {
+		t.Fatalf("options %#v", q.Options)
 	}
 }

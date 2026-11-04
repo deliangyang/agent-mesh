@@ -246,6 +246,12 @@ export const en: Record<string, string> = {
   "ask.chooseThis": "Choose this",
   "ask.pleaseChoose": "Please choose",
   "ask.pickFirst": "Pick an option first",
+  "ask.recommended": "Recommended",
+  "ask.customPlaceholder": "Or type your own answer…",
+  "ask.planHeader": "Plan",
+  "ask.planPrompt": "Approve this plan?",
+  "ask.planApprove": "Approve",
+  "ask.planKeep": "Keep planning",
 
   "followups.label": "follow-ups",
   "followups.stop": "Stop",

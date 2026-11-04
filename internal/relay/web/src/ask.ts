@@ -31,6 +31,13 @@ function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
+function planToolName(name: string): boolean {
+  const n = String(name || "")
+    .toLowerCase()
+    .replace(/[_\-\s]/g, "");
+  return n === "exitplanmode" || n === "presentplan" || n === "submitplan" || n === "planapproval" || n === "plan";
+}
+
 function askToolName(name: string): boolean {
   const n = String(name || "")
     .toLowerCase()
@@ -57,7 +64,14 @@ function parseOptions(v: unknown): AskOption[] {
     const label = str(m.label) || str(m.title) || str(m.text) || str(m.name) || str(m.value);
     const id = str(m.id) || str(m.value) || label;
     if (!label) continue;
-    out.push({ id, label, hint: str(m.description) || str(m.hint) || str(m.detail) });
+    const recommended =
+      Boolean(m.recommended) || /\(recommended\)|（推荐）/i.test(label);
+    out.push({
+      id,
+      label,
+      hint: str(m.description) || str(m.hint) || str(m.detail),
+      recommended,
+    });
   }
   return out;
 }
@@ -71,6 +85,7 @@ function parseQuestion(v: unknown): AskQuestion | null {
     id: str(m.id) || str(m.header) || prompt || "q",
     prompt: prompt || str(m.header) || t("ask.pleaseChoose"),
     header: str(m.header),
+    detail: str(m.detail) || str(m.plan),
     multi: Boolean(m.multiSelect || m.multi),
     options,
   };
@@ -129,7 +144,7 @@ function settleAsk(): void {
 function isAskToolCall(type: string, tool: string): boolean {
   return (
     (type === "tool_call" || type === "tool_use" || type === "tool-call" || type === "function_call") &&
-    askToolName(tool)
+    (askToolName(tool) || planToolName(tool))
   );
 }
 
@@ -175,7 +190,36 @@ export function noteAskEvents(evs: MeshEvent[], reset: boolean): void {
   for (const ev of evs || []) noteAskEvent(ev);
 }
 
+function parsePlanPrompt(name: string, args: unknown, id?: string): AskPrompt | null {
+  const m = asObject(args);
+  const plan = str(m.plan) || str(m.text) || str(m.content) || str(m.summary) || str(m.description);
+  if (!plan) return null;
+  const qid = id || "plan";
+  return {
+    id: qid,
+    kind: "plan",
+    title: plan.slice(0, 120),
+    questions: [
+      {
+        id: qid,
+        prompt: t("ask.planPrompt"),
+        header: t("ask.planHeader"),
+        detail: plan.slice(0, 8000),
+        options: [
+          { id: "approve", label: t("ask.planApprove"), recommended: true },
+          { id: "keep-planning", label: t("ask.planKeep") },
+        ],
+      },
+    ],
+  };
+}
+
 export function noteAskFromTool(name: string, args: unknown, id?: string): void {
+  if (planToolName(name)) {
+    const plan = parsePlanPrompt(name, args, id);
+    if (plan) showPrompt(plan);
+    return;
+  }
   if (!askToolName(name)) {
     if (name && name !== "tool") settleAsk();
     return;
@@ -200,7 +244,9 @@ export function clearAsk(): void {
   meshAsk.dismissed = "";
 }
 
-export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[]>): string {
+export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[]>, note = ""): string {
+  const custom = String(note || "").trim();
+  if (custom && !Object.values(picks).some((rows) => rows && rows.length)) return custom;
   if (prompt.kind === "permission") {
     for (const q of prompt.questions) {
       const sel = picks[q.id || q.prompt] || picks[q.prompt] || [];
@@ -223,11 +269,16 @@ export function formatAskAnswer(prompt: AskPrompt, picks: Record<string, string[
     lines.push((q.header || q.prompt) + " → " + joined);
   }
   const json = JSON.stringify({ answers });
-  return lines.length ? lines.join("\n") + "\n" + json : json;
+  const base = lines.length ? lines.join("\n") + "\n" + json : json;
+  return custom ? base + "\n" + custom : base;
 }
 
-export async function submitAsk(prompt: AskPrompt, picks: Record<string, string[]>): Promise<boolean> {
-  const text = formatAskAnswer(prompt, picks).trim();
+export async function submitAsk(
+  prompt: AskPrompt,
+  picks: Record<string, string[]>,
+  note = "",
+): Promise<boolean> {
+  const text = formatAskAnswer(prompt, picks, note).trim();
   if (!text) {
     meshAsk.error = t("ask.pickFirst");
     return false;

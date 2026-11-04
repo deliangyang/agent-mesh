@@ -618,6 +618,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		for _, k := range turnIDs {
 			s.turns.clear(k, handle)
 		}
+		go s.publishCatalog()
 	}()
 	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text, modelName, req.Thinking)
 	if err != nil {

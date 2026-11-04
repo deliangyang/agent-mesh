@@ -166,6 +166,20 @@ function looksLikeSessionMeta(text: string): boolean {
   return SESSION_ID_RE.test(s);
 }
 
+const COMMAND_SCAFFOLD_RE =
+  /^\s*(?:<command-message>[\s\S]*?<\/command-message>\s*)?(?:<command-name>[\s\S]*?<\/command-name>\s*)?$/i;
+const SKILL_EXPANSION_RE = /^\s*Base directory for this skill:/i;
+
+// Claude Code renders slash commands as <command-*> scaffolding plus a separate
+// expanded template message. Both are internal; the user bubble shows neither.
+function stripCommandScaffold(text: string): string {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  if (SKILL_EXPANSION_RE.test(raw)) return "";
+  if (COMMAND_SCAFFOLD_RE.test(raw) && /<command-(?:name|message)>/i.test(raw)) return "";
+  return raw.replace(/<\/?command-(?:message|name|args)>/gi, "").trim();
+}
+
 function stripMeshAttach(text: string): string {
   let s = String(text || "");
   const open = "<<MESH_ATTACH>>";
@@ -190,7 +204,7 @@ function dropInjectedUserPrefix(text: string): string {
 }
 
 export function cleanUserText(text: string): string {
-  const raw = stripSystemReminders(stripMeshAttach(String(text || "")));
+  const raw = stripSystemReminders(stripMeshAttach(stripCommandScaffold(String(text || ""))));
   const queries: string[] = [];
   raw.replace(USER_QUERY_RE, (_m, inner: string) => {
     const s = String(inner || "").trim();

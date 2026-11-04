@@ -517,6 +517,8 @@ func (s *Server) runTrackedStream(
 			for _, k := range turnIDs {
 				s.turns.clear(k, handle)
 			}
+			// Drop the active flag now, not on the next 5s snapshot tick.
+			go s.publishCatalog()
 		}()
 		for ev := range ch {
 			if ev.Session != "" {

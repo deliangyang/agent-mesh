@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-mesh/internal/driver"
 	"agent-mesh/internal/followup"
 	"agent-mesh/internal/i18n"
 	"agent-mesh/internal/protocol"
@@ -64,12 +65,30 @@ func (s *Server) followups() *followRuns {
 	return s.follow
 }
 
-func (s *Server) sessionBusy(ctx context.Context, engine, session, cwd string) bool {
+// turnActive reports whether this node is running a tracked turn for the
+// session. It flips the moment the engine stream closes, unlike the driver's
+// file-mtime Busy heuristic.
+func (s *Server) turnActive(engine, session, cwd string) bool {
+	if engine == "" {
+		return false
+	}
+	if s.turns != nil {
+		if session != "" && s.turns.active(turnKey(engine, session, cwd)) {
+			return true
+		}
+		if cwd != "" && s.turns.active(turnKey(engine, "", cwd)) {
+			return true
+		}
+	}
 	runs := s.followups()
 	if session != "" && runs.running(engine, session) {
 		return true
 	}
-	if cwd != "" && runs.running(engine, "cwd:"+cwd) {
+	return cwd != "" && runs.running(engine, "cwd:"+cwd)
+}
+
+func (s *Server) sessionBusy(ctx context.Context, engine, session, cwd string) bool {
+	if s.turnActive(engine, session, cwd) {
 		return true
 	}
 	if session == "" {
@@ -85,7 +104,9 @@ func (s *Server) sessionBusy(ctx context.Context, engine, session, cwd string) b
 	}
 	for _, row := range rows {
 		if row.ID == session {
-			return row.Busy
+			// Some drivers keep Busy for minutes after the turn (workbuddy uses a
+			// 2-minute window); gate on the transcript mtime instead.
+			return row.Busy && (row.JSONL == "" || driver.RecentWithin(row.JSONL, 10*time.Second))
 		}
 	}
 	return false
@@ -223,10 +244,19 @@ func (s *Server) drainSession(engine, session, cwd string) {
 		runs.mu.Unlock()
 	}()
 	fails := 0
+	waited := time.Duration(0)
 	for {
 		if s.sessionBusy(context.Background(), engine, session, cwd) {
-			time.Sleep(400 * time.Millisecond)
-			continue
+			// Do not wait forever on a stale busy flag; a live engine accepts the
+			// reply once its current turn actually ends.
+			if waited >= 60*time.Second {
+				waited = 0
+				s.Log.Warn("followup drain: session still busy, trying anyway", "engine", engine, "session", session)
+			} else {
+				time.Sleep(400 * time.Millisecond)
+				waited += 400 * time.Millisecond
+				continue
+			}
 		}
 		it, rest, ok, err := followup.Pop(engine, session)
 		if err != nil || !ok {
@@ -334,6 +364,7 @@ func (s *Server) drainIdle(prev, next []protocol.Session) {
 func (s *Server) dispatchFollow(engine, session, cwd string, it followup.Item) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
+	defer func() { go s.publishCatalog() }()
 	if session != "" {
 		if _, name, ok := s.driverForSession(ctx, session, engine); ok {
 			engine = name

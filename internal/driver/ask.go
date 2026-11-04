@@ -20,15 +20,17 @@ type AskQuestion struct {
 	ID      string      `json:"id,omitempty"`
 	Prompt  string      `json:"prompt"`
 	Header  string      `json:"header,omitempty"`
+	Detail  string      `json:"detail,omitempty"` // plan text or long prompt body
 	Multi   bool        `json:"multi,omitempty"`
 	Options []AskOption `json:"options"`
 }
 
 // AskOption is a choice.
 type AskOption struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Hint  string `json:"hint,omitempty"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Hint        string `json:"hint,omitempty"`
+	Recommended bool   `json:"recommended,omitempty"`
 }
 
 func askToolName(name string) bool {
@@ -43,6 +45,19 @@ func askToolName(name string) bool {
 	return strings.Contains(n, "askuser") || strings.HasSuffix(n, "question")
 }
 
+// planToolName matches tools that submit a plan for approval.
+func planToolName(name string) bool {
+	n := strings.ToLower(name)
+	n = strings.ReplaceAll(n, "_", "")
+	n = strings.ReplaceAll(n, "-", "")
+	n = strings.ReplaceAll(n, " ", "")
+	switch n {
+	case "exitplanmode", "presentplan", "submitplan", "planapproval", "plan":
+		return true
+	}
+	return false
+}
+
 func permissionType(kind string) bool {
 	k := strings.ToLower(kind)
 	return k == "control_request" || k == "permission" || k == "permission_request" || k == "can_use_tool"
@@ -50,6 +65,9 @@ func permissionType(kind string) bool {
 
 // AskFromTool turns tool arguments into an ask event.
 func AskFromTool(name string, args any, id string) (protocol.Event, bool) {
+	if planToolName(name) {
+		return planAsk(name, args, id)
+	}
 	if !askToolName(name) {
 		return protocol.Event{}, false
 	}
@@ -63,6 +81,45 @@ func AskFromTool(name string, args any, id string) (protocol.Event, bool) {
 	p.ID = id
 	if p.Title == "" {
 		p.Title = firstAskTitle(p)
+	}
+	raw, _ := json.Marshal(p)
+	return protocol.Event{
+		Type:    "ask",
+		Role:    "assistant",
+		Tool:    name,
+		Text:    string(raw),
+		Preview: Truncate(p.Title, 120),
+	}, true
+}
+
+// planAsk turns an ExitPlanMode-style tool call into a plan approval prompt.
+func planAsk(name string, args any, id string) (protocol.Event, bool) {
+	m := argsMap(args)
+	plan := strField(m, "plan", "text", "content", "summary", "description")
+	if plan == "" {
+		plan = payloadText(args)
+	}
+	plan = strings.TrimSpace(plan)
+	if plan == "" {
+		return protocol.Event{}, false
+	}
+	if id == "" {
+		id = "plan"
+	}
+	p := AskPrompt{
+		ID:    id,
+		Kind:  "plan",
+		Title: Truncate(plan, 120),
+		Questions: []AskQuestion{{
+			ID:     id,
+			Prompt: "Approve this plan?",
+			Header: "Plan",
+			Detail: Truncate(plan, 8000),
+			Options: []AskOption{
+				{ID: "approve", Label: "Approve", Recommended: true},
+				{ID: "keep-planning", Label: "Keep planning"},
+			},
+		}},
 	}
 	raw, _ := json.Marshal(p)
 	return protocol.Event{
@@ -89,6 +146,11 @@ func askFromControl(obj map[string]any) []protocol.Event {
 	tool := strField(req, "tool_name", "toolName", "name")
 	if tool == "" {
 		tool = "tool"
+	}
+	if planToolName(tool) {
+		if ev, ok := planAsk(tool, req["input"], id); ok {
+			return []protocol.Event{ev}
+		}
 	}
 	detail := previewArgs(req["input"])
 	if detail == "" {
@@ -211,10 +273,16 @@ func parseOptions(v any) []AskOption {
 			if id == "" {
 				id = label
 			}
+			rec, _ := t["recommended"].(bool)
+			if !rec {
+				low := strings.ToLower(label)
+				rec = strings.Contains(low, "(recommended)") || strings.Contains(low, "（推荐）")
+			}
 			out = append(out, AskOption{
-				ID:    id,
-				Label: label,
-				Hint:  strField(t, "description", "hint", "detail"),
+				ID:          id,
+				Label:       label,
+				Hint:        strField(t, "description", "hint", "detail"),
+				Recommended: rec,
 			})
 		default:
 			_ = i

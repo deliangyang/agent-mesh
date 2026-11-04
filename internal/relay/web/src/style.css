@@ -2390,6 +2390,46 @@ html.dark #app {
   line-height: 1.45;
 }
 
+.mesh-ask-detail {
+  max-height: 240px;
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  overflow: auto;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mesh-ask-rec {
+  margin-left: 6px;
+  padding: 1px 6px;
+  color: var(--signal);
+  background: var(--signal-soft);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.mesh-ask-opt.is-recommended .mesh-ask-opt-label {
+  font-weight: 600;
+}
+
+.mesh-ask-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
 .mesh-ask-opt {
   display: flex;
   align-items: flex-start;

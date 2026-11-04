@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearAsk, dismissAsk, meshAsk, noteAskEvents } from "./ask.ts";
+import { clearAsk, dismissAsk, formatAskAnswer, meshAsk, noteAskEvents, noteAskFromTool } from "./ask.ts";
 
 const askText = JSON.stringify({
   id: "q1",
@@ -85,4 +85,19 @@ test("after a manual dismiss, a new question still pops", () => {
   dismissAsk();
   noteAskEvents([askEvent("q2")], true);
   assert.equal(meshAsk.prompt?.id, "q2");
+});
+
+test("a plan tool call asks for approval with a recommended choice", () => {
+  clearAsk();
+  noteAskFromTool("ExitPlanMode", { plan: "1. read the code\n2. fix the bug" }, "p1");
+  const prompt = meshAsk.prompt;
+  assert.ok(prompt);
+  assert.equal(prompt.kind, "plan");
+  assert.equal(prompt.questions[0].detail.includes("fix the bug"), true);
+  assert.equal(prompt.questions[0].options[0].recommended, true);
+});
+
+test("free text alone is a valid answer", () => {
+  assert.equal(formatAskAnswer({ kind: "plan", questions: [] }, {}, "looks good"), "looks good");
+  assert.equal(formatAskAnswer({ kind: "plan", questions: [] }, {}, "") , '{"answers":{}}');
 });

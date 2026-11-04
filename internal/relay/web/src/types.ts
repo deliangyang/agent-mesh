@@ -60,6 +60,8 @@ export type Session = {
   cwd?: string;
   live?: boolean;
   busy?: boolean;
+  /** The node is running a tracked turn right now. */
+  active?: boolean;
   updated_at?: number;
   node_id?: string;
   node_name?: string;
@@ -93,12 +95,14 @@ export type AskOption = {
   id: string;
   label: string;
   hint?: string;
+  recommended?: boolean;
 };
 
 export type AskQuestion = {
   id?: string;
   prompt: string;
   header?: string;
+  detail?: string;
   multi?: boolean;
   options: AskOption[];
 };

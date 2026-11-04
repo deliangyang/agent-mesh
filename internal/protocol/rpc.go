@@ -84,6 +84,7 @@ type Session struct {
 	PID       int    `json:"pid,omitempty"`
 	Live      bool   `json:"live"`
 	Busy      bool   `json:"busy"`
+	Active    bool   `json:"active"` // a tracked turn is running on this node right now
 	UpdatedAt int64  `json:"updated_at,omitempty"`
 	JSONL     string `json:"jsonl,omitempty"`
 	Extra     string `json:"extra,omitempty"`

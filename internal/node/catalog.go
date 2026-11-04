@@ -122,6 +122,15 @@ func (s *Server) webCatalog() (nodes []protocol.NodeInfo, engines []engineRow, m
 			sess.NodeID = info.ID
 			sess.NodeName = info.Name
 		}
+		// Active is authoritative for turns this node runs; Busy stays the
+		// driver's file-mtime guess, capped so it cannot look busy for minutes
+		// after the turn ended.
+		sess.Active = s.turnActive(sess.Engine, sess.ID, sess.CWD)
+		if sess.Active {
+			sess.Busy = true
+		} else if sess.JSONL != "" && !driver.RecentWithin(sess.JSONL, 12*time.Second) {
+			sess.Busy = false
+		}
 		sessions = append(sessions, sess)
 	}
 	followups = []protocol.FollowQueue{}

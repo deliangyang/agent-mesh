@@ -210,3 +210,11 @@ test("a user turn with only system-reminder blocks is dropped", () => {
 test("an unclosed system-reminder does not leak its content", () => {
   assert.equal(cleanUserText("hello\n<system-reminder>ctx to eof"), "hello");
 });
+
+test("slash-command scaffolding does not render as a user bubble", () => {
+  const rows = mergeEvents([
+    { type: "user", role: "user", text: "<command-message>mesh-deploy</command-message>\n<command-name>/mesh-deploy</command-name>" },
+    { type: "user", role: "user", text: "Base directory for this skill: /repo/.claude/skills/mesh-deploy\n\n# Deploy\nrun it" },
+  ]);
+  assert.equal(rows.length, 0);
+});

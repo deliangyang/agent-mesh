@@ -89,6 +89,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer s.Hub.Unsubscribe(hid)
 	bid, bch := s.bus.subscribe()
 	defer s.bus.unsubscribe(bid)
+	// One live subscription per client: only the watched node/engine/session
+	// reaches this socket. An empty watch unsubscribes.
+	var watchMu sync.Mutex
+	var watch watchTarget
 	for _, msg := range s.catalogParts() {
 		if err := write(msg); err != nil {
 			return
@@ -102,6 +106,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			var msg struct {
 				Type    string `json:"type"`
+				Node    string `json:"node"`
 				Engine  string `json:"engine"`
 				Session string `json:"session"`
 			}
@@ -114,6 +119,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 					_ = write(part)
 				}
 			case "watch":
+				watchMu.Lock()
+				watch = watchTarget{node: msg.Node, engine: msg.Engine, session: msg.Session}
+				watchMu.Unlock()
 				s.sendWatchHistory(write, msg.Engine, msg.Session)
 			}
 		}
@@ -125,6 +133,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		case chunk, ok := <-hch:
 			if !ok {
 				return
+			}
+			watchMu.Lock()
+			target := watch
+			watchMu.Unlock()
+			if !watchAllows(chunk, target) {
+				continue
 			}
 			cp := chunk
 			if err := write(busMsg{Type: "chunk", Chunk: &cp}); err != nil {
@@ -139,6 +153,31 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+type watchTarget struct {
+	node    string
+	engine  string
+	session string
+}
+
+// watchAllows reports whether a live chunk belongs to the client's watched
+// node/engine/session. An empty watch receives no live chunks (its own turn
+// still streams over the send/reply response).
+func watchAllows(c openai.Chunk, target watchTarget) bool {
+	if target.session == "" && target.engine == "" && target.node == "" {
+		return false
+	}
+	if target.node != "" && c.Mesh.NodeID != "" && c.Mesh.NodeID != target.node {
+		return false
+	}
+	if target.engine != "" && c.Mesh.Engine != "" && c.Mesh.Engine != target.engine {
+		return false
+	}
+	if target.session != "" {
+		return c.Mesh.Session == target.session
+	}
+	return true
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {

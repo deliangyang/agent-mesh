@@ -253,7 +253,12 @@ export function watchSession(s: Session | null): void {
       return;
     }
     if (same && ws && ws.readyState === WebSocket.OPEN) return;
-    if (!s || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!s) {
+      // Unsubscribe: one live session/engine per socket, nothing else streams.
+      ws.send(JSON.stringify({ type: "watch", node: "", engine: "", session: "" }));
+      return;
+    }
     ws.send(
       JSON.stringify({
         type: "watch",

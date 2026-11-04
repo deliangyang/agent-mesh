@@ -323,6 +323,10 @@ export class E2EClient {
       this.dropSession(ns.peer.id);
       throw err instanceof Error ? err : new Error(String(err));
     };
+    const failOpen = (err: unknown): never => {
+      close();
+      throw err instanceof Error ? err : new Error(String(err));
+    };
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -389,7 +393,13 @@ export class E2EClient {
         sock.send(raw);
       });
     } catch (err) {
-      failAuth(err);
+      // Only a socket that opened but never produced a sealed frame means the node
+      // cannot decrypt our session. Timeouts/upgrade errors are network noise
+      // (relay restart, tunnel swap); dropping the session there would force a
+      // re-handshake and spray 401s at every in-flight call.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "catalog ws no data") failAuth(err);
+      failOpen(err);
     }
     sock.onclose = () => {
       closed = true;

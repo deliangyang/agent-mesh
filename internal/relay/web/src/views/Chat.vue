@@ -14,6 +14,8 @@ import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
 import { fetchJSON } from "../http";
+import { listServerDirs, type DirListing } from "../dirsApi";
+import { resolveModelPref } from "../modelPrefs";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
 import {
   capsAllowDiff,
@@ -34,7 +36,7 @@ import { isOpenSettingsHotkey } from "../settingsHotkey";
 import { slashItems, watchSlashCatalog } from "../slash";
 import { meshTarget, threadIdOf } from "../target";
 import { clearAttachJobs, onComposerUploadFailed, uploadComposerFile } from "../attachUpload";
-import type { DirRow, GitRepo, Session } from "../types";
+import type { GitRepo, Session } from "../types";
 
 useDefaultRenderTool({ render: MeshToolWindow });
 
@@ -47,7 +49,6 @@ const creating = ref(false);
 const turnEnded = ref(false);
 let endedTimer = 0;
 const navOpen = ref(typeof window !== "undefined" && window.matchMedia("(min-width: 861px)").matches);
-const openPick = ref("");
 const diffOpen = ref(false);
 const picksOpen = reactive({ node: false, engine: false });
 const composerGuarded = ref(false);
@@ -374,21 +375,6 @@ function nodeName(id: string, name?: string): string {
   return name || id || t("chat.nodeFallback");
 }
 
-function modelLabel(id: string): string {
-  if (!id) return t("chat.pickModel");
-  for (const n of catalog.nodes) {
-    if (n.id && id.startsWith(n.id + "/")) return id.slice(n.id.length + 1);
-  }
-  if (filters.node && id.startsWith(filters.node + "/")) return id.slice(filters.node.length + 1);
-  return id;
-}
-
-function dirBase(path: string): string {
-  const p = path.replace(/[\\/]+$/, "");
-  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return i >= 0 ? p.slice(i + 1) : p || path;
-}
-
 function syncQuery(s: Session | null): void {
   const pick = {
     node: (s && s.node_id) || filters.node,
@@ -456,10 +442,9 @@ function pickNode(id: string): void {
 }
 
 function syncModelToEngine(): void {
-  const models = modelOptions.value;
-  if (!models.length) return;
-  if (models.some((m) => m.id === filters.model)) return;
-  filters.model = models[0].id;
+  if (!filters.engine) return;
+  const { model } = resolveModelPref(filters.engine, catalog.models, filters.node);
+  if (model) filters.model = model;
 }
 
 function pickEngine(name: string): void {
@@ -506,33 +491,52 @@ function ensureWorkDir(): void {
   filters.dir = d.path;
 }
 
-function pickModel(id: string): void {
-  filters.model = id;
-  openPick.value = "";
+const dirOpen = ref(false);
+const dirLoading = ref(false);
+const dirError = ref("");
+const dirPath = ref("");
+const dirListing = ref<DirListing | null>(null);
+
+async function browseDir(path: string): Promise<void> {
+  dirLoading.value = true;
+  dirError.value = "";
+  try {
+    const listing = await listServerDirs(filters.node, path);
+    dirListing.value = listing;
+    dirPath.value = listing.path;
+  } catch (err) {
+    dirError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    dirLoading.value = false;
+  }
 }
 
-function pickDir(d: DirRow): void {
-  if (d.node_id) filters.node = d.node_id;
-  if (d.engine) filters.engine = d.engine;
-  filters.dir = d.path;
-  syncModelToEngine();
-  openPick.value = "";
+function toggleDirBrowser(): void {
+  dirOpen.value = !dirOpen.value;
+  if (dirOpen.value) void browseDir(filters.dir || "");
 }
 
-function togglePick(name: string): void {
-  openPick.value = openPick.value === name ? "" : name;
+function enterDir(path: string): void {
+  void browseDir(path);
 }
 
-function onDocClick(ev: MouseEvent): void {
-  const t = ev.target as HTMLElement | null;
-  if (t && t.closest(".mesh-chip")) return;
-  openPick.value = "";
+function browseParent(): void {
+  if (dirListing.value?.parent) void browseDir(dirListing.value.parent);
+}
+
+function useDir(): void {
+  const path = (dirListing.value?.path || dirPath.value).trim();
+  if (!path) return;
+  filters.dir = path;
+  meshTarget.cwd = path;
+  dirOpen.value = false;
+  syncQuery(selected.value);
 }
 
 function newSession(): void {
   if (!filters.node && catalog.nodes.length) filters.node = catalog.nodes[0].id;
   if (!filters.engine && engineCards.value.length) filters.engine = engineCards.value[0].name;
-  if (!filters.model && modelOptions.value.length) filters.model = modelOptions.value[0].id;
+  syncModelToEngine();
   ensureWorkDir();
   creating.value = true;
   selected.value = null;
@@ -865,7 +869,6 @@ onMounted(() => {
     applyHealthHint();
     connectCatalog();
   })();
-  document.addEventListener("click", onDocClick);
   window.addEventListener("keydown", onSettingsHotkey);
   window.addEventListener("mesh-link-up", onLinkUp);
   hideKitCursor();
@@ -875,7 +878,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocClick);
   window.removeEventListener("keydown", onSettingsHotkey);
   window.removeEventListener("mesh-link-up", onLinkUp);
   window.clearTimeout(copiedTimer);
@@ -1142,6 +1144,56 @@ onBeforeUnmount(() => {
             <div class="mesh-welcome">
               <h1>{{ t("chat.welcome") }}</h1>
               <p>{{ welcomeHint }}</p>
+              <div v-if="isDraftChat" class="mesh-workspace-pick">
+                <button
+                  type="button"
+                  class="mesh-workspace-btn"
+                  :class="{ open: dirOpen }"
+                  :title="filters.dir || t('chat.pickDir')"
+                  :aria-expanded="dirOpen"
+                  @click.stop="toggleDirBrowser"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h3.1l1.2 1.5h4.3A1.2 1.2 0 0 1 13.5 5.7v6.1A1.2 1.2 0 0 1 12.3 13H3.7A1.2 1.2 0 0 1 2.5 11.8V4.2Z"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span>{{ filters.dir || t("chat.pickDir") }}</span>
+                </button>
+                <div v-if="dirOpen" class="mesh-dir-panel" @click.stop>
+                  <form class="mesh-dir-form" @submit.prevent="browseDir(dirPath)">
+                    <button type="button" class="mesh-dir-up" :disabled="!dirListing?.parent" @click="browseParent">
+                      ..
+                    </button>
+                    <input v-model="dirPath" :placeholder="t('chat.dirManual')" autocomplete="off" spellcheck="false" />
+                    <button type="submit">{{ t("chat.go") }}</button>
+                  </form>
+                  <div class="mesh-dir-list" role="listbox" :aria-label="t('chat.pickDir')">
+                    <button
+                      v-for="d in dirListing?.dirs || []"
+                      :key="d.path"
+                      type="button"
+                      class="mesh-dir-item"
+                      :title="d.path"
+                      @click="enterDir(d.path)"
+                    >
+                      {{ d.name }}
+                    </button>
+                    <div v-if="dirLoading" class="mesh-pop-empty">{{ t("chat.loading") }}</div>
+                    <div v-else-if="!dirListing?.dirs?.length" class="mesh-pop-empty">{{ t("chat.noSubdirs") }}</div>
+                    <div v-if="dirError" class="mesh-dir-error">{{ dirError }}</div>
+                  </div>
+                  <div class="mesh-dir-foot">
+                    <span class="mesh-dir-current">{{ dirListing?.path || dirPath }}</span>
+                    <button type="button" class="mesh-dir-use" :disabled="!dirListing?.path && !dirPath.trim()" @click="useDir">
+                      {{ t("chat.useDir") }}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </template>
           <template #reasoning-message>
@@ -1225,67 +1277,6 @@ onBeforeUnmount(() => {
           <template #input="slot">
             <div class="mesh-composer" :class="{ 'is-guarded': composerGuarded }">
               <div v-if="composerGuarded" class="mesh-composer-guard" aria-hidden="true"></div>
-              <div class="mesh-composer-meta">
-                <div class="mesh-chip">
-                  <button type="button" class="mesh-chip-btn is-model" @click.stop="togglePick('model')">
-                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4" />
-                      <path
-                        d="M8 1.7v1.4M8 12.9v1.4M1.7 8h1.4M12.9 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                        stroke-linecap="round"
-                      />
-                    </svg>
-                    <span>{{ modelLabel(filters.model) }}</span>
-                  </button>
-                  <div v-if="openPick === 'model'" class="mesh-pop" role="listbox" :aria-label="t('chat.pickModel')">
-                    <button
-                      v-for="m in modelOptions"
-                      :key="m.id"
-                      type="button"
-                      class="mesh-pop-item"
-                      :class="{ on: filters.model === m.id }"
-                      @click.stop="pickModel(m.id)"
-                    >
-                      {{ modelLabel(m.id) }}
-                    </button>
-                    <div v-if="!modelOptions.length" class="mesh-pop-empty">{{ t("chat.noModels") }}</div>
-                  </div>
-                </div>
-                <div class="mesh-chip">
-                  <button
-                    type="button"
-                    class="mesh-chip-btn is-dir"
-                    :title="filters.dir || t('chat.pickDir')"
-                    @click.stop="togglePick('dir')"
-                  >
-                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h3.1l1.2 1.5h4.3A1.2 1.2 0 0 1 13.5 5.7v6.1A1.2 1.2 0 0 1 12.3 13H3.7A1.2 1.2 0 0 1 2.5 11.8V4.2Z"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                    <span>{{ filters.dir ? dirBase(filters.dir) : t("chat.workspace") }}</span>
-                  </button>
-                  <div v-if="openPick === 'dir'" class="mesh-pop" role="listbox" :aria-label="t('chat.pickDir')">
-                    <button
-                      v-for="d in dirOptions"
-                      :key="(d.node_id || '') + d.path + (d.engine || '')"
-                      type="button"
-                      class="mesh-pop-item"
-                      :class="{ on: filters.dir === d.path }"
-                      :title="d.path"
-                      @click.stop="pickDir(d)"
-                    >
-                      <span class="mesh-pop-dir">{{ d.path }}</span>
-                    </button>
-                    <div v-if="!dirOptions.length" class="mesh-pop-empty">{{ t("chat.noWorkspaces") }}</div>
-                  </div>
-                </div>
-              </div>
               <MeshAskCard v-if="showAsk" />
               <MeshFollowups
                 v-if="showFollowups"

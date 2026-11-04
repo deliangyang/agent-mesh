@@ -73,17 +73,19 @@ func (d *Driver) Models(ctx context.Context) ([]protocol.Model, error) {
 		}
 		title, _ := item["label"].(string)
 		rows = append(rows, protocol.Model{
-			ID:      d.Name() + "/" + name,
-			Engine:  d.Name(),
-			Name:    name,
-			Title:   title,
-			Default: name == cur,
+			ID:       d.Name() + "/" + name,
+			Engine:   d.Name(),
+			Name:     name,
+			Title:    title,
+			Default:  name == cur,
+			Thinking: driver.ModelThinking(d.Name()),
 		})
 		seen[name] = true
 	}
 	if cur != "" && !seen[cur] {
 		rows = append([]protocol.Model{{
 			ID: d.Name() + "/" + cur, Engine: d.Name(), Name: cur, Title: cur, Default: true,
+			Thinking: driver.ModelThinking(d.Name()),
 		}}, rows...)
 	}
 	return rows, nil
@@ -327,6 +329,7 @@ func (d *Driver) runPrint(ctx context.Context, cwd, text, resume, model string) 
 		args = append(args, "--resume", resume)
 	}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
+	args = append(args, driver.ThinkingArgs(d.Name(), driver.ThinkingOf(ctx))...)
 	args = append(args, text)
 	cmd := driver.CommandContext(ctx, d.bin, args...)
 	if cwd != "" {

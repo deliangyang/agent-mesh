@@ -5,6 +5,7 @@ export type SettingsSection =
   | "shortcuts"
   | "connection"
   | "platforms"
+  | "models"
   | "nodes"
   | "relay"
   | "health"
@@ -23,6 +24,7 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
   { id: "shortcuts", labelKey: "settings.navShortcuts", hintKey: "settings.navShortcutsHint" },
   { id: "connection", labelKey: "settings.navConnection", hintKey: "settings.navConnectionHint" },
   { id: "platforms", labelKey: "settings.navPlatforms", hintKey: "settings.navPlatformsHint" },
+  { id: "models", labelKey: "settings.navModels", hintKey: "settings.navModelsHint" },
   { id: "nodes", labelKey: "settings.navNodes", hintKey: "settings.navNodesHint" },
   { id: "relay", labelKey: "settings.navRelay", hintKey: "settings.navRelayHint" },
   { id: "health", labelKey: "settings.navHealth", hintKey: "settings.navHealthHint" },
@@ -36,6 +38,7 @@ export function resolveSettingsSection(raw: string | undefined | null): Settings
     id === "shortcuts" ||
     id === "connection" ||
     id === "platforms" ||
+    id === "models" ||
     id === "nodes" ||
     id === "relay" ||
     id === "health" ||

@@ -42,6 +42,8 @@ export type EngineRow = {
 export type ModelCard = {
   id: string;
   owned_by?: string;
+  /** Thinking levels the model accepts; empty means the engine has none. */
+  thinking?: string[];
 };
 
 export type DirRow = {

@@ -59,7 +59,10 @@ func (d *Driver) Models(ctx context.Context) ([]protocol.Model, error) {
 		if cur == "" {
 			return nil, err
 		}
-		return []protocol.Model{{ID: d.Name() + "/" + cur, Engine: d.Name(), Name: cur, Title: cur, Default: true}}, nil
+		return []protocol.Model{{
+			ID: d.Name() + "/" + cur, Engine: d.Name(), Name: cur, Title: cur, Default: true,
+			Thinking: driver.ModelThinking(d.Name()),
+		}}, nil
 	}
 	var wrap struct {
 		Models []struct {
@@ -88,11 +91,12 @@ func (d *Driver) Models(ctx context.Context) ([]protocol.Model, error) {
 			title = m.Slug
 		}
 		rows = append(rows, protocol.Model{
-			ID:      d.Name() + "/" + m.Slug,
-			Engine:  d.Name(),
-			Name:    m.Slug,
-			Title:   title,
-			Default: m.Slug == cur,
+			ID:       d.Name() + "/" + m.Slug,
+			Engine:   d.Name(),
+			Name:     m.Slug,
+			Title:    title,
+			Default:  m.Slug == cur,
+			Thinking: driver.ModelThinking(d.Name()),
 		})
 	}
 	return rows, nil
@@ -353,6 +357,7 @@ func (d *Driver) Send(ctx context.Context, cwd, text, resume, model string) (<-c
 func (d *Driver) runExec(ctx context.Context, cwd, text, resume, model string) (<-chan protocol.Event, error) {
 	args := []string{"exec", "--json"}
 	args = driver.WithModelFlag(args, driver.CLIModel(model, d.Name()))
+	args = append(args, driver.ThinkingArgs(d.Name(), driver.ThinkingOf(ctx))...)
 	if resume != "" {
 		args = append(args, "resume", resume)
 	}

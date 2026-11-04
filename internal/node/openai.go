@@ -34,6 +34,7 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/openai/events", s.handleEvents)
 	mux.HandleFunc("GET /v1/openai/stream", s.handleOpenStream)
 	mux.HandleFunc("GET /v1/openai/directories", s.handleDirectories)
+	mux.HandleFunc("GET /v1/openai/dirs", s.handleDirs)
 	mux.HandleFunc("GET /v1/openai/commands", s.handleCommands)
 	mux.HandleFunc("GET /v1/openai/ws", s.handleWS)
 	mux.HandleFunc("GET /v1/openai/git", s.handleGitRepos)
@@ -469,7 +470,7 @@ func (s *Server) dispatchChoice(ctx context.Context, req protocol.Request) proto
 		return protocol.Response{ID: req.ID, Error: "engine is required"}
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
-	_, engine, evs, err := s.startPrompt(runCtx, p.Engine, p.Session, p.CWD, p.Text, "")
+	_, engine, evs, err := s.startPrompt(runCtx, p.Engine, p.Session, p.CWD, p.Text, "", "")
 	if err != nil {
 		stop()
 		return protocol.Response{ID: req.ID, Error: err.Error()}
@@ -506,7 +507,7 @@ func (s *Server) handleChoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runCtx, stop := context.WithCancel(context.WithoutCancel(r.Context()))
-	_, engine, evs, err := s.startPrompt(runCtx, req.Engine, req.Session, req.CWD, req.Text, "")
+	_, engine, evs, err := s.startPrompt(runCtx, req.Engine, req.Session, req.CWD, req.Text, "", "")
 	if err != nil {
 		stop()
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -618,7 +619,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.turns.clear(k, handle)
 		}
 	}()
-	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text, modelName)
+	_, engine, evs, err := s.startPrompt(runCtx, engine, req.Session, req.CWD, text, modelName, req.Thinking)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -742,7 +743,8 @@ func (s *Server) matchSessionDriver(rows []protocol.Session, session, prefer str
 	return d, hit.Engine, true
 }
 
-func (s *Server) startPrompt(ctx context.Context, engine, session, cwd, text, model string) (driver.Driver, string, <-chan protocol.Event, error) {
+func (s *Server) startPrompt(ctx context.Context, engine, session, cwd, text, model, thinking string) (driver.Driver, string, <-chan protocol.Event, error) {
+	ctx = driver.WithThinking(ctx, thinking)
 	d, err := s.Drivers.Get(engine)
 	if err != nil {
 		return nil, engine, nil, err

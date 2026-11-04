@@ -52,10 +52,11 @@ type ModelList struct {
 
 // ModelCard is an OpenAI model card.
 type ModelCard struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
+	ID       string   `json:"id"`
+	Object   string   `json:"object"`
+	Created  int64    `json:"created"`
+	OwnedBy  string   `json:"owned_by"`
+	Thinking []string `json:"thinking,omitempty"` // thinking levels this model accepts
 }
 
 // Completion is a non-streaming OpenAI chat.completion.
@@ -83,6 +84,7 @@ type ChatRequest struct {
 	Session  string        `json:"session,omitempty"`
 	CWD      string        `json:"cwd,omitempty"`
 	Engine   string        `json:"engine,omitempty"`
+	Thinking string        `json:"thinking,omitempty"`
 	Files    []ChatFile    `json:"files,omitempty"`
 }
 
@@ -105,10 +107,11 @@ func FromModels(rows []protocol.Model) ModelList {
 	now := time.Now().Unix()
 	for _, m := range rows {
 		out.Data = append(out.Data, ModelCard{
-			ID:      m.ID,
-			Object:  "model",
-			Created: now,
-			OwnedBy: m.Engine,
+			ID:       m.ID,
+			Object:   "model",
+			Created:  now,
+			OwnedBy:  m.Engine,
+			Thinking: m.Thinking,
 		})
 	}
 	return out

@@ -114,6 +114,7 @@ func (s *Server) mountOpenAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/to/{id}/v1/models", s.proxyNode("GET", "/v1/models"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/sessions", s.proxyNode("GET", "/v1/openai/sessions"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/engines", s.proxyNode("GET", "/v1/openai/engines"))
+	mux.HandleFunc("GET /v1/to/{id}/v1/openai/dirs", s.proxyNode("GET", "/v1/openai/dirs"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/events", s.proxyNodeStream("GET", "/v1/openai/events"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/commands", s.proxyNode("GET", "/v1/openai/commands"))
 	mux.HandleFunc("GET /v1/to/{id}/v1/openai/git", s.proxyNode("GET", "/v1/openai/git"))

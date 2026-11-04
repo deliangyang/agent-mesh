@@ -394,6 +394,8 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 		return s.dispatchGit(ctx, req)
 	case protocol.MethodGitDiff:
 		return s.dispatchGitDiff(ctx, req)
+	case protocol.MethodDirs:
+		return s.dispatchDirs(req)
 	case protocol.MethodStop:
 		return s.dispatchStop(ctx, req)
 	default:
@@ -454,7 +456,7 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 			return nil, err
 		}
 		return s.runTrackedStream(ctx, p.Engine, p.SessionID, p.CWD, func(runCtx context.Context) (<-chan protocol.Event, error) {
-			return d.Reply(runCtx, p.SessionID, text, s.cliModelFor(p.Model, p.Engine))
+			return d.Reply(driver.WithThinking(runCtx, p.Thinking), p.SessionID, text, s.cliModelFor(p.Model, p.Engine))
 		})
 	case protocol.MethodSend:
 		var p protocol.SendParams
@@ -468,7 +470,7 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 			return nil, err
 		}
 		return s.runTrackedStream(ctx, p.Engine, p.Resume, p.CWD, func(runCtx context.Context) (<-chan protocol.Event, error) {
-			return d.Send(runCtx, p.CWD, text, p.Resume, s.cliModelFor(p.Model, p.Engine))
+			return d.Send(driver.WithThinking(runCtx, p.Thinking), p.CWD, text, p.Resume, s.cliModelFor(p.Model, p.Engine))
 		})
 	default:
 		return nil, fmt.Errorf("method %s is not a stream", req.Method)

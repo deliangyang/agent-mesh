@@ -341,7 +341,7 @@ func (s *Server) dispatchFollow(engine, session, cwd string, it followup.Item) e
 	}
 	s.followups().begin(engine, session)
 	defer s.followups().end(engine, session)
-	_, engine, evs, err := s.startPrompt(ctx, engine, session, cwd, it.Text, "")
+	_, engine, evs, err := s.startPrompt(ctx, engine, session, cwd, it.Text, "", "")
 	if err != nil {
 		return err
 	}

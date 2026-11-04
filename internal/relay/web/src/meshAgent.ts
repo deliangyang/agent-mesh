@@ -9,6 +9,7 @@ import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
 import { chatModelOf } from "./chatModel";
+import { resolveModelPref } from "./modelPrefs";
 import { chunkFingerprint, nextPiece, rememberChunk } from "./liveDedup";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
 import { meshTarget, parseThreadId } from "./target";
@@ -347,6 +348,7 @@ export class MeshAgent extends AbstractAgent {
         const engine = meshTarget.engine || bound.engine;
         const node = meshTarget.node || bound.node;
         const model = chatModelOf(meshTarget.model, node, engine);
+        const thinking = resolveModelPref(engine, (await import("./catalog")).catalog.models, node).thinking;
         if (!model) {
           failRun(t("agent.pickEngine"));
           return;
@@ -361,6 +363,7 @@ export class MeshAgent extends AbstractAgent {
           messages: [{ role: "user", content: text }],
         };
         if (engine) body.engine = engine;
+        if (thinking) body.thinking = thinking;
         if (session) body.session = session;
         if (meshTarget.cwd) body.cwd = meshTarget.cwd;
         if (payload.files.length) body.files = payload.files;
@@ -609,6 +612,7 @@ export class MeshAgent extends AbstractAgent {
                 session_id: session,
                 text,
                 model,
+                thinking,
                 cwd: meshTarget.cwd || "",
                 files: payload.files,
                 watch: true,
@@ -618,6 +622,7 @@ export class MeshAgent extends AbstractAgent {
                 cwd: meshTarget.cwd || "",
                 text,
                 model,
+                thinking,
                 files: payload.files,
               };
           try {

@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { catalog, connectCatalog, meshLink, refreshCatalog } from "../catalog";
+import MeshModelSettings from "../components/MeshModelSettings.vue";
 import MeshSettings from "../components/MeshSettings.vue";
 import { buildConnectionDiag } from "../connectionDiag";
 import {
@@ -416,6 +417,8 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </section>
+
+        <MeshModelSettings v-else-if="section === 'models'" />
 
         <MeshSettings v-else-if="section === 'nodes'" section="nodes" />
         <MeshSettings v-else-if="section === 'relay'" section="relay" />

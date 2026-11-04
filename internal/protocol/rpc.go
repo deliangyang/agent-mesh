@@ -25,6 +25,7 @@ const (
 	MethodGitDiff   = "git_diff"
 	MethodCatalog   = "catalog" // encrypted push of node catalog parts (sessions/engines/…)
 	MethodStop      = "stop"    // cancel an in-flight send/reply turn
+	MethodDirs      = "dirs"    // browse one directory on the node
 )
 
 // Request is an RPC request before encryption.
@@ -112,11 +113,12 @@ type EngineInfo struct {
 
 // Model is a model the engine can use.
 type Model struct {
-	ID      string `json:"id"`
-	Engine  string `json:"engine"`
-	Name    string `json:"name"`
-	Title   string `json:"title,omitempty"`
-	Default bool   `json:"default,omitempty"`
+	ID       string   `json:"id"`
+	Engine   string   `json:"engine"`
+	Name     string   `json:"name"`
+	Title    string   `json:"title,omitempty"`
+	Default  bool     `json:"default,omitempty"`
+	Thinking []string `json:"thinking,omitempty"` // accepted thinking levels; empty = unsupported
 }
 
 // SlashItem is a slash command or skill the engine can invoke.
@@ -163,6 +165,7 @@ type ReplyParams struct {
 	SessionID string       `json:"session_id"`
 	Text      string       `json:"text"`
 	Model     string       `json:"model,omitempty"`
+	Thinking  string       `json:"thinking,omitempty"`
 	Watch     bool         `json:"watch,omitempty"`
 	CWD       string       `json:"cwd,omitempty"`
 	Files     []AttachFile `json:"files,omitempty"`
@@ -170,12 +173,13 @@ type ReplyParams struct {
 
 // SendParams starts a new turn.
 type SendParams struct {
-	Engine string       `json:"engine"`
-	CWD    string       `json:"cwd,omitempty"`
-	Text   string       `json:"text"`
-	Resume string       `json:"resume,omitempty"`
-	Model  string       `json:"model,omitempty"`
-	Files  []AttachFile `json:"files,omitempty"`
+	Engine   string       `json:"engine"`
+	CWD      string       `json:"cwd,omitempty"`
+	Text     string       `json:"text"`
+	Resume   string       `json:"resume,omitempty"`
+	Model    string       `json:"model,omitempty"`
+	Thinking string       `json:"thinking,omitempty"`
+	Files    []AttachFile `json:"files,omitempty"`
 }
 
 // WatchParams follows progress.
@@ -224,6 +228,25 @@ type GitParams struct {
 type GitDiffParams struct {
 	Repo string `json:"repo,omitempty"`
 	CWD  string `json:"cwd,omitempty"`
+}
+
+// DirsParams browses one directory; an empty path opens the node user's home.
+type DirsParams struct {
+	Path string `json:"path,omitempty"`
+}
+
+// DirEntry is one subdirectory in a browse result.
+type DirEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// DirListing is the dirs RPC body.
+type DirListing struct {
+	Path   string     `json:"path"`
+	Parent string     `json:"parent,omitempty"`
+	Home   string     `json:"home,omitempty"`
+	Dirs   []DirEntry `json:"dirs"`
 }
 
 // PublicSnapshot strips session/path/follow-up content for relay directory pushes.

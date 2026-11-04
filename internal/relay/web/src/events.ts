@@ -166,18 +166,26 @@ function looksLikeSessionMeta(text: string): boolean {
   return SESSION_ID_RE.test(s);
 }
 
-const COMMAND_SCAFFOLD_RE =
-  /^\s*(?:<command-message>[\s\S]*?<\/command-message>\s*)?(?:<command-name>[\s\S]*?<\/command-name>\s*)?$/i;
 const SKILL_EXPANSION_RE = /^\s*Base directory for this skill:/i;
+const COMMAND_NAME_RE = /<command-name>\s*([\s\S]*?)\s*<\/command-name>/i;
+const COMMAND_ARGS_RE = /<command-args>\s*([\s\S]*?)\s*<\/command-args>/i;
 
 // Claude Code renders slash commands as <command-*> scaffolding plus a separate
-// expanded template message. Both are internal; the user bubble shows neither.
+// expanded template message. The bubble shows "/name args"; the template is dropped.
 function stripCommandScaffold(text: string): string {
   const raw = String(text || "").trim();
   if (!raw) return "";
   if (SKILL_EXPANSION_RE.test(raw)) return "";
-  if (COMMAND_SCAFFOLD_RE.test(raw) && /<command-(?:name|message)>/i.test(raw)) return "";
-  return raw.replace(/<\/?command-(?:message|name|args)>/gi, "").trim();
+  if (!/<command-(?:message|name|args)>/i.test(raw)) return raw;
+  const name = (raw.match(COMMAND_NAME_RE)?.[1] || "").trim();
+  const args = (raw.match(COMMAND_ARGS_RE)?.[1] || "").replace(/\s+/g, " ").trim();
+  const detail = raw
+    .replace(/<command-message>[\s\S]*?<\/command-message>/gi, "")
+    .replace(/<command-name>[\s\S]*?<\/command-name>/gi, "")
+    .replace(/<command-args>[\s\S]*?<\/command-args>/gi, "")
+    .trim();
+  const cmd = [name, args].filter(Boolean).join(" ");
+  return [cmd, detail].filter(Boolean).join("\n").trim();
 }
 
 function stripMeshAttach(text: string): string {

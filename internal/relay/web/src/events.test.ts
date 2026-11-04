@@ -211,9 +211,33 @@ test("an unclosed system-reminder does not leak its content", () => {
   assert.equal(cleanUserText("hello\n<system-reminder>ctx to eof"), "hello");
 });
 
-test("slash-command scaffolding does not render as a user bubble", () => {
+test("slash commands render as /name args", () => {
+  const withArgs = mergeEvents([
+    {
+      type: "user",
+      role: "user",
+      text:
+        "<command-message>gitlab-mr-fix</command-message>\n" +
+        "<command-name>/gitlab-mr-fix</command-name>\n" +
+        "<command-args>3.10.50</command-args>",
+    },
+  ]);
+  assert.equal(withArgs.length, 1);
+  assert.equal(withArgs[0].text, "/gitlab-mr-fix 3.10.50");
+
+  const bare = mergeEvents([
+    {
+      type: "user",
+      role: "user",
+      text: "<command-message>mesh-deploy</command-message>\n<command-name>/mesh-deploy</command-name>",
+    },
+  ]);
+  assert.equal(bare.length, 1);
+  assert.equal(bare[0].text, "/mesh-deploy");
+});
+
+test("the expanded skill template never renders as a user bubble", () => {
   const rows = mergeEvents([
-    { type: "user", role: "user", text: "<command-message>mesh-deploy</command-message>\n<command-name>/mesh-deploy</command-name>" },
     { type: "user", role: "user", text: "Base directory for this skill: /repo/.claude/skills/mesh-deploy\n\n# Deploy\nrun it" },
   ]);
   assert.equal(rows.length, 0);

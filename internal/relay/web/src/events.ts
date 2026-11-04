@@ -84,6 +84,18 @@ function stripEnvelopeTags(text: string): string {
 
 const TASK_PREFIX_RE =
   /^\s*Briefly inform the user about the task result[^\n]*(?:\n+|$)/;
+const SYSTEM_REMINDER_RE = /<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/gi;
+const SYSTEM_REMINDER_TAIL_RE = /<system-reminder\b[^>]*>[\s\S]*$/i;
+const SYSTEM_REMINDER_TAG_RE = /<\/?system-reminder\b[^>]*>/gi;
+
+// Claude Code injects hook output as <system-reminder> blocks in the user turn.
+// The engine's jsonl keeps them; the transcript bubble must not.
+function stripSystemReminders(text: string): string {
+  return String(text || "")
+    .replace(SYSTEM_REMINDER_RE, "\n")
+    .replace(SYSTEM_REMINDER_TAIL_RE, "\n")
+    .replace(SYSTEM_REMINDER_TAG_RE, "\n");
+}
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isInternalDump(text: string): boolean {
@@ -178,7 +190,7 @@ function dropInjectedUserPrefix(text: string): string {
 }
 
 export function cleanUserText(text: string): string {
-  const raw = stripMeshAttach(String(text || ""));
+  const raw = stripSystemReminders(stripMeshAttach(String(text || "")));
   const queries: string[] = [];
   raw.replace(USER_QUERY_RE, (_m, inner: string) => {
     const s = String(inner || "").trim();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText } from "./events.ts";
+import { cleanUserText, ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText } from "./events.ts";
 
 test("mergeEvents keeps ask", () => {
   const rows = mergeEvents([
@@ -191,4 +191,22 @@ test("extract session id from stream JSON", () => {
   assert.equal(sessionIdFromText('{"type":"system","session_id":"sys-9"}'), "sys-9");
   assert.equal(sessionIdFromText('{"type":"session","id":"pi-1","cwd":"/tmp"}'), "pi-1");
   assert.equal(sessionIdFromChunk({ choices: [{ delta: { content: "hello" } }] }), "");
+});
+
+test("system-reminder hook blocks stay out of the user bubble", () => {
+  const raw = "<system-reminder>\nUserPromptSubmit hook context\n</system-reminder>\n\nfix the bug";
+  const rows = mergeEvents([{ type: "user", role: "user", text: raw }]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].text, "fix the bug");
+});
+
+test("a user turn with only system-reminder blocks is dropped", () => {
+  const rows = mergeEvents([
+    { type: "user", role: "user", text: "<system-reminder>hook only</system-reminder>" },
+  ]);
+  assert.equal(rows.length, 0);
+});
+
+test("an unclosed system-reminder does not leak its content", () => {
+  assert.equal(cleanUserText("hello\n<system-reminder>ctx to eof"), "hello");
 });

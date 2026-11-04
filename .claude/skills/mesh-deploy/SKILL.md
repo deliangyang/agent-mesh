@@ -57,6 +57,11 @@ Never paste `relay.env` or `node.env` contents into logs: they hold `MESH_PASSWO
 
 - The web UI is embedded in both binaries, so a web-only change still needs this
   deploy (relay for browser clients, node for the local UI).
+- Only one process per machine may own the relay tunnel. `agent-mesh` (desktop)
+  and `mesh-node` (supervisor) both read `~/.agent-mesh/node.key`; running both
+  makes the relay kick one tunnel every ~16s, which drops web catalog streams and
+  shows up as a 401 storm in the browser console. The script warns when it sees
+  the desktop app or repeated tunnel drops.
 - Old relay binaries are kept as `/opt/agent-mesh/relay.bak-<timestamp>`.
 - If the relay host also runs an `agent-mesh-node` unit, restart it separately only
   when the change affects that node; this skill restarts the local node.

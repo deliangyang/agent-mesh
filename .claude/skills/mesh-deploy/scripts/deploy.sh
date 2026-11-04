@@ -84,4 +84,19 @@ fi
 sleep 2
 curl -fsS -o /dev/null -m 8 "$NODE_HEALTH/healthz" || die "node healthz failed at $NODE_HEALTH"
 note "node healthy at $NODE_HEALTH"
+
+# 7. Warn about a second process registering the same node identity. Both read
+# ~/.agent-mesh/node.key, so the relay keeps kicking one tunnel every ~16s and
+# the web catalog stream drops with it.
+if pgrep -f '/agent-mesh( |$)' >/dev/null 2>&1; then
+  echo "warning: the desktop app (agent-mesh) is running; it registers the same node id and will fight this tunnel" >&2
+fi
+NODE_LOG="$STATE_DIR/supervisor.err.log"
+if [ -f "$NODE_LOG" ]; then
+  since="$(date -d '-60 seconds' +%Y-%m-%dT%H:%M:%S 2>/dev/null || true)"
+  if [ -n "$since" ]; then
+    drops="$(awk -v since="time=$since" '$0 ~ /tunnel dropped/ && $1 >= since' "$NODE_LOG" | wc -l)"
+    [ "$drops" -gt 2 ] && echo "warning: tunnel dropped $drops times in the last 60s (duplicate node identity?)" >&2
+  fi
+fi
 note "done: relay=$relay_host node=$(hostname)"

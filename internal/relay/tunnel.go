@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -252,8 +253,17 @@ func (h *tunnelHub) PipeHdr(ctx context.Context, nodeID, method, path string, bo
 				if cc := f.Header["Cache-Control"]; cc != "" {
 					w.Header().Set("Cache-Control", cc)
 				}
+				if strings.Contains(path, "/stream") || strings.Contains(path, "/events") ||
+					strings.Contains(path, "/chat/completions") {
+					w.Header().Set("X-Accel-Buffering", "no")
+					w.Header().Set("Connection", "keep-alive")
+				}
 				w.WriteHeader(status)
 				headerSent = true
+				if fl != nil && (strings.Contains(path, "/stream") || strings.Contains(path, "/events") ||
+					strings.Contains(path, "/chat/completions")) {
+					fl.Flush()
+				}
 			}
 			if len(f.Body) > 0 {
 				_, _ = w.Write(f.Body)

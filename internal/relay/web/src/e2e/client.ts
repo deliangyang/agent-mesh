@@ -199,6 +199,143 @@ export class E2EClient {
   }
 
   async *stream(nodeID: string, method: string, params?: unknown, signal?: AbortSignal): AsyncGenerator<MeshEvent> {
+    if (typeof WebSocket !== "undefined") {
+      try {
+        yield* this.streamOverWS(nodeID, method, params, signal);
+        return;
+      } catch (err) {
+        if (signal?.aborted) throw err;
+      }
+    }
+    yield* this.streamOverHTTP(nodeID, method, params, signal);
+  }
+
+  private e2eWSURL(peerID: string): string {
+    const base = this.relay || (typeof location !== "undefined" ? location.origin : "");
+    const proto =
+      base.startsWith("https") || (typeof location !== "undefined" && location.protocol === "https:")
+        ? "wss:"
+        : "ws:";
+    let host = "";
+    try {
+      host = base ? new URL(base).host : location.host;
+    } catch {
+      host = typeof location !== "undefined" ? location.host : "";
+    }
+    return `${proto}//${host}/v1/to/${peerID}/e2e/ws`;
+  }
+
+  private async *streamOverWS(
+    nodeID: string,
+    method: string,
+    params?: unknown,
+    signal?: AbortSignal,
+  ): AsyncGenerator<MeshEvent> {
+    const primed = await this.withNode(nodeID, async () => {
+      const ns = await this.ensureSession(nodeID);
+      const req: RPCRequest = { id: this.nextID(), method, stream: true, params };
+      const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
+      const raw = marshalEnvelope(env);
+      return { ns, heldGen: ns.gen, raw, url: this.e2eWSURL(ns.peer.id) };
+    });
+    const { ns, heldGen, raw, url } = primed;
+    const sock = new WebSocket(url);
+    sock.binaryType = "arraybuffer";
+    const queue: MeshEvent[] = [];
+    let pending: (() => void) | null = null;
+    let closed = false;
+    let openErr: Error | null = null;
+
+    const wake = () => {
+      pending?.();
+      pending = null;
+    };
+
+    const onAbort = () => {
+      try {
+        sock.close();
+      } catch {
+        /* ignore */
+      }
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    sock.onmessage = (ev) => {
+      void (async () => {
+        try {
+          const cur = this.byNode.get(ns.peer.id);
+          if (!cur || cur.gen !== heldGen) return;
+          const buf =
+            ev.data instanceof ArrayBuffer
+              ? new Uint8Array(ev.data)
+              : ev.data instanceof Blob
+                ? new Uint8Array(await ev.data.arrayBuffer())
+                : null;
+          if (!buf) return;
+          const frame = unmarshalEnvelope(buf);
+          const plain = await open(ns.sess, frame);
+          const meshEv = JSON.parse(fromUtf8(plain)) as MeshEvent;
+          if (meshEv.type === "ping") return;
+          queue.push(meshEv);
+          wake();
+        } catch {
+          /* drop */
+        }
+      })();
+    };
+    sock.onclose = () => {
+      closed = true;
+      wake();
+    };
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const t = window.setTimeout(() => reject(new Error("e2e stream ws timeout")), 15000);
+        sock.onopen = () => {
+          window.clearTimeout(t);
+          resolve();
+        };
+        sock.onerror = () => {
+          window.clearTimeout(t);
+          reject(new Error("e2e stream ws error"));
+        };
+      });
+      sock.onerror = () => {
+        openErr = new Error("e2e stream ws error");
+        closed = true;
+        wake();
+      };
+      sock.send(raw);
+
+      while (true) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        if (openErr) throw openErr;
+        while (queue.length) {
+          const ev = queue.shift()!;
+          yield ev;
+          if (ev.done) return;
+        }
+        if (closed) return;
+        await new Promise<void>((resolve) => {
+          pending = resolve;
+        });
+      }
+    } finally {
+      signal?.removeEventListener("abort", onAbort);
+      try {
+        sock.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  private async *streamOverHTTP(
+    nodeID: string,
+    method: string,
+    params?: unknown,
+    signal?: AbortSignal,
+  ): AsyncGenerator<MeshEvent> {
     const started = await this.withNode(nodeID, async () => {
       const openOnce = async (): Promise<{ ns: NodeSession; resp: Response }> => {
         const ns = await this.ensureSession(nodeID);
@@ -248,6 +385,7 @@ export class E2EClient {
         for (const fe of frames.push(value)) {
           const plain = await open(ns.sess, fe);
           const ev = JSON.parse(fromUtf8(plain)) as MeshEvent;
+          if (ev.type === "ping") continue;
           yield ev;
           if (ev.done) return;
         }
@@ -261,6 +399,7 @@ export class E2EClient {
       const fe = decodeEnvelopeBody("application/json", utf8(line.slice(6)));
       const plain = await open(ns.sess, fe);
       const ev = JSON.parse(fromUtf8(plain)) as MeshEvent;
+      if (ev.type === "ping") continue;
       yield ev;
       if (ev.done) return;
     }
@@ -281,18 +420,7 @@ export class E2EClient {
       const req: RPCRequest = { id: this.nextID(), method: "catalog", stream: true };
       const env = await seal(ns.sess, utf8(JSON.stringify(req)), "stream");
       const raw = marshalEnvelope(env);
-      const base = this.relay || (typeof location !== "undefined" ? location.origin : "");
-      const proto =
-        base.startsWith("https") || (typeof location !== "undefined" && location.protocol === "https:")
-          ? "wss:"
-          : "ws:";
-      let host = "";
-      try {
-        host = base ? new URL(base).host : location.host;
-      } catch {
-        host = typeof location !== "undefined" ? location.host : "";
-      }
-      const url = `${proto}//${host}/v1/to/${ns.peer.id}/e2e/ws`;
+      const url = this.e2eWSURL(ns.peer.id);
       return { ns, heldGen: ns.gen, raw, url };
     });
 

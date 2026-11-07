@@ -69,6 +69,7 @@ func (s *Server) handleE2EWS(w http.ResponseWriter, r *http.Request) {
 		_ = pw.Close()
 	}()
 
+	const wsWriteGrace = 5 * time.Minute
 	for {
 		env, err := e2e.ReadStreamFrame(pr, true)
 		if err != nil {
@@ -81,7 +82,7 @@ func (s *Server) handleE2EWS(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		_ = conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteGrace))
 		if err := conn.WriteMessage(websocket.BinaryMessage, raw); err != nil {
 			return
 		}

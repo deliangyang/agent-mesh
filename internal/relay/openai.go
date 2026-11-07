@@ -550,6 +550,8 @@ func (s *Server) httpPipe(ctx context.Context, rec Record, method, path string, 
 		return err
 	}
 	defer resp.Body.Close()
+	streamHop := strings.Contains(path, "/stream") || strings.Contains(path, "/events") ||
+		strings.Contains(path, "/chat/completions")
 	for k, vs := range resp.Header {
 		if strings.EqualFold(k, "Content-Type") || strings.EqualFold(k, "Cache-Control") {
 			for _, v := range vs {
@@ -557,8 +559,15 @@ func (s *Server) httpPipe(ctx context.Context, rec Record, method, path string, 
 			}
 		}
 	}
+	if streamHop {
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Connection", "keep-alive")
+	}
 	w.WriteHeader(resp.StatusCode)
 	fl, _ := w.(http.Flusher)
+	if fl != nil && streamHop {
+		fl.Flush()
+	}
 	buf := make([]byte, 4096)
 	for {
 		n, err := resp.Body.Read(buf)

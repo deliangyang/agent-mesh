@@ -478,6 +478,7 @@ export class MeshAgent extends AbstractAgent {
             if (title) meshLive.title = Array.from(title).slice(0, 80).join("");
             return false;
           }
+          if (kind === "ping" || kind === "started") return false;
           if (kind === "ask") {
             meshLive.thinking = false;
             sawContent = true;

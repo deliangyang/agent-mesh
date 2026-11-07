@@ -240,18 +240,49 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
 	if req.Method == protocol.MethodCatalog {
 		s.streamCatalog(r.Context(), w, flusher, sess, binStream)
 		return
 	}
+	_ = s.writeStream(w, flusher, sess, protocol.Event{Type: "started"}, binStream)
 	ch, err := s.dispatchStream(r.Context(), req)
 	if err != nil {
 		s.writeStream(w, flusher, sess, protocol.Event{Type: "error", Text: err.Error(), Done: true}, binStream)
 		return
 	}
-	for ev := range ch {
-		if err := s.writeStream(w, flusher, sess, ev, binStream); err != nil {
+	s.pumpStreamWithKeepalive(r.Context(), w, flusher, sess, ch, binStream)
+}
+
+const streamKeepalive = 20 * time.Second
+
+// pumpStreamWithKeepalive forwards driver events and emits periodic ping frames
+// so reverse proxies and tunnels see bytes during long tool/thinking gaps.
+func (s *Server) pumpStreamWithKeepalive(
+	ctx context.Context,
+	w http.ResponseWriter,
+	fl http.Flusher,
+	sess *e2e.Session,
+	ch <-chan protocol.Event,
+	binStream bool,
+) {
+	ticker := time.NewTicker(streamKeepalive)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			if err := s.writeStream(w, fl, sess, protocol.Event{Type: "ping"}, binStream); err != nil {
+				return
+			}
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := s.writeStream(w, fl, sess, ev, binStream); err != nil {
+				return
+			}
 		}
 	}
 }

@@ -1981,6 +1981,12 @@ html.dark #app {
   border-radius: 8px;
 }
 
+/* Open fence with no body yet is just a dark strip while the model streams the opener. */
+.copilot-chat-assistant-markdown [data-streamdown="code-block"][data-open-fence="true"]:has(code:empty),
+.copilot-chat-assistant-markdown [data-streamdown="code-block"][data-streaming="true"]:has(code:empty) {
+  display: none;
+}
+
 .copilot-chat-assistant-markdown [data-streamdown="code-block-header"] {
   display: flex;
   align-items: center;
@@ -2062,7 +2068,13 @@ html.dark #app {
 
 .copilot-chat-assistant-markdown [data-streamdown="code-body"] code,
 .mesh-chat .copilot-chat-assistant-markdown pre code {
-  display: block;
+  /* Flex column: each .line is a row; whitespace text nodes between lines are ignored,
+     so we neither collapse (inline without newlines) nor double-space (block + Shiki newlines). */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: max-content;
+  min-width: 100%;
   padding: 0;
   color: inherit;
   background: transparent;
@@ -2081,11 +2093,15 @@ html.dark #app {
   background-color: transparent !important;
 }
 
-/* CopilotKit sets .line to block and Shiki keeps newlines between lines, so line-height would be counted twice. */
+/* CopilotKit sets .line to block; keep block layout so missing inter-line newlines still wrap. */
 .copilot-chat-assistant-markdown [data-streamdown="code-body"] .line,
 .copilot-chat-assistant-markdown [data-streamdown="code"] .line,
 .copilot-chat-assistant-markdown .shiki .line {
-  display: inline;
+  display: block;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  min-height: 1.4em;
   padding: 0;
   margin: 0;
   line-height: inherit;

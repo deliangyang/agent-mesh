@@ -8,10 +8,12 @@ import { fetchJSON } from "./http";
 import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import {
+  cleanUserText,
   ensureTurnThink,
   eventsToMessages,
   isInternalDump,
   isRedactedPlaceholder,
+  keepOptimisticTail,
   lastTurnMessages,
   sameEvents,
   sameMessages,
@@ -349,6 +351,18 @@ export class MeshAgent extends AbstractAgent {
         if (!text) {
           failRun(t("agent.missingText"));
           return;
+        }
+        // Anchor the optimistic user turn in historyEvents so a lagging watch
+        // snapshot cannot paint a transcript that drops the bubble the user sees.
+        {
+          const want = cleanUserText(text).replace(/\s+/g, " ").trim();
+          const last = historyEvents[historyEvents.length - 1];
+          const lastText = cleanUserText(last?.text || "").replace(/\s+/g, " ").trim();
+          const lastIsUser = Boolean(last && (last.type === "user" || last.role === "user"));
+          if (want && !(lastIsUser && lastText === want)) {
+            historyEvents = historyEvents.concat([{ type: "user", role: "user", text }]);
+            if (threadId) historyCache.set(threadId, historyEvents);
+          }
         }
         // a new chat has an empty meshTarget.session; do not reuse a leftover CopilotChat thread.
         const bound = threadId.includes("|") ? parseThreadId(threadId) : { node: "", engine: "", session: "" };
@@ -821,17 +835,20 @@ export function expectHistory(threadId: string): void {
 function paintMessages(evs: MeshEvent[], progressive: boolean): void {
   if (!runningNow()) noteAskEvents(evs, true);
   const prev = meshAgent.messages.slice();
-  const all = ensureTurnThink(keepMediaContent(eventsToMessages(evs), prev), meshLive.think);
-  const first = progressive && prev.length === 0 ? lastTurnMessages(all, FIRST_PAINT_TURNS) : all;
+  const painted = keepOptimisticTail(
+    prev,
+    ensureTurnThink(keepMediaContent(eventsToMessages(evs), prev), meshLive.think),
+  );
+  const first = progressive && prev.length === 0 ? lastTurnMessages(painted, FIRST_PAINT_TURNS) : painted;
   if (!runningNow() && !sameMessages(prev, first)) meshAgent.setMessages(first);
   chatLoad.loading = false;
-  if (!progressive || first.length >= all.length || prev.length > 0) return;
+  if (!progressive || first.length >= painted.length || prev.length > 0) return;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       if (runningNow()) return;
       if (historyEvents !== evs) return;
-      if (sameMessages(meshAgent.messages, all)) return;
-      meshAgent.setMessages(all);
+      if (sameMessages(meshAgent.messages, painted)) return;
+      meshAgent.setMessages(painted);
     });
   });
 }

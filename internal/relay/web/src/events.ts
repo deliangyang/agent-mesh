@@ -356,6 +356,63 @@ export function sameMessages(a: Message[], b: Message[]): boolean {
   return true;
 }
 
+function messageContentKey(m: Message): string {
+  return JSON.stringify((m as { content?: unknown }).content ?? "");
+}
+
+function messageText(m: Message): string {
+  const c = (m as { content?: unknown }).content;
+  return typeof c === "string" ? c : JSON.stringify(c ?? "");
+}
+
+function messagesRolePrefix(short: Message[], long: Message[]): boolean {
+  if (short.length > long.length) return false;
+  for (let i = 0; i < short.length; i++) {
+    if (short[i].role !== long[i].role) return false;
+  }
+  return true;
+}
+
+/**
+ * History snapshots often lag the CopilotKit optimistic user bubble (and the
+ * live assistant tail). Keep the live tail so paintMessages cannot erase the
+ * input the user just sent.
+ */
+export function keepOptimisticTail(prev: Message[], next: Message[]): Message[] {
+  if (!prev.length) return next;
+  if (!next.length) return prev;
+
+  let lastUserIdx = -1;
+  for (let i = prev.length - 1; i >= 0; i--) {
+    if (prev[i].role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx < 0) return next;
+
+  const want = messageContentKey(prev[lastUserIdx]);
+  const nextHasUser = next.some((m) => m.role === "user" && messageContentKey(m) === want);
+  if (!nextHasUser) {
+    return next.concat(prev.slice(lastUserIdx));
+  }
+
+  // History has the user but is still a shorter role-prefix of the live transcript.
+  if (prev.length > next.length && messagesRolePrefix(next, prev)) {
+    return prev;
+  }
+
+  const prevTail = prev[prev.length - 1];
+  const nextTail = next[next.length - 1];
+  if (prevTail && nextTail && prevTail.role === nextTail.role && prevTail.role !== "user") {
+    const a = messageText(prevTail);
+    const b = messageText(nextTail);
+    if (a.length > b.length && a.startsWith(b)) return prev;
+  }
+
+  return next;
+}
+
 function argsContinue(prev: string, next: string): boolean {
   if (!next) return true;
   const a = (prev || "").trim();

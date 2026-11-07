@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanUserText, ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText, sessionMissingError } from "./events.ts";
+import {
+  cleanUserText,
+  ensureTurnThink,
+  eventsToMessages,
+  keepOptimisticTail,
+  mergeEvents,
+  sameEvents,
+  sameMessages,
+  sessionIdFromChunk,
+  sessionIdFromText,
+  sessionMissingError,
+} from "./events.ts";
 
 test("mergeEvents keeps ask", () => {
   const rows = mergeEvents([
@@ -171,6 +182,35 @@ test("sameMessages compares content and ignores new objects", () => {
   assert.equal(a === b, false);
   assert.equal(sameMessages(a, b), true);
   assert.equal(sameMessages(a, eventsToMessages([{ type: "user", role: "user", text: "hi" }])), false);
+});
+
+test("keepOptimisticTail keeps a live user bubble history has not caught up to", () => {
+  const live = eventsToMessages([
+    { type: "user", role: "user", text: "old" },
+    { type: "assistant", text: "reply" },
+    { type: "user", role: "user", text: "new input" },
+  ]);
+  const hist = eventsToMessages([
+    { type: "user", role: "user", text: "old" },
+    { type: "assistant", text: "reply" },
+    { type: "assistant", text: "partial" },
+  ]);
+  const merged = keepOptimisticTail(live, hist);
+  assert.equal(merged[merged.length - 1]?.role, "user");
+  assert.equal(JSON.stringify(merged[merged.length - 1]?.content), JSON.stringify("new input"));
+});
+
+test("keepOptimisticTail keeps a longer live assistant over a short history prefix", () => {
+  const live = eventsToMessages([
+    { type: "user", role: "user", text: "hi" },
+    { type: "assistant", text: "hello world" },
+  ]);
+  const hist = eventsToMessages([
+    { type: "user", role: "user", text: "hi" },
+    { type: "assistant", text: "hello" },
+  ]);
+  const merged = keepOptimisticTail(live, hist);
+  assert.equal(JSON.stringify(merged[1]?.content), JSON.stringify("hello world"));
 });
 
 test("extract session id from stream JSON", () => {

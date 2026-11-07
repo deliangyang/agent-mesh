@@ -37,8 +37,9 @@ import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
 import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft, stopRemoteTurn } from "../meshAgent";
-import { t } from "../locale";
+import { locale, t } from "../locale";
 import { filterNodesByOs, nodePlatforms } from "../nodeFilter";
+import { formatSessionUpdated } from "../sessionTime";
 import { platformLabel } from "../platform";
 import { pushFollowup, pullLastFollowup, shouldQueueFollowup, watchFollowups } from "../followup";
 import { isOpenSettingsHotkey } from "../settingsHotkey";
@@ -213,6 +214,10 @@ const dirOptions = computed(() => {
 function sessionStamp(s: Session): number {
   if (sessionStreaming(s)) return Date.now() / 1000;
   return s.updated_at || 0;
+}
+
+function sessionUpdatedLabel(s: Session): string {
+  return formatSessionUpdated(sessionStamp(s), { locale: locale.value });
 }
 
 function sessionListable(s: Session): boolean {
@@ -1051,6 +1056,7 @@ onBeforeUnmount(() => {
           >
             <span v-if="s.active || s.busy || sessionStreaming(s)" class="mesh-lamp" aria-hidden="true"></span>
             <span class="mesh-thread-name">{{ s.title || t("nav.untitled") }}</span>
+            <span class="mesh-thread-time">{{ sessionUpdatedLabel(s) }}</span>
           </button>
         </div>
         <div v-if="!sessionRows.length && !creating" class="mesh-empty">{{ t("nav.noChats") }}</div>

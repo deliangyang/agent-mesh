@@ -312,8 +312,9 @@ export class E2EClient {
         if (openErr) throw openErr;
         while (queue.length) {
           const ev = queue.shift()!;
+          // Watch stays open across turn `done` markers; reply/send close when the
+          // server ends the socket after Pump's quiet window. Never treat done as EOF.
           yield ev;
-          if (ev.done) return;
         }
         if (closed) return;
         await new Promise<void>((resolve) => {
@@ -386,8 +387,8 @@ export class E2EClient {
           const plain = await open(ns.sess, fe);
           const ev = JSON.parse(fromUtf8(plain)) as MeshEvent;
           if (ev.type === "ping") continue;
+          // See streamOverWS: done is a turn marker, not stream EOF.
           yield ev;
-          if (ev.done) return;
         }
       }
       return;
@@ -401,7 +402,6 @@ export class E2EClient {
       const ev = JSON.parse(fromUtf8(plain)) as MeshEvent;
       if (ev.type === "ping") continue;
       yield ev;
-      if (ev.done) return;
     }
   }
 

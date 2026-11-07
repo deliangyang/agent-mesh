@@ -24,6 +24,7 @@ import { loadStoredHistory, saveStoredHistory } from "./historyStore";
 import { resolveModelPref } from "./modelPrefs";
 import { chunkFingerprint, nextPiece, rememberChunk } from "./liveDedup";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
+import { keepLiveAfterStream } from "./liveHandoff";
 import { meshTarget, parseThreadId } from "./target";
 import type { MeshEvent, Session } from "./types";
 
@@ -607,26 +608,14 @@ export class MeshAgent extends AbstractAgent {
         };
         // Listen on catalog WS / E2E watch in parallel so a dropped SSE can hand off without gaps.
         if (session) bindLiveWatch(session, engine, node);
-        let stopLive = () => {};
-        const liveDone = new Promise<void>((resolve) => {
-          let settled = false;
-          const finishLive = () => {
-            if (settled) return;
-            settled = true;
-            off();
-            ac.signal.removeEventListener("abort", finishLive);
-            resolve();
-          };
-          stopLive = finishLive;
-          const off = onLiveChunk((obj) => {
-            if (feed(obj)) finishLive();
-          });
-          if (ac.signal.aborted) {
-            finishLive();
-            return;
-          }
-          ac.signal.addEventListener("abort", finishLive, { once: true });
+        // Keep feeding after a turn `done` marker so a dropped SSE can hand off to watch
+        // until the node goes idle. stopLive runs after waitSessionIdle below.
+        const offLive = onLiveChunk((obj) => {
+          feed(obj);
         });
+        const stopLive = () => {
+          offLive();
+        };
         if (useE2E) {
           const { e2eClient } = await import("./e2e/runtime.ts");
           const { eventToChunk } = await import("./e2e/chunk.ts");
@@ -653,6 +642,7 @@ export class MeshAgent extends AbstractAgent {
               };
           try {
             for await (const ev of c.stream(node, method, params, ac.signal)) {
+              // Terminal chunks end this reply/send socket consumer; watch keeps the UI live.
               if (feed(eventToChunk(ev))) break;
             }
           } catch (err) {
@@ -669,12 +659,21 @@ export class MeshAgent extends AbstractAgent {
         }
         const sid = meshLive.session || session;
         if (sid) bindLiveWatch(sid, engine, node);
-        if (!ac.signal.aborted && !ended && !runFailed) {
+        if (!ac.signal.aborted && !runFailed) {
           const grace = sseDropped || queued ? 60000 : sawContent ? 1500 : 4000;
-          await Promise.race([
-            liveDone,
-            waitSessionIdle(ac.signal, () => ended || runFailed || ac.signal.aborted, sid, grace),
-          ]);
+          await waitSessionIdle(
+            ac.signal,
+            () =>
+              !keepLiveAfterStream({
+                ended,
+                sseDropped,
+                queued,
+                runFailed,
+                aborted: ac.signal.aborted,
+              }),
+            sid,
+            grace,
+          );
         }
         stopLive();
         if (sseDropped && !sawContent && !ended && !runFailed && !sid) {

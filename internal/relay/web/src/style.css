@@ -670,6 +670,20 @@ html.dark #app {
   white-space: nowrap;
 }
 
+.mesh-thread-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--mute);
+  font-size: 11px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mesh-thread-time:empty {
+  display: none;
+}
+
 .mesh-empty {
   color: var(--mute);
   padding: 12px 12px;

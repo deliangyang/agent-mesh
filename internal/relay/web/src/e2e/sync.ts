@@ -166,15 +166,32 @@ export function startE2EWatch(node: string, engine: string, session: string): vo
   const ac = new AbortController();
   watchAbort = ac;
   void (async () => {
-    try {
-      const c = e2eClient();
-      for await (const ev of c.stream(node, "watch", { engine, session_id: session }, ac.signal)) {
-        if (ac.signal.aborted) return;
-        pushLiveChunk(eventToChunk(ev));
-        if (ev.done) break;
+    let attempt = 0;
+    while (!ac.signal.aborted && watchKey === key && watchAbort === ac) {
+      try {
+        const c = e2eClient();
+        for await (const ev of c.stream(node, "watch", { engine, session_id: session }, ac.signal)) {
+          if (ac.signal.aborted) return;
+          // Turn `done` must not end the watch — later turns still need live chunks.
+          pushLiveChunk(eventToChunk(ev));
+        }
+      } catch {
+        /* aborted or node down */
       }
-    } catch {
-      /* aborted or node down */
+      if (ac.signal.aborted || watchKey !== key || watchAbort !== ac) return;
+      attempt += 1;
+      const delay = Math.min(1200 * Math.max(1, attempt), 8000);
+      await new Promise<void>((resolve) => {
+        const t = window.setTimeout(resolve, delay);
+        ac.signal.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
     }
   })();
 }

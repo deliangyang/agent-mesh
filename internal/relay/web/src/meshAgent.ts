@@ -7,7 +7,17 @@ import { clearMediaBank, keepMediaContent, lastUserPayload, rememberMedia } from
 import { fetchJSON } from "./http";
 import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
-import { cleanUserText, ensureTurnThink, eventsToMessages, isInternalDump, lastTurnMessages, sameEvents, sameMessages, sessionIdFromChunk } from "./events";
+import {
+  cleanUserText,
+  ensureTurnThink,
+  eventsToMessages,
+  isInternalDump,
+  isRedactedPlaceholder,
+  lastTurnMessages,
+  sameEvents,
+  sameMessages,
+  sessionIdFromChunk,
+} from "./events";
 import { chatModelOf } from "./chatModel";
 import { loadStoredHistory, saveStoredHistory } from "./historyStore";
 import { resolveModelPref } from "./modelPrefs";
@@ -494,11 +504,13 @@ export class MeshAgent extends AbstractAgent {
             kind === "thinking" ||
             kind === "reasoning" ||
             kind === "thought" ||
-            kind === "thinking_delta"
+            kind === "thinking_delta" ||
+            kind === "redacted_thinking"
           ) {
             sawContent = true;
             closeTool();
             closeText();
+            if (isRedactedPlaceholder(delta)) return false;
             const piece = nextPiece(thinkAcc, delta);
             thinkAcc += piece;
             if (piece) {
@@ -566,6 +578,7 @@ export class MeshAgent extends AbstractAgent {
           }
           if (!delta) return stop();
           if (isInternalDump(delta)) return stop();
+          if (isRedactedPlaceholder(delta)) return false;
           meshLive.thinking = false;
           sawContent = true;
           closeTool();

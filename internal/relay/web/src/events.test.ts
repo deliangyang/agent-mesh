@@ -193,6 +193,20 @@ test("extract session id from stream JSON", () => {
   assert.equal(sessionIdFromChunk({ choices: [{ delta: { content: "hello" } }] }), "");
 });
 
+test("redacted thinking placeholders stay out of the bubble", () => {
+  const msgs = eventsToMessages(
+    mergeEvents([
+      { type: "user", role: "user", text: "hi" },
+      { type: "thinking", text: "[REDACTED]" },
+      { type: "assistant", text: "[REDACTED]" },
+      { type: "assistant", text: "ok" },
+    ]),
+  );
+  const asst = msgs.filter((m) => m.role === "assistant");
+  assert.equal(asst.length, 1);
+  assert.equal((asst[0] as { content?: string }).content, "ok");
+});
+
 test("system-reminder hook blocks stay out of the user bubble", () => {
   const raw = "<system-reminder>\nUserPromptSubmit hook context\n</system-reminder>\n\nfix the bug";
   const rows = mergeEvents([{ type: "user", role: "user", text: raw }]);

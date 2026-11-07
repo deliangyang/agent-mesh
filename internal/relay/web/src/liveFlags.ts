@@ -11,7 +11,13 @@ export function liveHintMode(flags: StreamFlags): LiveHint {
 }
 
 export function thinkingKind(kind: string): boolean {
-  return kind === "thinking" || kind === "reasoning" || kind === "thought" || kind === "thinking_delta";
+  return (
+    kind === "thinking" ||
+    kind === "reasoning" ||
+    kind === "thought" ||
+    kind === "thinking_delta" ||
+    kind === "redacted_thinking"
+  );
 }
 
 function contentKind(kind: string): boolean {

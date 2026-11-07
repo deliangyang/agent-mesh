@@ -77,6 +77,10 @@ func FullText(s string) string {
 	return cutBytes(s, maxEventText) + "\n…(truncated)"
 }
 
+func isRedactedThinkingText(s string) bool {
+	return strings.EqualFold(strings.TrimSpace(s), "[REDACTED]")
+}
+
 // EventTime reads a timestamp from a jsonl object.
 func EventTime(obj map[string]any) int64 {
 	if obj == nil {
@@ -352,7 +356,7 @@ func parseContentBlocks(content any) []protocol.Event {
 	arr, ok := content.([]any)
 	if !ok {
 		text := ContentToText(content)
-		if strings.TrimSpace(text) == "" {
+		if strings.TrimSpace(text) == "" || isRedactedThinkingText(text) {
 			return nil
 		}
 		return []protocol.Event{{Type: "assistant", Role: "assistant", Text: FullText(text)}}
@@ -389,12 +393,12 @@ func parseContentBlocks(content any) []protocol.Event {
 			if text == "" {
 				text = ContentToText(m)
 			}
-			if text != "" {
+			if text != "" && !isRedactedThinkingText(text) {
 				out = append(out, protocol.Event{Type: "thinking", Role: "assistant", Text: FullText(text)})
 			}
 		case "text", "input_text", "output_text":
 			text := strField(m, "text")
-			if text != "" {
+			if text != "" && !isRedactedThinkingText(text) {
 				out = append(out, protocol.Event{Type: "assistant", Role: "assistant", Text: FullText(text)})
 			}
 		}
@@ -680,8 +684,11 @@ func parseVendorJSONL(obj map[string]any, kind string) []protocol.Event {
 		return []protocol.Event{}
 	case "tool_use":
 		return openCodeToolEvents(obj)
-	case "thinking":
+	case "thinking", "redacted_thinking":
 		if strField(obj, "subtype") == "completed" && strField(obj, "text", "thinking") == "" && ContentToText(obj["content"]) == "" {
+			return []protocol.Event{}
+		}
+		if kind == "redacted_thinking" || isRedactedThinkingText(strField(obj, "text", "thinking")) {
 			return []protocol.Event{}
 		}
 		return nil
@@ -1076,7 +1083,7 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 	}
 	content := jsonlContent(obj, msg)
 
-	if kind == "thinking" || kind == "reasoning" || kind == "thought" || kind == "thinking_delta" {
+	if kind == "thinking" || kind == "reasoning" || kind == "thought" || kind == "thinking_delta" || kind == "redacted_thinking" {
 		text := ContentToText(content)
 		if text == "" {
 			text = ContentToText(obj["rawContent"])
@@ -1084,7 +1091,7 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 		if text == "" {
 			text = strField(obj, "thinking", "text")
 		}
-		if text == "" {
+		if text == "" || isRedactedThinkingText(text) {
 			return nil
 		}
 		return []protocol.Event{{Type: "thinking", Role: "assistant", Text: FullText(text)}}
@@ -1164,7 +1171,7 @@ func ParseJSONL(obj map[string]any) []protocol.Event {
 			return parseContentBlocks(content)
 		}
 		text := ContentToText(content)
-		if text == "" {
+		if text == "" || isRedactedThinkingText(text) {
 			return nil
 		}
 		return []protocol.Event{{Type: "assistant", Role: "assistant", Text: FullText(text)}}

@@ -55,6 +55,34 @@ func TestParseJSONLThinking(t *testing.T) {
 	}
 }
 
+func TestParseJSONLRedactedPlaceholder(t *testing.T) {
+	evs := ParseJSONL(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": "[REDACTED]",
+		},
+	})
+	if len(evs) != 0 {
+		t.Fatalf("literal redacted string %#v", evs)
+	}
+	evs = ParseJSONL(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": []any{
+				map[string]any{"type": "redacted_thinking", "text": "[REDACTED]"},
+				map[string]any{"type": "text", "text": "done"},
+			},
+		},
+	})
+	if len(evs) != 1 || evs[0].Type != "assistant" || evs[0].Text != "done" {
+		t.Fatalf("mixed content %#v", evs)
+	}
+	evs = ParseJSONL(map[string]any{"type": "thinking", "subtype": "delta", "text": "[REDACTED]"})
+	if len(evs) != 0 {
+		t.Fatalf("thinking placeholder %#v", evs)
+	}
+}
+
 func TestParseJSONLWorkBuddy(t *testing.T) {
 	think := ParseJSONL(map[string]any{
 		"type":    "reasoning",

@@ -4,6 +4,11 @@ import { meshTarget } from "./target.ts";
 import type { MeshEvent } from "./types.ts";
 
 const TURN_LIMIT = 20;
+const REDACTED_PLACEHOLDER_RE = /^\[REDACTED\]$/i;
+
+export function isRedactedPlaceholder(text: string): boolean {
+  return REDACTED_PLACEHOLDER_RE.test(String(text || "").trim());
+}
 
 function isToolType(type: string): boolean {
   return (
@@ -234,6 +239,7 @@ export function mergeEvents(evs: MeshEvent[]): MeshEvent[] {
         : parseAttachBlock(ev.text || "")
       : undefined;
     const text = user ? cleanUserText(ev.text || "") : ev.text || "";
+    if (!user && isRedactedPlaceholder(text) && !isToolType(type)) continue;
     if (type === "title" || type === "session" || type === "system") continue;
     if (type === "ask") {
       out.push({

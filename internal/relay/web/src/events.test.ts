@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   cleanUserText,
+  connectSnapshot,
   ensureTurnThink,
   eventsToMessages,
   keepOptimisticTail,
@@ -182,6 +183,15 @@ test("sameMessages compares content and ignores new objects", () => {
   assert.equal(a === b, false);
   assert.equal(sameMessages(a, b), true);
   assert.equal(sameMessages(a, eventsToMessages([{ type: "user", role: "user", text: "hi" }])), false);
+});
+
+test("connectSnapshot keeps a live user bubble when the draft cache is empty", () => {
+  const live = eventsToMessages([{ type: "user", role: "user", text: "my input" }]);
+  const snap = connectSnapshot(live, []);
+  assert.equal(snap.length, 1);
+  assert.equal(snap[0]?.role, "user");
+  assert.equal(JSON.stringify(snap[0]?.content), JSON.stringify("my input"));
+  assert.equal(connectSnapshot([], []).length, 0);
 });
 
 test("keepOptimisticTail keeps a live user bubble history has not caught up to", () => {

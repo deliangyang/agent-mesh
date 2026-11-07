@@ -373,6 +373,13 @@ function messagesRolePrefix(short: Message[], long: Message[]): boolean {
   return true;
 }
 
+/** Prefer an in-memory transcript over a cache miss when connecting a thread. */
+export function connectSnapshot(live: Message[], cached: MeshEvent[]): Message[] {
+  if (live.length) return live.slice();
+  if (cached.length) return eventsToMessages(cached);
+  return [];
+}
+
 /**
  * History snapshots often lag the CopilotKit optimistic user bubble (and the
  * live assistant tail). Keep the live tail so paintMessages cannot erase the

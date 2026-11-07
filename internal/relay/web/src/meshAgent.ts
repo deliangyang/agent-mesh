@@ -9,6 +9,7 @@ import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import {
   cleanUserText,
+  connectSnapshot,
   ensureTurnThink,
   eventsToMessages,
   isInternalDump,
@@ -291,17 +292,14 @@ export class MeshAgent extends AbstractAgent {
       const runId = input.runId || crypto.randomUUID();
       const threadId = input.threadId || this.threadId;
       const cached = historyCache.get(threadId) || [];
-      // replay the current list when the same session is already on screen; switching sessions uses that session's cache instead of the old snapshot.
-      const reuseLive = historyThread === threadId && this.messages.length > 0;
-      if (cached.length) {
+      const live = this.messages || [];
+      // Draft chats keep draft-* threadIds while historyThread rebinds to the real
+      // session; never snapshot [] over a live optimistic user bubble.
+      const snapshot = connectSnapshot(live, cached);
+      if (!live.length && cached.length) {
         historyEvents = cached;
         historyThread = threadId;
       }
-      const snapshot = reuseLive
-        ? this.messages.slice()
-        : cached.length
-          ? eventsToMessages(cached)
-          : [];
       sub.next({ type: EventType.RUN_STARTED, threadId, runId });
       sub.next({
         type: EventType.MESSAGES_SNAPSHOT,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanUserText, ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText } from "./events.ts";
+import { cleanUserText, ensureTurnThink, eventsToMessages, mergeEvents, sameEvents, sameMessages, sessionIdFromChunk, sessionIdFromText, sessionMissingError } from "./events.ts";
 
 test("mergeEvents keeps ask", () => {
   const rows = mergeEvents([
@@ -191,6 +191,12 @@ test("extract session id from stream JSON", () => {
   assert.equal(sessionIdFromText('{"type":"system","session_id":"sys-9"}'), "sys-9");
   assert.equal(sessionIdFromText('{"type":"session","id":"pi-1","cwd":"/tmp"}'), "pi-1");
   assert.equal(sessionIdFromChunk({ choices: [{ delta: { content: "hello" } }] }), "");
+});
+
+test("session missing errors are soft for brand-new watches", () => {
+  assert.equal(sessionMissingError("session abc has no jsonl"), true);
+  assert.equal(sessionMissingError("session xyz not unique or missing"), true);
+  assert.equal(sessionMissingError("permission denied"), false);
 });
 
 test("redacted thinking placeholders stay out of the bubble", () => {

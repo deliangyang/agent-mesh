@@ -473,7 +473,8 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 			return nil, err
 		}
 		s.publishWatchedSession(p.Engine, p.SessionID)
-		return d.Watch(ctx, p.SessionID)
+		// New chats emit session_id before the engine writes jsonl; wait instead of erroring.
+		return watchWhenReady(ctx, d, p.SessionID)
 	case protocol.MethodReply:
 		var p protocol.ReplyParams
 		_ = json.Unmarshal(req.Params, &p)
@@ -575,6 +576,50 @@ func (s *Server) cliModelFor(model, engine string) string {
 	model = s.localModelID(model)
 	_, name := openai.EngineModel(model, engine, s.Drivers.Names())
 	return driver.CLIModel(name, engine)
+}
+
+const watchReadyPoll = 200 * time.Millisecond
+
+// watchWhenReady calls Driver.Watch, retrying while the session jsonl is still missing.
+// Brand-new Send streams publish a session id before the engine creates the file; the UI
+// binds a parallel watch as soon as it sees that id.
+func watchWhenReady(ctx context.Context, d driver.Driver, sessionID string) (<-chan protocol.Event, error) {
+	ch, err := d.Watch(ctx, sessionID)
+	if err == nil || !sessionGone(err) {
+		return ch, err
+	}
+	out := make(chan protocol.Event, 32)
+	go func() {
+		defer close(out)
+		ticker := time.NewTicker(watchReadyPoll)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ready, werr := d.Watch(ctx, sessionID)
+				if werr == nil {
+					for ev := range ready {
+						select {
+						case <-ctx.Done():
+							return
+						case out <- ev:
+						}
+					}
+					return
+				}
+				if !sessionGone(werr) {
+					select {
+					case <-ctx.Done():
+					case out <- protocol.Event{Type: "error", Text: werr.Error(), Done: true}:
+					}
+					return
+				}
+			}
+		}
+	}()
+	return out, nil
 }
 
 func applyRPCFiles(text, cwd string, files []protocol.AttachFile) (string, error) {

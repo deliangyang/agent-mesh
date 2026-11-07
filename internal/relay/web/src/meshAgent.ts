@@ -17,6 +17,7 @@ import {
   sameEvents,
   sameMessages,
   sessionIdFromChunk,
+  sessionMissingError,
 } from "./events";
 import { chatModelOf } from "./chatModel";
 import { loadStoredHistory, saveStoredHistory } from "./historyStore";
@@ -110,14 +111,19 @@ function chunkTerminal(obj: LiveChunk): boolean {
 
 function chunkFail(obj: LiveChunk): string {
   const top = obj.error;
-  if (typeof top === "string" && top.trim()) return top.replace(/\s+/g, " ").trim();
-  if (top && typeof top === "object") {
-    const msg = (top as { message?: unknown }).message;
-    if (typeof msg === "string" && msg.trim()) return msg.replace(/\s+/g, " ").trim();
+  let msg = "";
+  if (typeof top === "string" && top.trim()) msg = top.replace(/\s+/g, " ").trim();
+  else if (top && typeof top === "object") {
+    const nested = (top as { message?: unknown }).message;
+    if (typeof nested === "string" && nested.trim()) msg = nested.replace(/\s+/g, " ").trim();
   }
   const mesh = meshOf(obj);
-  if ((mesh.type || "").toLowerCase() !== "error") return "";
-  return (chunkDelta(obj) || mesh.preview || "").replace(/\s+/g, " ").trim() || t("toast.requestFailed");
+  if (!msg && (mesh.type || "").toLowerCase() === "error") {
+    msg = (chunkDelta(obj) || mesh.preview || "").replace(/\s+/g, " ").trim() || t("toast.requestFailed");
+  }
+  // Parallel watch can race a brand-new Send: session_id arrives before jsonl exists.
+  if (msg && sessionMissingError(msg)) return "";
+  return msg;
 }
 
 async function failBody(resp: Response): Promise<string> {
@@ -452,6 +458,8 @@ export class MeshAgent extends AbstractAgent {
           });
         };
         const feed = (obj: LiveChunk): boolean => {
+          // AG-UI forbids further events after RUN_ERROR (e.g. TOOL_CALL_START).
+          if (runFailed || aborted) return true;
           const fp = chunkFingerprint(obj);
           if (rememberChunk(seenChunks, fp)) {
             const done = chunkTerminal(obj);
@@ -469,6 +477,8 @@ export class MeshAgent extends AbstractAgent {
           const mesh = meshOf(obj);
           const delta = chunkDelta(obj);
           const kind = mesh.type || (mesh.tool ? "tool_call" : "assistant");
+          // Soft-ignored watch misses still arrive as type=error; do not end the send run.
+          if (kind === "error") return false;
           if (noteSession(obj)) cacheLiveThread(threadId);
           const stop = (): boolean => {
             const done = chunkTerminal(obj);

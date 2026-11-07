@@ -161,6 +161,12 @@ export function sessionIdFromChunk(obj: Record<string, unknown> | null | undefin
   return sessionIdFromText(choices?.[0]?.delta?.content || "");
 }
 
+/** Transient watch/history misses while a brand-new engine session is still writing jsonl. */
+export function sessionMissingError(message: string): boolean {
+  const msg = String(message || "").toLowerCase();
+  return msg.includes("has no jsonl") || msg.includes("not unique or missing");
+}
+
 function looksLikeSessionMeta(text: string): boolean {
   const s = String(text || "").trim();
   if (!s) return true;

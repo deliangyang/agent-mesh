@@ -460,3 +460,49 @@ func TestRPCCommands(t *testing.T) {
 		t.Fatalf("rpc %#v", resp)
 	}
 }
+
+type lateWatchDriver struct {
+	stubDriver
+	attempts atomic.Int32
+}
+
+func (d *lateWatchDriver) Name() string { return "late" }
+
+func (d *lateWatchDriver) Watch(ctx context.Context, sessionID string) (<-chan protocol.Event, error) {
+	n := d.attempts.Add(1)
+	if n < 3 {
+		return nil, fmt.Errorf("session %s has no jsonl", sessionID)
+	}
+	ch := make(chan protocol.Event, 1)
+	ch <- protocol.Event{Type: "assistant", Text: "ready", Session: sessionID, Done: true}
+	close(ch)
+	return ch, nil
+}
+
+func (d *lateWatchDriver) Probe(ctx context.Context) protocol.EngineInfo {
+	return protocol.EngineInfo{Name: "late", Title: "Late", Available: true, Enabled: true}
+}
+
+func TestWatchWhenReadyWaitsForJSONL(t *testing.T) {
+	d := &lateWatchDriver{}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	ch, err := watchWhenReady(ctx, d, "new-sid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ev, ok := <-ch:
+		if !ok {
+			t.Fatal("closed before event")
+		}
+		if ev.Text != "ready" {
+			t.Fatalf("got %#v", ev)
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for watch")
+	}
+	if d.attempts.Load() < 3 {
+		t.Fatalf("attempts %d", d.attempts.Load())
+	}
+}

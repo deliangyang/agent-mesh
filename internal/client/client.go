@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -17,10 +18,11 @@ import (
 
 // Client can talk to a node directly or through the relay; application encryption is always E2E.
 type Client struct {
-	Ident  *e2e.Identity
-	Relay  string
-	Direct string
-	HTTP   *http.Client
+	Ident    *e2e.Identity
+	Relay    string
+	Direct   string
+	Password string // optional MESH_PASSWORD bearer for relay directory routes
+	HTTP     *http.Client
 
 	peer *e2e.PublicIdentity
 	sess *e2e.Session
@@ -30,10 +32,11 @@ type Client struct {
 // New creates a client.
 func New(ident *e2e.Identity, relay, direct string) *Client {
 	return &Client{
-		Ident:  ident,
-		Relay:  strings.TrimRight(relay, "/"),
-		Direct: strings.TrimRight(direct, "/"),
-		HTTP:   &http.Client{Timeout: 120 * time.Second},
+		Ident:    ident,
+		Relay:    strings.TrimRight(relay, "/"),
+		Direct:   strings.TrimRight(direct, "/"),
+		Password: strings.TrimSpace(os.Getenv("MESH_PASSWORD")),
+		HTTP:     &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -46,6 +49,7 @@ func (c *Client) Nodes(ctx context.Context) ([]protocol.NodeInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.setRelayAuth(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -147,6 +151,12 @@ func (c *Client) Handshake(ctx context.Context, nodeID string) error {
 	return nil
 }
 
+func (c *Client) setRelayAuth(req *http.Request) {
+	if c.Password != "" && req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+c.Password)
+	}
+}
+
 func (c *Client) postEnvelope(ctx context.Context, u string, env e2e.Envelope) (e2e.Envelope, error) {
 	var out e2e.Envelope
 	raw, ct, err := e2e.EncodeEnvelope(env, true)
@@ -159,6 +169,7 @@ func (c *Client) postEnvelope(ctx context.Context, u string, env e2e.Envelope) (
 	}
 	req.Header.Set("Content-Type", ct)
 	req.Header.Set("Accept", e2e.ContentTypeEnvelope)
+	c.setRelayAuth(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return out, err
@@ -274,6 +285,7 @@ func (c *Client) openStream(ctx context.Context, req protocol.Request) (*http.Re
 	}
 	httpReq.Header.Set("Content-Type", ct)
 	httpReq.Header.Set("Accept", e2e.ContentTypeEnvelopeStream)
+	c.setRelayAuth(httpReq)
 	httpCli := c.HTTP
 	if httpCli.Timeout != 0 {
 		cp := *httpCli

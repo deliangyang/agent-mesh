@@ -318,11 +318,6 @@ export class E2EClient {
         /* ignore */
       }
     };
-    const failAuth = (err: unknown): never => {
-      close();
-      this.dropSession(ns.peer.id);
-      throw err instanceof Error ? err : new Error(String(err));
-    };
     const failOpen = (err: unknown): never => {
       close();
       throw err instanceof Error ? err : new Error(String(err));
@@ -340,71 +335,38 @@ export class E2EClient {
           reject(new Error("catalog ws error"));
         };
       });
-      // Fail fast if the node rejects the sealed subscribe (401 decrypt/no session).
-      await new Promise<void>((resolve, reject) => {
-        const t = window.setTimeout(() => reject(new Error("catalog ws no data")), 12000);
-        sock.onmessage = (ev) => {
-          window.clearTimeout(t);
-          void (async () => {
-            try {
-              const buf =
-                ev.data instanceof ArrayBuffer
-                  ? new Uint8Array(ev.data)
-                  : ev.data instanceof Blob
-                    ? new Uint8Array(await ev.data.arrayBuffer())
-                    : null;
-              if (!buf) return;
-              const fe = unmarshalEnvelope(buf);
-              const plain = await open(ns.sess, fe);
-              const msg = JSON.parse(fromUtf8(plain)) as Record<string, unknown>;
-              onPart(msg);
-              resolve();
-              sock.onmessage = (later) => {
-                if (closed) return;
-                void (async () => {
-                  try {
-                    const cur = this.byNode.get(ns.peer.id);
-                    if (!cur || cur.gen !== heldGen) return;
-                    const b =
-                      later.data instanceof ArrayBuffer
-                        ? new Uint8Array(later.data)
-                        : later.data instanceof Blob
-                          ? new Uint8Array(await later.data.arrayBuffer())
-                          : null;
-                    if (!b) return;
-                    const frame = unmarshalEnvelope(b);
-                    const pt = await open(ns.sess, frame);
-                    onPart(JSON.parse(fromUtf8(pt)) as Record<string, unknown>);
-                  } catch {
-                    /* drop */
-                  }
-                })();
-              };
-            } catch (err) {
-              reject(err instanceof Error ? err : new Error(String(err)));
-            }
-          })();
-        };
-        sock.onclose = () => {
-          window.clearTimeout(t);
-          closed = true;
-          reject(new Error("catalog ws closed before first frame"));
-        };
-        sock.send(raw);
-      });
+      // Catalog streams are increments-only: a quiet node may send nothing for a long
+      // time. Do not wait for a first frame (that used to drop the E2E session and
+      // 401 every parallel engines/models call). Subscribe and listen for diffs.
+      sock.onmessage = (ev) => {
+        if (closed) return;
+        void (async () => {
+          try {
+            const cur = this.byNode.get(ns.peer.id);
+            if (!cur || cur.gen !== heldGen) return;
+            const buf =
+              ev.data instanceof ArrayBuffer
+                ? new Uint8Array(ev.data)
+                : ev.data instanceof Blob
+                  ? new Uint8Array(await ev.data.arrayBuffer())
+                  : null;
+            if (!buf) return;
+            const frame = unmarshalEnvelope(buf);
+            const plain = await open(ns.sess, frame);
+            onPart(JSON.parse(fromUtf8(plain)) as Record<string, unknown>);
+          } catch {
+            /* drop */
+          }
+        })();
+      };
+      sock.onclose = () => {
+        closed = true;
+        notifyClose();
+      };
+      sock.send(raw);
     } catch (err) {
-      // Only a socket that opened but never produced a sealed frame means the node
-      // cannot decrypt our session. Timeouts/upgrade errors are network noise
-      // (relay restart, tunnel swap); dropping the session there would force a
-      // re-handshake and spray 401s at every in-flight call.
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg === "catalog ws no data") failAuth(err);
       failOpen(err);
     }
-    sock.onclose = () => {
-      closed = true;
-      notifyClose();
-    };
     return { close, peerID: ns.peer.id };
   }
 

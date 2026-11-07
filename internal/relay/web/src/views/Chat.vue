@@ -675,17 +675,8 @@ watch(
   },
 );
 
-/** After a draft's first turn lands a real session id, bind the chat key once streaming ends. */
-watch(
-  () => [meshLive.session, meshLive.streaming, isDraftChat.value] as const,
-  ([sid, streaming, draft]) => {
-    if (!draft || !sid || streaming) return;
-    const tid = threadIdOf(filters.node, filters.engine, sid);
-    if (!tid || tid === chatKey.value) return;
-    chatKey.value = tid;
-    meshAgent.threadId = tid;
-  },
-);
+// Keep the draft chatKey for the whole first turn. Remounting onto the real
+// session id mid/post-stream wiped the AG-UI transcript (jsonl often lags).
 
 watch(
   () => [filters.node, filters.engine, filters.model, filters.dir, selected.value] as const,

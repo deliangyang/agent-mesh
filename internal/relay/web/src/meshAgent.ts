@@ -23,6 +23,7 @@ import { loadStoredHistory, saveStoredHistory } from "./historyStore";
 import { resolveModelPref } from "./modelPrefs";
 import { chunkFingerprint, nextPiece, rememberChunk } from "./liveDedup";
 import { flagsAfterBusy, flagsAfterChunk, flagsAfterEvents } from "./liveFlags";
+import { historyBehindLive, liveChunkToEvent } from "./liveChunk";
 import { keepLiveAfterStream } from "./liveHandoff";
 import { meshTarget, parseThreadId } from "./target";
 import type { MeshEvent, Session } from "./types";
@@ -199,6 +200,12 @@ export function pushLiveChunk(obj: LiveChunk): void {
     ),
   );
   for (const fn of liveFns) fn(obj);
+  // Passive watch (engine/CLI turn, or after the web run ended): fold chunks into the
+  // transcript. Without this, only the busy lamp moves and the chat freezes.
+  if (liveFns.size === 0) {
+    const ev = liveChunkToEvent(obj);
+    if (ev) applyHistory([ev], false);
+  }
 }
 
 async function sessionIsActive(session: string): Promise<boolean> {
@@ -321,9 +328,8 @@ export class MeshAgent extends AbstractAgent {
         } else {
           meshLive.streaming = heldBusy;
         }
-        // Do not re-paint historyEvents here. A stale snapshot used to wipe the
-        // just-streamed reply and show the previous turn. AG-UI messages stay;
-        // history refreshes from the node after a clean finish below.
+        // Do not re-paint historyEvents here — a stale snapshot used to wipe the
+        // just-streamed reply. Passive watch keeps painting after stopLive.
       };
       (async () => {
         sub.next({ type: EventType.RUN_STARTED, threadId, runId });
@@ -676,11 +682,16 @@ export class MeshAgent extends AbstractAgent {
         }
         sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
         sub.complete();
-        const realThread = sid
-          ? [node || bound.node, engine || bound.engine, sid].filter(Boolean).join("|")
-          : threadId;
-        if (realThread.includes("|")) {
-          void refreshHistory(realThread, undefined, true);
+        // Defer history revalidation: a force fetch while jsonl lags would paint an
+        // older transcript and hide the reply the user just watched stream in.
+        if (sid) {
+          const realThread = [node || bound.node, engine || bound.engine, sid].filter(Boolean).join("|");
+          if (realThread.includes("|")) {
+            window.setTimeout(() => {
+              if (runningNow()) return;
+              void refreshHistory(realThread, undefined, true);
+            }, 2500);
+          }
         }
       })()
         .catch((err: unknown) => {
@@ -924,6 +935,16 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal, for
     }
     const rows = Array.isArray(evs) ? evs : [];
     if (keepLiveTranscript(rows)) {
+      chatLoad.loading = false;
+      return;
+    }
+    const live = meshAgent.messages;
+    let liveChars = 0;
+    for (const m of live) {
+      const c = (m as { content?: unknown }).content;
+      liveChars += typeof c === "string" ? c.length : JSON.stringify(c || "").length;
+    }
+    if (historyBehindLive(rows, live.length, liveChars)) {
       chatLoad.loading = false;
       return;
     }

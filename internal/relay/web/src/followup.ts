@@ -243,7 +243,8 @@ export async function pullLastFollowup(): Promise<string> {
 }
 
 export function shouldQueueFollowup(isRunning: boolean): boolean {
-  // queue a follow-up only while the current turn is running. Blocking while idle because the queue is non-empty drops both the bubble and the reply.
+  // Queue only while a turn is in flight. Idle sends must go through CopilotKit
+  // so the user bubble lands; follow-up drain alone never paints that bubble.
   return isRunning;
 }
 

@@ -36,7 +36,15 @@ import { formatEngineInstall } from "../engineInstall";
 import { resolveHealthPick } from "../healthMatrix";
 import { loadLastPick, pickToQuery, saveLastPick } from "../lastPick";
 import { liveHintMode } from "../liveFlags";
-import { bindHistoryThread, expectHistory, meshAgent, meshLive, resetDraft, stopRemoteTurn } from "../meshAgent";
+import {
+  bindHistoryThread,
+  expectHistory,
+  meshAgent,
+  meshLive,
+  noteQueuedUser,
+  resetDraft,
+  stopRemoteTurn,
+} from "../meshAgent";
 import { locale, t } from "../locale";
 import { filterNodesByOs, nodePlatforms } from "../nodeFilter";
 import { formatSessionUpdated } from "../sessionTime";
@@ -792,9 +800,14 @@ function removeComposerAttach(id: string, rows: { id?: string }[]): void {
 }
 
 function composerBusy(slot: { isRunning?: boolean }): boolean {
-  // CopilotKit can leave isRunning set after a failed/aborted run; trust the
-  // node's active flag plus our own stream before queueing a follow-up.
-  if (chatStreaming.value) return true;
+  // Only queue while a local turn is actually in flight. Catalog busy/mtime can
+  // keep meshLive.streaming lit after the turn ends; treating that alone as busy
+  // diverted idle sends into follow-ups, which drain without a CopilotKit bubble.
+  try {
+    if (meshAgent.isRunning) return true;
+  } catch {
+    /* agent not ready */
+  }
   return Boolean(slot.isRunning && meshLive.streaming);
 }
 
@@ -828,6 +841,7 @@ function onComposerSubmit(
   text: string,
 ): void {
   if (!fileCountOf(slot) && shouldQueueFollowup(composerBusy(slot))) {
+    noteQueuedUser(text);
     void pushFollowup(text);
     slot.onUpdateModelValue("");
     return;

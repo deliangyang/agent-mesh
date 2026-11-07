@@ -772,6 +772,43 @@ export async function stopRemoteTurn(): Promise<void> {
 
 export const meshAgent = new MeshAgent();
 
+/**
+ * When a send is diverted into the follow-up queue (session busy), CopilotKit
+ * never appends a user bubble. Seed the live transcript so drain later cannot
+ * make the input vanish with the follow-up chip.
+ */
+export function noteQueuedUser(text: string): void {
+  const raw = String(text || "");
+  const want = cleanUserText(raw).replace(/\s+/g, " ").trim();
+  if (!want) return;
+  const lastEv = historyEvents[historyEvents.length - 1];
+  const lastEvUser = Boolean(lastEv && (lastEv.type === "user" || lastEv.role === "user"));
+  const lastEvText = cleanUserText(lastEv?.text || "").replace(/\s+/g, " ").trim();
+  if (!(lastEvUser && lastEvText === want)) {
+    historyEvents = historyEvents.concat([{ type: "user", role: "user", text: raw }]);
+    const thread = meshAgent.threadId || historyThread;
+    if (thread) {
+      historyCache.set(thread, historyEvents);
+      saveStoredHistory(thread, historyEvents);
+    }
+  }
+  const prev = meshAgent.messages || [];
+  const lastMsg = prev[prev.length - 1];
+  if (lastMsg?.role === "user") {
+    const content = (lastMsg as { content?: unknown }).content;
+    const got = cleanUserText(typeof content === "string" ? content : "").replace(/\s+/g, " ").trim();
+    if (got === want) return;
+  }
+  meshAgent.setMessages([
+    ...prev,
+    {
+      id: "queued-" + Math.random().toString(36).slice(2, 10),
+      role: "user",
+      content: raw,
+    },
+  ]);
+}
+
 export function resetDraft(): void {
   historyAbort?.abort();
   historyAbort = null;

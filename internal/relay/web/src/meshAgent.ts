@@ -8,7 +8,6 @@ import { fetchJSON } from "./http";
 import { t } from "./locale";
 import { showToast, toastError, unwrapFailText } from "./toast";
 import {
-  cleanUserText,
   ensureTurnThink,
   eventsToMessages,
   isInternalDump,
@@ -229,20 +228,6 @@ export function isLiveChat(): boolean {
   return meshLive.streaming;
 }
 
-function pushHasUser(text: string): boolean {
-  const want = cleanUserText(text).replace(/\s+/g, " ").trim();
-  if (!want) return false;
-  for (let i = historyEvents.length - 1; i >= 0; i--) {
-    const ev = historyEvents[i];
-    const type = ev.type || "";
-    if (type.includes("tool")) continue;
-    if (type !== "user" && ev.role !== "user") continue;
-    const got = cleanUserText(ev.text || "").replace(/\s+/g, " ").trim();
-    if (got && (got === want || got.includes(want) || want.includes(got))) return true;
-  }
-  return false;
-}
-
 function redirectIfUnauthorized(resp: Response): void {
   if (resp.status === 401) {
     location.href = "/login";
@@ -327,7 +312,6 @@ export class MeshAgent extends AbstractAgent {
       meshLive.streaming = true;
       meshLive.think = "";
       meshLive.thinking = false;
-      let sentText = "";
       let aborted = false;
       const finish = () => {
         meshLive.thinking = false;
@@ -337,9 +321,9 @@ export class MeshAgent extends AbstractAgent {
         } else {
           meshLive.streaming = heldBusy;
         }
-        if (historyEvents.length && pushHasUser(sentText)) {
-          paintMessages(historyEvents, false);
-        }
+        // Do not re-paint historyEvents here. A stale snapshot used to wipe the
+        // just-streamed reply and show the previous turn. AG-UI messages stay;
+        // history refreshes from the node after a clean finish below.
       };
       (async () => {
         sub.next({ type: EventType.RUN_STARTED, threadId, runId });
@@ -350,7 +334,6 @@ export class MeshAgent extends AbstractAgent {
         };
         const payload = lastUserPayload(input.messages || []);
         const text = payload.text || (payload.files.length ? t("agent.lookAttachments") : "");
-        sentText = text;
         for (let i = (input.messages || []).length - 1; i >= 0; i--) {
           const m = (input.messages || [])[i];
           if (m.role !== "user") continue;
@@ -693,6 +676,12 @@ export class MeshAgent extends AbstractAgent {
         }
         sub.next({ type: EventType.RUN_FINISHED, threadId, runId });
         sub.complete();
+        const realThread = sid
+          ? [node || bound.node, engine || bound.engine, sid].filter(Boolean).join("|")
+          : threadId;
+        if (realThread.includes("|")) {
+          void refreshHistory(realThread, undefined, true);
+        }
       })()
         .catch((err: unknown) => {
           if (ac.signal.aborted || aborted) {
@@ -928,7 +917,8 @@ export async function refreshHistory(threadId: string, signal?: AbortSignal, for
       evs = (await resp.json()) as MeshEvent[];
     }
     if (gen !== historyGen) return;
-    if (historySource === "ws" && historyThread === threadId && historyEvents.length) {
+    // force=true (post-turn sync) must not lose to a stale mid-turn WS snapshot.
+    if (!force && historySource === "ws" && historyThread === threadId && historyEvents.length) {
       chatLoad.loading = false;
       return;
     }

@@ -1969,15 +1969,15 @@ html.dark #app {
   line-height: 1.45;
 }
 
-/* Code blocks: one well, tight monospace, so Shiki .line blocks do not double pre newlines. */
+/* Code blocks: dark well so github-light gray tokens are never washed out on moss --wall. */
 .copilot-chat-assistant-markdown [data-streamdown="code-block"] {
   position: relative;
   width: 100%;
   margin-block: 0.45em;
   overflow: hidden;
-  color: var(--ink);
-  background: var(--wall);
-  border: 1px solid var(--rule);
+  color: #e6edf3;
+  background: #121a17;
+  border: 1px solid #2a3531;
   border-radius: 8px;
 }
 
@@ -1994,7 +1994,7 @@ html.dark #app {
 .copilot-chat-assistant-markdown [data-streamdown="code-lang"] {
   margin: 0 auto 0 2px;
   padding: 0;
-  color: var(--mute);
+  color: #9aaba3;
   background: transparent;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
@@ -2019,7 +2019,7 @@ html.dark #app {
 .copilot-chat-assistant-markdown [data-streamdown="code-block"]:not(:has([data-streamdown="code-lang-empty"]))
   [data-streamdown="code-block-header"] {
   height: 22px;
-  box-shadow: inset 0 -1px 0 var(--rule);
+  box-shadow: inset 0 -1px 0 #2a3531;
 }
 
 .copilot-chat-assistant-markdown [data-streamdown="code-actions"] {
@@ -2046,7 +2046,7 @@ html.dark #app {
   margin: 0 !important;
   padding: 8px 12px !important;
   overflow-x: auto;
-  color: var(--ink);
+  color: #e6edf3;
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -2072,6 +2072,13 @@ html.dark #app {
   white-space: pre;
   overflow-wrap: normal;
   tab-size: 8;
+}
+
+/* Prefer github-dark token colors on the dark well (dual-theme spans expose --shiki-dark). */
+.copilot-chat-assistant-markdown [data-streamdown="code-body"] .shiki,
+.copilot-chat-assistant-markdown [data-streamdown="code-body"] .shiki span {
+  color: var(--shiki-dark, #e6edf3) !important;
+  background-color: transparent !important;
 }
 
 /* CopilotKit sets .line to block and Shiki keeps newlines between lines, so line-height would be counted twice. */

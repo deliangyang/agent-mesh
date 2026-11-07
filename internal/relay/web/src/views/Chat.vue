@@ -2,7 +2,17 @@
 import { CopilotChat, CopilotChatUserMessage, useDefaultRenderTool } from "@copilotkit/vue/v2";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { catalog, connectCatalog, meshLink, refreshCatalog, watchSession } from "../catalog";
+import {
+  bootstrapScreen,
+  catalog,
+  connectCatalog,
+  loadEngineSessions,
+  loadMoreSessions,
+  meshLink,
+  refreshCatalog,
+  sessionPageHasMore,
+  watchSession,
+} from "../catalog";
 import { meshAsk } from "../ask";
 import MeshAskCard from "../components/MeshAskCard.vue";
 import MeshAttachQueue from "../components/MeshAttachQueue.vue";
@@ -13,7 +23,6 @@ import MeshThinkWindow from "../components/MeshThinkWindow.vue";
 import MeshToolCallsView from "../components/MeshToolCallsView.vue";
 import MeshToolWindow from "../components/MeshToolWindow.vue";
 import MeshUserParts from "../components/MeshUserParts.vue";
-import { fetchJSON } from "../http";
 import { listServerDirs, type DirListing } from "../dirsApi";
 import { resolveModelPref } from "../modelPrefs";
 import { engineEmptyHint, nodeEngines, nodeMissingEngines } from "../engineCards";
@@ -36,7 +45,7 @@ import { isOpenSettingsHotkey } from "../settingsHotkey";
 import { slashItems, watchSlashCatalog } from "../slash";
 import { meshTarget, threadIdOf } from "../target";
 import { clearAttachJobs, onComposerUploadFailed, uploadComposerFile } from "../attachUpload";
-import type { GitRepo, Session } from "../types";
+import type { Session } from "../types";
 
 useDefaultRenderTool({ render: MeshToolWindow });
 
@@ -152,42 +161,17 @@ const engineHint = computed(() => (engineCards.value.length ? "" : engineEmptyHi
 
 const selectedCaps = computed(() => engineCaps(catalog.engines, filters.node, filters.engine));
 
-const gitRepos = ref<GitRepo[]>([]);
-let gitProbeSeq = 0;
+const selectedLive = computed(() => {
+  const cur = selected.value;
+  if (!cur) return null;
+  return (
+    catalog.sessions.find(
+      (s) => s.id === cur.id && s.engine === cur.engine && (!cur.node_id || s.node_id === cur.node_id),
+    ) || cur
+  );
+});
 
-async function probeGitRepos(): Promise<void> {
-  const cwd = filters.dir || meshTarget.cwd;
-  const node = filters.node || meshTarget.node;
-  if (!cwd || !capsAllowDiff(selectedCaps.value)) {
-    gitRepos.value = [];
-    return;
-  }
-  const seq = ++gitProbeSeq;
-  try {
-    const { ensureMeshMode, isE2EMode } = await import("../e2e/mode.ts");
-    await ensureMeshMode();
-    let repos: GitRepo[] = [];
-    if (isE2EMode()) {
-      const { e2eClient } = await import("../e2e/runtime.ts");
-      const resp = await e2eClient().call(node, "git", { cwd });
-      const body = (resp.body || {}) as { repos?: GitRepo[] };
-      repos = body.repos || [];
-    } else {
-      const q = new URLSearchParams({ cwd, node });
-      const resp = await fetchJSON("/v1/openai/git?" + q.toString(), { credentials: "same-origin" });
-      if (!resp.ok) throw new Error("git probe failed");
-      const data = (await resp.json()) as { repos?: GitRepo[] };
-      repos = data.repos || [];
-    }
-    if (seq !== gitProbeSeq) return;
-    gitRepos.value = repos;
-  } catch {
-    if (seq !== gitProbeSeq) return;
-    gitRepos.value = [];
-  }
-}
-
-const showDiff = computed(() => capsAllowDiff(selectedCaps.value) && gitRepos.value.length > 0);
+const showDiff = computed(() => capsAllowDiff(selectedCaps.value) && selectedLive.value?.git === true);
 
 const showFollowups = computed(() => capsAllowFollowups(selectedCaps.value));
 
@@ -437,7 +421,7 @@ function openSession(s: Session): void {
   closeNavIfMobile(true);
 }
 
-function pickNode(id: string): void {
+async function pickNode(id: string): Promise<void> {
   filters.node = filters.node === id ? "" : id;
   if (filters.node && !engineCards.value.some((e) => e.name === filters.engine)) {
     filters.engine = engineCards.value[0]?.name || "";
@@ -445,6 +429,7 @@ function pickNode(id: string): void {
   syncModelToEngine();
   ensureWorkDir();
   picksOpen.node = false;
+  if (filters.node && filters.engine) await loadEngineSessions(filters.node, filters.engine);
 }
 
 function syncModelToEngine(): void {
@@ -453,13 +438,14 @@ function syncModelToEngine(): void {
   if (model) filters.model = model;
 }
 
-function pickEngine(name: string): void {
+async function pickEngine(name: string): Promise<void> {
   const next = filters.engine === name ? "" : name;
   filters.engine = next;
   syncModelToEngine();
   ensureWorkDir();
-  if (next) openLatestSessionOrNew();
   picksOpen.engine = false;
+  if (filters.node && next) await loadEngineSessions(filters.node, next);
+  if (next) openLatestSessionOrNew();
 }
 
 function applyHealthHint(): void {
@@ -498,6 +484,20 @@ function ensureWorkDir(): void {
 }
 
 const dirOpen = ref(false);
+const dirSheetQuery = typeof window !== "undefined" ? window.matchMedia("(max-width: 860px)") : null;
+const dirSheet = ref(Boolean(dirSheetQuery?.matches));
+
+function syncDirSheet(): void {
+  dirSheet.value = Boolean(dirSheetQuery?.matches);
+}
+
+async function onThreadsScroll(ev: Event): Promise<void> {
+  const el = ev.currentTarget as HTMLElement | null;
+  if (!el || !filters.node || !filters.engine) return;
+  if (el.scrollTop + el.clientHeight < el.scrollHeight - 64) return;
+  if (!sessionPageHasMore(filters.node, filters.engine)) return;
+  await loadMoreSessions(filters.node, filters.engine);
+}
 const dirLoading = ref(false);
 const dirError = ref("");
 const dirPath = ref("");
@@ -702,14 +702,6 @@ watch(
   },
 );
 
-watch(
-  () => [filters.dir, filters.node, filters.engine, selectedCaps.value.diff] as const,
-  () => {
-    void probeGitRepos();
-  },
-  { immediate: true },
-);
-
 watch(showDiff, (on) => {
   if (!on) diffOpen.value = false;
 });
@@ -728,6 +720,7 @@ watch(
     if (engineCards.value.some((e) => e.name === filters.engine)) return;
     filters.engine = engineCards.value[0]?.name || "";
     syncModelToEngine();
+    if (filters.node && filters.engine) void loadEngineSessions(filters.node, filters.engine);
   },
 );
 
@@ -844,10 +837,6 @@ async function onComposerPull(
   return true;
 }
 
-function onLinkUp(): void {
-  refreshCatalog();
-}
-
 function hideKitCursor(): void {
   document.querySelectorAll('[data-testid="copilot-loading-cursor"]').forEach((node) => {
     const el = node as HTMLElement;
@@ -878,9 +867,13 @@ onMounted(() => {
     hydrateFromQuery();
     applyHealthHint();
     connectCatalog();
+    const picked = await bootstrapScreen(filters.node, filters.engine);
+    if (picked.node && (!filters.node || !isE2EMode())) filters.node = picked.node;
+    if (!filters.engine && picked.engine) filters.engine = picked.engine;
   })();
   window.addEventListener("keydown", onSettingsHotkey);
-  window.addEventListener("mesh-link-up", onLinkUp);
+  syncDirSheet();
+  dirSheetQuery?.addEventListener("change", syncDirSheet);
   hideKitCursor();
   cursorObs = new MutationObserver(hideKitCursor);
   const host = document.querySelector(".mesh-chat") || document.body;
@@ -889,7 +882,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onSettingsHotkey);
-  window.removeEventListener("mesh-link-up", onLinkUp);
+  dirSheetQuery?.removeEventListener("change", syncDirSheet);
   window.clearTimeout(copiedTimer);
   window.clearTimeout(endedTimer);
   window.clearTimeout(composerGuardTimer);
@@ -1033,7 +1026,7 @@ onBeforeUnmount(() => {
         <span>{{ t("nav.chat") }}</span>
         <button class="ghost" type="button" @click="refreshCatalog">{{ t("nav.refresh") }}</button>
       </div>
-      <div class="mesh-threads">
+      <div class="mesh-threads" @scroll="onThreadsScroll">
         <div v-for="g in sessionGroups" :key="g.key" class="mesh-time-group">
           <div class="mesh-time-label">{{ g.label }}</div>
           <button
@@ -1166,7 +1159,10 @@ onBeforeUnmount(() => {
                     </svg>
                     <span>{{ filters.dir || t("chat.pickDir") }}</span>
                   </button>
-                  <div v-if="dirOpen" class="mesh-dir-panel" @click.stop>
+                  <Teleport to="body" :disabled="!dirSheet">
+                  <div v-if="dirOpen" class="mesh-dir-layer" :class="{ sheet: dirSheet }">
+                  <div v-if="dirSheet" class="mesh-dir-backdrop" @click="dirOpen = false"></div>
+                  <div class="mesh-dir-panel" :class="{ 'mesh-dir-sheet': dirSheet }" @click.stop>
                     <form class="mesh-dir-form" @submit.prevent="browseDir(dirPath)">
                       <button type="button" class="mesh-dir-up" :disabled="!dirListing?.parent" @click="browseParent">
                         ..
@@ -1196,6 +1192,8 @@ onBeforeUnmount(() => {
                       </button>
                     </div>
                   </div>
+                  </div>
+                  </Teleport>
                 </div>
           </div>
         </div>

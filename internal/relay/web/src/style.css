@@ -1579,6 +1579,49 @@ html.dark #app {
   cursor: pointer;
 }
 
+.mesh-dir-layer:not(.sheet) {
+  display: contents;
+}
+
+.mesh-dir-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+}
+
+.mesh-dir-sheet {
+  position: fixed;
+  z-index: 90;
+  box-sizing: border-box;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: min(70vh, 520px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px 16px 0 0;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.mesh-dir-sheet .mesh-dir-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.mesh-dir-sheet .mesh-dir-foot {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.mesh-dir-sheet .mesh-dir-use {
+  width: 100%;
+  min-height: 44px;
+}
+
 .mesh-slash {
   position: absolute;
   right: 0;

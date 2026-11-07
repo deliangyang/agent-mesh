@@ -211,22 +211,66 @@ func (c *Client) Call(ctx context.Context, req protocol.Request) (protocol.Respo
 
 // Stream is encrypted streaming (binary frames by default, SSE fallback).
 func (c *Client) Stream(ctx context.Context, req protocol.Request) (<-chan protocol.Event, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	raw, err := c.StreamJSON(ctx, req)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	out := make(chan protocol.Event, 32)
+	go func() {
+		defer close(out)
+		defer cancel()
+		for plain := range raw {
+			var ev protocol.Event
+			if err := json.Unmarshal(plain, &ev); err != nil {
+				continue
+			}
+			out <- ev
+			if ev.Done {
+				return
+			}
+		}
+	}()
+	return out, nil
+}
+
+// StreamJSON is encrypted streaming that yields each decrypted JSON payload.
+func (c *Client) StreamJSON(ctx context.Context, req protocol.Request) (<-chan json.RawMessage, error) {
+	resp, binStream, err := c.openStream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan json.RawMessage, 32)
+	go func() {
+		defer close(out)
+		defer resp.Body.Close()
+		if binStream {
+			c.readBinaryJSON(resp.Body, out)
+			return
+		}
+		c.readSSEJSON(resp.Body, out)
+	}()
+	return out, nil
+}
+
+func (c *Client) openStream(ctx context.Context, req protocol.Request) (*http.Response, bool, error) {
 	if c.sess == nil {
-		return nil, fmt.Errorf("handshake required")
+		return nil, false, fmt.Errorf("handshake required")
 	}
 	plain, _ := json.Marshal(req)
 	env, err := c.sess.Seal(plain)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	env.Kind = "stream"
 	raw, ct, err := e2e.EncodeEnvelope(env, true)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/stream", bytes.NewReader(raw))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	httpReq.Header.Set("Content-Type", ct)
 	httpReq.Header.Set("Accept", e2e.ContentTypeEnvelopeStream)
@@ -238,29 +282,19 @@ func (c *Client) Stream(ctx context.Context, req protocol.Request) (<-chan proto
 	}
 	resp, err := httpCli.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("stream http %d: %s", resp.StatusCode, b)
+		return nil, false, fmt.Errorf("stream http %d: %s", resp.StatusCode, b)
 	}
 	binStream := e2e.ContentTypeIsEnvelope(resp.Header.Get("Content-Type")) ||
 		strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "envelope-stream")
-	out := make(chan protocol.Event, 32)
-	go func() {
-		defer close(out)
-		defer resp.Body.Close()
-		if binStream {
-			c.readBinaryStream(resp.Body, out)
-			return
-		}
-		c.readSSEStream(resp.Body, out)
-	}()
-	return out, nil
+	return resp, binStream, nil
 }
 
-func (c *Client) readBinaryStream(r io.Reader, out chan<- protocol.Event) {
+func (c *Client) readBinaryJSON(r io.Reader, out chan<- json.RawMessage) {
 	for {
 		env, err := e2e.ReadStreamFrame(r, true)
 		if err != nil {
@@ -270,18 +304,11 @@ func (c *Client) readBinaryStream(r io.Reader, out chan<- protocol.Event) {
 		if err != nil {
 			continue
 		}
-		var ev protocol.Event
-		if err := json.Unmarshal(plain, &ev); err != nil {
-			continue
-		}
-		out <- ev
-		if ev.Done {
-			return
-		}
+		out <- append(json.RawMessage(nil), plain...)
 	}
 }
 
-func (c *Client) readSSEStream(r io.Reader, out chan<- protocol.Event) {
+func (c *Client) readSSEJSON(r io.Reader, out chan<- json.RawMessage) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -297,13 +324,6 @@ func (c *Client) readSSEStream(r io.Reader, out chan<- protocol.Event) {
 		if err != nil {
 			continue
 		}
-		var ev protocol.Event
-		if err := json.Unmarshal(plain, &ev); err != nil {
-			continue
-		}
-		out <- ev
-		if ev.Done {
-			return
-		}
+		out <- append(json.RawMessage(nil), plain...)
 	}
 }

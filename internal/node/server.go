@@ -31,14 +31,15 @@ type Server struct {
 	Hub     *hub.Hub
 	Log     *slog.Logger
 
-	mu       sync.Mutex
-	sessions map[string][]*e2e.Session // peer client id → recent sessions (newest first)
-	snap     protocol.NodeSnapshot
-	snapRaw  []byte
-	tunConn  tunnelConn
-	follow   *followRuns
-	turns    *turnCancels
-	bus      *busHub
+	mu        sync.Mutex
+	sessions  map[string][]*e2e.Session // peer client id → recent sessions (newest first)
+	snap      protocol.NodeSnapshot
+	snapRaw   []byte
+	published catalogSnap
+	tunConn   tunnelConn
+	follow    *followRuns
+	turns     *turnCancels
+	bus       *busHub
 
 	relays    []string
 	password  string
@@ -273,11 +274,8 @@ func (s *Server) streamCatalog(ctx context.Context, w http.ResponseWriter, fl ht
 		fl.Flush()
 		return nil
 	}
-	for _, msg := range s.catalogParts() {
-		if err := writeMsg(msg); err != nil {
-			return
-		}
-	}
+	// Increments only. Flush the headers now so a quiet stream does not block the client.
+	fl.Flush()
 	if s.bus == nil {
 		<-ctx.Done()
 		return
@@ -352,11 +350,11 @@ func (s *Server) dispatch(ctx context.Context, req protocol.Request) protocol.Re
 	case protocol.MethodList:
 		var p protocol.ListParams
 		_ = json.Unmarshal(req.Params, &p)
-		rows, err := s.Drivers.ListAll(ctx, p.Engine, p.All)
+		body, err := s.listSessions(ctx, p)
 		if err != nil {
 			return protocol.Response{ID: req.ID, Error: err.Error()}
 		}
-		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(rows)}
+		return protocol.Response{ID: req.ID, OK: true, Body: protocol.MustJSON(body)}
 	case protocol.MethodStatus:
 		rows, err := s.Drivers.ListAll(ctx, "", false)
 		if err != nil {
@@ -443,6 +441,7 @@ func (s *Server) dispatchStream(ctx context.Context, req protocol.Request) (<-ch
 		if err != nil {
 			return nil, err
 		}
+		s.publishWatchedSession(p.Engine, p.SessionID)
 		return d.Watch(ctx, p.SessionID)
 	case protocol.MethodReply:
 		var p protocol.ReplyParams
@@ -520,9 +519,19 @@ func (s *Server) runTrackedStream(
 			// Drop the active flag now, not on the next 5s snapshot tick.
 			go s.publishCatalog()
 		}()
+		seen := map[string]bool{}
+		note := func(sid string) {
+			if sid == "" || seen[sid] {
+				return
+			}
+			seen[sid] = true
+			bind(sid)
+			s.publishLiveSession(engine, sid, cwd)
+		}
+		note(session)
 		for ev := range ch {
 			if ev.Session != "" {
-				bind(ev.Session)
+				note(ev.Session)
 			}
 			out <- ev
 		}

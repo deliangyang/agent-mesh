@@ -112,19 +112,15 @@ func TestCatalogStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seen := map[string]bool{}
-	for ev := range ch {
-		seen[ev.Type] = true
-		if seen["sessions"] && seen["engines"] && seen["models"] && seen["dirs"] {
-			cancel()
-			break
+	select {
+	case ev, ok := <-ch:
+		if !ok {
+			t.Fatal("catalog stream closed before the quiet window")
 		}
+		t.Fatalf("catalog stream pushed %q before a change", ev.Type)
+	case <-time.After(300 * time.Millisecond):
 	}
-	for _, want := range []string{"sessions", "engines", "models", "dirs"} {
-		if !seen[want] {
-			t.Fatalf("missing catalog part %q; got %#v", want, seen)
-		}
-	}
+	cancel()
 }
 
 type recDriver struct {

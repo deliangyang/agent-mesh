@@ -75,10 +75,13 @@ type WorkDir struct {
 
 // Session is the shared session view.
 type Session struct {
-	Engine    string `json:"engine"`
-	ID        string `json:"id"`
-	Title     string `json:"title,omitempty"`
-	CWD       string `json:"cwd,omitempty"`
+	Engine string `json:"engine"`
+	ID     string `json:"id"`
+	Title  string `json:"title,omitempty"`
+	CWD    string `json:"cwd,omitempty"`
+	// Git reports whether CWD contains a .git entry. Nil means the row was not checked.
+	// A non-nil false is explicit so a client can clear a previous true.
+	Git       *bool  `json:"git,omitempty"`
 	Status    string `json:"status,omitempty"`
 	Kind      string `json:"kind,omitempty"`
 	PID       int    `json:"pid,omitempty"`
@@ -147,10 +150,21 @@ type EngineToggleParams struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// ListParams lists tasks.
+// ListParams lists sessions.
+// Limit 0 keeps the historical array of live rows (unless All).
+// Limit above 0 returns a SessionPage, newest first, exclusive of the Before cursor.
 type ListParams struct {
-	Engine string `json:"engine,omitempty"`
-	All    bool   `json:"all,omitempty"`
+	Engine   string `json:"engine,omitempty"`
+	All      bool   `json:"all,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+	Before   int64  `json:"before,omitempty"`
+	BeforeID string `json:"before_id,omitempty"`
+}
+
+// SessionPage is one newest-first page of sessions.
+type SessionPage struct {
+	Sessions []Session `json:"sessions"`
+	More     bool      `json:"more"`
 }
 
 // HistoryParams is a history summary.

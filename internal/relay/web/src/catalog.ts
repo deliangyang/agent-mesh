@@ -1,7 +1,9 @@
 import { reactive } from "vue";
 import { applyCatalogBusy, applyHistory, meshLive, pushLiveChunk } from "./meshAgent";
 import { applyFollowups } from "./followup";
+import { fetchJSON } from "./http";
 import { t } from "./locale";
+import { applySessionIncrement, applySessionPage } from "./sessionPage";
 import { showToast } from "./toast";
 import type { CatalogState, DirRow, EngineRow, MeshEvent, ModelCard, NodeInfo, Session } from "./types";
 
@@ -25,62 +27,6 @@ let reconnectTimer = 0;
 function sessionKey(s: Session | null): string {
   if (!s) return "";
   return (s.node_id || "") + "|" + (s.engine || "") + "|" + (s.id || "");
-}
-
-const SESSION_CAP_PER_ENGINE = 80;
-
-function sortSessions(rows: Session[]): Session[] {
-  const sorted = (rows || []).slice().sort((a, b) => {
-    const ua = a.updated_at || 0;
-    const ub = b.updated_at || 0;
-    if (ua !== ub) return ub - ua;
-    const la = a.live || a.busy ? 1 : 0;
-    const lb = b.live || b.busy ? 1 : 0;
-    return lb - la;
-  });
-  const n: Record<string, number> = {};
-  const out: Session[] = [];
-  for (const s of sorted) {
-    if (s.live || s.busy) {
-      out.push(s);
-      continue;
-    }
-    const eng = s.engine || "";
-    if ((n[eng] || 0) >= SESSION_CAP_PER_ENGINE) continue;
-    n[eng] = (n[eng] || 0) + 1;
-    out.push(s);
-  }
-  return out;
-}
-
-function mergeSession(prev: Session | undefined, row: Session): Session {
-  if (!prev) return row;
-  return {
-    ...prev,
-    ...row,
-    title: row.title || prev.title,
-    cwd: row.cwd || prev.cwd,
-    updated_at: Math.max(row.updated_at || 0, prev.updated_at || 0) || undefined,
-  };
-}
-
-function mergeSessionRows(cur: Session[], incoming: Session[] | undefined, reset: boolean, removed: string[]): Session[] {
-  const rows = incoming || [];
-  const prev = new Map<string, Session>();
-  for (const row of cur) {
-    const k = sessionKey(row);
-    if (k) prev.set(k, row);
-  }
-  if (reset) {
-    return rows.map((row) => mergeSession(prev.get(sessionKey(row)), row));
-  }
-  const map = new Map(prev);
-  for (const row of rows) {
-    const k = sessionKey(row);
-    if (k) map.set(k, mergeSession(map.get(k), row));
-  }
-  for (const id of removed) map.delete(id);
-  return Array.from(map.values());
 }
 
 function mergeRows<T>(cur: T[], incoming: T[] | undefined, reset: boolean, removed: string[], keyOf: (row: T) => string): T[] {
@@ -168,10 +114,8 @@ function applyPart(msg: Record<string, unknown>): void {
       (d) => (d.node_id || "") + "\x1f" + (d.engine || "") + "\x1f" + d.path,
     );
   }
-  if (msg.type === "sessions" && (reset || Array.isArray(msg.sessions) || removed.length)) {
-    catalog.sessions = sortSessions(
-      mergeSessionRows(catalog.sessions, msg.sessions as Session[] | undefined, reset, removed),
-    );
+  if (msg.type === "sessions" && (Array.isArray(msg.sessions) || removed.length)) {
+    catalog.sessions = applySessionIncrement(catalog.sessions, msg.sessions as Session[] | undefined, removed);
     syncWatchedBusy();
   }
   if (msg.type === "followups" && (reset || Array.isArray(msg.followups) || removed.length)) {
@@ -192,26 +136,22 @@ function applyPart(msg: Record<string, unknown>): void {
 export function applyNodeCatalogPart(nodeID: string, msg: Record<string, unknown>): void {
   if (!msg || !msg.type) return;
   const nid = nodeID || String(msg.node_id || "");
+  if (msg.type === "sessions") {
+    const incoming = ((msg.sessions as Session[]) || []).map((s) => ({
+      ...s,
+      node_id: s.node_id || nid,
+    }));
+    const removed = Array.isArray(msg.removed) ? (msg.removed as string[]) : [];
+    catalog.sessions = applySessionIncrement(catalog.sessions, incoming, removed);
+    syncWatchedBusy();
+    return;
+  }
   if (!nid || !msg.reset) {
     applyPart(msg);
     return;
   }
   if (msg.type === "nodes") {
     applyPart({ ...msg, reset: false });
-    return;
-  }
-  if (msg.type === "sessions") {
-    // One node's snapshot is authoritative for its own rows, but merge fields
-    // (title/cwd/updated_at) with what is already on screen so a scan that
-    // temporarily omits them does not hide the session.
-    const keep = catalog.sessions.filter((s) => (s.node_id || "") !== nid);
-    const prev = catalog.sessions.filter((s) => (s.node_id || "") === nid);
-    const incoming = ((msg.sessions as Session[]) || []).map((s) => ({
-      ...s,
-      node_id: s.node_id || nid,
-    }));
-    catalog.sessions = sortSessions([...keep, ...mergeSessionRows(prev, incoming, true, [])]);
-    syncWatchedBusy();
     return;
   }
   if (msg.type === "engines") {
@@ -270,19 +210,210 @@ export function watchSession(s: Session | null): void {
   });
 }
 
+const SESSION_PAGE = 40;
+const readyNodes = new Set<string>();
+const sessionMore = new Map<string, boolean>();
+const loadedPages: { node: string; engine: string }[] = [];
+let paging = false;
+
+function pageMapKey(node: string, engine: string): string {
+  return node + "|" + engine;
+}
+
+export function sessionPageHasMore(node: string, engine: string): boolean {
+  return sessionMore.get(pageMapKey(node, engine)) === true;
+}
+
+function rememberPage(node: string, engine: string): void {
+  if (!loadedPages.some((p) => p.node === node && p.engine === engine)) {
+    loadedPages.push({ node, engine });
+  }
+}
+
+function pageCursor(node: string, engine: string): { before: number; before_id: string } | null {
+  let cursor: Session | null = null;
+  for (const s of catalog.sessions) {
+    if ((s.node_id || "") !== node || s.engine !== engine) continue;
+    if (!cursor) {
+      cursor = s;
+      continue;
+    }
+    const su = s.updated_at || 0;
+    const cu = cursor.updated_at || 0;
+    if (su < cu || (su === cu && s.id < cursor.id)) cursor = s;
+  }
+  if (!cursor) return null;
+  return { before: cursor.updated_at || 0, before_id: cursor.id };
+}
+
+function installEngines(nodeID: string, rows: EngineRow[]): void {
+  const keep = catalog.engines.filter((e) => (e.node_id || "") !== nodeID);
+  catalog.engines = [...keep, ...rows.map((e) => ({ ...e, node_id: e.node_id || nodeID }))];
+}
+
+function installModels(nodeID: string, rows: ModelCard[]): void {
+  const prefix = nodeID ? nodeID + "/" : "";
+  const keep = prefix ? catalog.models.filter((m) => !String(m.id || "").startsWith(prefix)) : [];
+  catalog.models = [
+    ...keep,
+    ...rows.map((m) => {
+      const id = String(m.id || "");
+      return { ...m, id: prefix && !id.startsWith(prefix) ? prefix + id : id };
+    }),
+  ];
+}
+
+function normalizePage(body: unknown): { sessions: Session[]; more: boolean } {
+  if (Array.isArray(body)) return { sessions: body as Session[], more: false };
+  const page = (body || {}) as { sessions?: Session[]; more?: boolean };
+  return { sessions: page.sessions || [], more: Boolean(page.more) };
+}
+
+function installPage(node: string, engine: string, body: unknown, append: boolean): void {
+  const page = normalizePage(body);
+  catalog.sessions = applySessionPage(catalog.sessions, page.sessions, append, node, engine);
+  sessionMore.set(pageMapKey(node, engine), page.more);
+  rememberPage(node, engine);
+}
+
+async function loadPlainMeta(nodeID: string): Promise<void> {
+  const engResp = await fetchJSON("/v1/openai/engines", { credentials: "same-origin" });
+  if (!engResp.ok) throw new Error("engines failed");
+  installEngines(nodeID, ((await engResp.json()) as EngineRow[]) || []);
+  const modelResp = await fetchJSON("/v1/models", { credentials: "same-origin" });
+  if (!modelResp.ok) throw new Error("models failed");
+  const modelBody = (await modelResp.json()) as { data?: ModelCard[] };
+  installModels(nodeID, modelBody.data || []);
+  readyNodes.add(nodeID);
+}
+
+async function loadE2EMeta(nodeID: string): Promise<void> {
+  const { e2eClient } = await import("./e2e/runtime.ts");
+  const c = e2eClient();
+  const eng = await c.call(nodeID, "engines");
+  if (!eng.ok) throw new Error(eng.error || "engines failed");
+  installEngines(nodeID, (Array.isArray(eng.body) ? eng.body : []) as EngineRow[]);
+  const models = await c.call(nodeID, "models");
+  if (!models.ok) throw new Error(models.error || "models failed");
+  const list = (Array.isArray(models.body) ? models.body : []) as { id?: string; engine?: string; thinking?: string[] }[];
+  installModels(
+    nodeID,
+    list.map((m) => ({ id: String(m.id || ""), owned_by: m.engine, thinking: m.thinking })),
+  );
+  readyNodes.add(nodeID);
+}
+
+async function fetchPlainPage(node: string, engine: string, append: boolean): Promise<void> {
+  const q = new URLSearchParams({ engine, limit: String(SESSION_PAGE), all: "1" });
+  if (append) {
+    const cursor = pageCursor(node, engine);
+    if (!cursor) return;
+    q.set("before", String(cursor.before));
+    q.set("before_id", cursor.before_id);
+  }
+  const resp = await fetchJSON("/v1/openai/sessions?" + q.toString(), { credentials: "same-origin" });
+  if (!resp.ok) throw new Error("sessions failed");
+  installPage(node, engine, await resp.json(), append);
+}
+
+async function fetchE2EPage(node: string, engine: string, append: boolean): Promise<void> {
+  const { e2eClient } = await import("./e2e/runtime.ts");
+  const params: Record<string, unknown> = { engine, limit: SESSION_PAGE, all: true };
+  if (append) {
+    const cursor = pageCursor(node, engine);
+    if (!cursor) return;
+    params.before = cursor.before;
+    params.before_id = cursor.before_id;
+  }
+  const resp = await e2eClient().call(node, "list", params);
+  if (!resp.ok) throw new Error(resp.error || "list failed");
+  installPage(node, engine, resp.body, append);
+}
+
+async function ensureNodeMeta(node: string, e2e: boolean): Promise<void> {
+  if (!node || readyNodes.has(node)) return;
+  if (e2e) await loadE2EMeta(node);
+  else await loadPlainMeta(node);
+}
+
+export async function loadEngineSessions(node: string, engine: string): Promise<void> {
+  if (!node || !engine) return;
+  try {
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    const e2e = isE2EMode();
+    await ensureNodeMeta(node, e2e);
+    if (e2e) await fetchE2EPage(node, engine, false);
+    else await fetchPlainPage(node, engine, false);
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : String(err), "error");
+  }
+}
+
+export async function loadMoreSessions(node: string, engine: string): Promise<void> {
+  if (paging || !node || !engine || !sessionPageHasMore(node, engine)) return;
+  paging = true;
+  try {
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    if (isE2EMode()) await fetchE2EPage(node, engine, true);
+    else await fetchPlainPage(node, engine, true);
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : String(err), "error");
+  } finally {
+    paging = false;
+  }
+}
+
+/** bootstrapScreen loads engines, models, and the first session page once. It does not poll. */
+export async function bootstrapScreen(node: string, engine: string): Promise<{ node: string; engine: string }> {
+  try {
+    const { ensureMeshMode, isE2EMode } = await import("./e2e/mode.ts");
+    await ensureMeshMode();
+    if (isE2EMode()) return await bootstrapE2E(node, engine);
+    return await bootstrapPlain(engine);
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : String(err), "error");
+    return { node, engine };
+  }
+}
+
+async function bootstrapPlain(engine: string): Promise<{ node: string; engine: string }> {
+  const infoResp = await fetchJSON("/v1/info", { credentials: "same-origin" });
+  if (!infoResp.ok) throw new Error("info failed");
+  const info = (await infoResp.json()) as { id?: string; name?: string; os?: string; arch?: string };
+  const nodeID = String(info.id || "");
+  if (!nodeID) return { node: "", engine };
+  catalog.nodes = [{ id: nodeID, name: info.name || "", os: info.os || "", arch: info.arch || "" }];
+  await loadPlainMeta(nodeID);
+  const engineName = engine || catalog.engines.find((e) => e.node_id === nodeID)?.name || "";
+  if (engineName) await fetchPlainPage(nodeID, engineName, false);
+  return { node: nodeID, engine: engineName };
+}
+
+async function bootstrapE2E(node: string, engine: string): Promise<{ node: string; engine: string }> {
+  const { refreshE2ECatalog } = await import("./e2e/sync.ts");
+  await refreshE2ECatalog();
+  const nodeID = node || catalog.nodes[0]?.id || "";
+  if (!nodeID) return { node: "", engine: "" };
+  await loadE2EMeta(nodeID);
+  const engineName = engine || catalog.engines.find((e) => e.node_id === nodeID)?.name || "";
+  if (engineName) await fetchE2EPage(nodeID, engineName, false);
+  return { node: nodeID, engine: engineName };
+}
+
 export function refreshCatalog(): void {
   void import("./e2e/mode.ts").then(async ({ ensureMeshMode, isE2EMode }) => {
     await ensureMeshMode();
     if (isE2EMode()) {
       const { refreshE2ECatalog } = await import("./e2e/sync.ts");
       await refreshE2ECatalog();
-      return;
+    } else if (!ws || ws.readyState !== WebSocket.OPEN) {
+      connectPlainCatalog();
     }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "refresh" }));
-      return;
-    }
-    connectCatalog();
+    const pages = loadedPages.slice();
+    for (const page of pages) readyNodes.delete(page.node);
+    for (const page of pages) await loadEngineSessions(page.node, page.engine);
   });
 }
 
@@ -345,10 +476,7 @@ function connectPlainCatalog(): void {
     meshLink.state = "live";
     meshLink.attempt = 0;
     resendWatch(sock);
-    if (wasDown) {
-      sock.send(JSON.stringify({ type: "refresh" }));
-      window.dispatchEvent(new Event("mesh-link-up"));
-    }
+    if (wasDown) window.dispatchEvent(new Event("mesh-link-up"));
   };
   sock.onclose = () => {
     const wasLive = meshLink.state === "live";
@@ -376,12 +504,7 @@ function onBrowserResume(): void {
       window.dispatchEvent(new Event("mesh-link-up"));
       return;
     }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "refresh" }));
-      resendWatch(ws);
-      window.dispatchEvent(new Event("mesh-link-up"));
-      return;
-    }
+    if (ws && ws.readyState === WebSocket.OPEN) return;
     connectPlainCatalog();
   });
 }

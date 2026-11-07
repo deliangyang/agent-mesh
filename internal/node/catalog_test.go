@@ -130,100 +130,93 @@ func TestNodeServesUIAndCatalogWS(t *testing.T) {
 		t.Fatalf("login status %d", resp.StatusCode)
 	}
 
+	_, _, models, _, sessions, _ := srv.webCatalog()
+	if len(sessions) == 0 {
+		t.Fatal("expected snapshot sessions")
+	}
+	prefix := ident.ID + "/"
+	gotPrefixedModel := false
+	for _, m := range models {
+		if strings.HasPrefix(m.ID, prefix) {
+			gotPrefixedModel = true
+			break
+		}
+	}
+	if len(models) == 0 || !gotPrefixedModel {
+		t.Fatalf("models missing node prefix %q: %#v", prefix, models)
+	}
+
+	pageResp, err := http.Get(ts.URL + "/v1/openai/sessions?engine=stub&limit=40")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var page protocol.SessionPage
+	if err := json.NewDecoder(pageResp.Body).Decode(&page); err != nil {
+		pageResp.Body.Close()
+		t.Fatal(err)
+	}
+	pageResp.Body.Close()
+	gotSession := false
+	for _, sess := range page.Sessions {
+		if sess.ID == "s1" {
+			gotSession = true
+		}
+	}
+	if !gotSession {
+		t.Fatalf("session page %#v", page)
+	}
+	engResp, err := http.Get(ts.URL + "/v1/openai/engines")
+	if err != nil {
+		t.Fatal(err)
+	}
+	engResp.Body.Close()
+	if engResp.StatusCode != http.StatusOK {
+		t.Fatalf("engines status %d", engResp.StatusCode)
+	}
+
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/v1/openai/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
 	defer conn.Close()
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	seen := map[string]bool{}
-	gotSession := false
-	gotPrefixedModel := false
-	for {
-		if seen["nodes"] && seen["engines"] && seen["sessions"] && seen["models"] && gotSession && gotPrefixedModel {
-			break
-		}
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			t.Fatalf("catalog read: %v parts %v", err, seen)
-		}
-		var msg struct {
-			Type     string              `json:"type"`
-			Nodes    []protocol.NodeInfo `json:"nodes"`
-			Sessions []protocol.Session  `json:"sessions"`
-			Models   []struct {
-				ID string `json:"id"`
-			} `json:"models"`
-		}
-		if json.Unmarshal(raw, &msg) != nil {
-			continue
-		}
-		seen[msg.Type] = true
-		if msg.Type == "nodes" {
-			if len(msg.Nodes) != 1 {
-				t.Fatalf("nodes %d", len(msg.Nodes))
-			}
-			if msg.Nodes[0].OS == "" || msg.Nodes[0].Arch == "" {
-				t.Fatalf("node platform %#v", msg.Nodes[0])
-			}
-		}
-		if msg.Type == "models" {
-			prefix := ident.ID + "/"
-			for _, m := range msg.Models {
-				if strings.HasPrefix(m.ID, prefix) {
-					gotPrefixedModel = true
-					break
-				}
-			}
-			if len(msg.Models) == 0 {
-				t.Fatal("expected catalog models")
-			}
-			if !gotPrefixedModel {
-				t.Fatalf("models missing node prefix %q: %#v", prefix, msg.Models)
-			}
-		}
-		if msg.Type == "sessions" {
-			for _, sess := range msg.Sessions {
-				if sess.ID == "s1" {
-					gotSession = true
-				}
-			}
-		}
-	}
-	if !seen["nodes"] || !seen["engines"] || !seen["sessions"] || !seen["models"] {
-		t.Fatalf("parts %v", seen)
-	}
-	if !gotSession {
-		t.Fatal("missing session s1")
-	}
-	if !gotPrefixedModel {
-		t.Fatal("catalog models must be nodeID/engine/… like the relay")
-	}
-
 	if err := conn.WriteJSON(map[string]string{"type": "watch", "engine": "stub", "session": "s1"}); err != nil {
 		t.Fatalf("watch: %v", err)
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	gotConv := false
+	gotGit := false
 	for i := 0; i < 8; i++ {
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
 			break
 		}
 		var msg struct {
-			Type  string `json:"type"`
-			Reset bool   `json:"reset"`
+			Type     string             `json:"type"`
+			Reset    bool               `json:"reset"`
+			Sessions []protocol.Session `json:"sessions"`
 		}
 		if json.Unmarshal(raw, &msg) != nil {
 			continue
 		}
 		if msg.Type == "conversation" && msg.Reset {
 			gotConv = true
+		}
+		if msg.Type == "sessions" && !msg.Reset {
+			for _, sess := range msg.Sessions {
+				if sess.ID == "s1" && sess.Git != nil && !*sess.Git {
+					gotGit = true
+				}
+			}
+		}
+		if gotConv && gotGit {
 			break
 		}
 	}
 	if !gotConv {
 		t.Fatal("expected conversation")
+	}
+	if !gotGit {
+		t.Fatal("expected git:false marker on the opened session")
 	}
 }

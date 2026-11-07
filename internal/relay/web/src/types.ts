@@ -58,6 +58,8 @@ export type Session = {
   engine: string;
   title?: string;
   cwd?: string;
+  /** Set by a session push after a .git stat. False clears a previous true. */
+  git?: boolean;
   live?: boolean;
   busy?: boolean;
   /** The node is running a tracked turn right now. */

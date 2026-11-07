@@ -1,7 +1,11 @@
 package node
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -107,7 +111,9 @@ func (s *Server) webCatalog() (nodes []protocol.NodeInfo, engines []engineRow, m
 		models = []openai.ModelCard{}
 	}
 	// Match the relay catalog: Vue filters models by nodeID/… prefix.
+	// Created comes from FromModels as time.Now and would republish every scan.
 	for i := range models {
+		models[i].Created = 0
 		if info.ID != "" && !strings.HasPrefix(models[i].ID, info.ID+"/") {
 			models[i].ID = info.ID + "/" + models[i].ID
 		}
@@ -146,29 +152,176 @@ func (s *Server) webCatalog() (nodes []protocol.NodeInfo, engines []engineRow, m
 	return nodes, engines, models, dirs, sessions, followups
 }
 
-func (s *Server) catalogParts() []busMsg {
-	nodes, engines, models, dirs, sessions, followups := s.webCatalog()
-	nid := ""
-	if len(nodes) > 0 {
-		nid = nodes[0].ID
-	}
-	return []busMsg{
-		{Type: "sessions", Sessions: sessions, Reset: true, NodeID: nid},
-		{Type: "nodes", Nodes: nodes, Reset: true, NodeID: nid},
-		{Type: "engines", Engines: engines, Reset: true, NodeID: nid},
-		{Type: "models", Models: models, Reset: true, NodeID: nid},
-		{Type: "dirs", Dirs: dirs, Reset: true, NodeID: nid},
-		{Type: "followups", Followups: followups, Reset: true, NodeID: nid},
-	}
+// catalogSnap is the last catalog published on the bus, used to emit diffs.
+type catalogSnap struct {
+	nodes     []protocol.NodeInfo
+	engines   []engineRow
+	models    []openai.ModelCard
+	dirs      []dirRow
+	sessions  []protocol.Session
+	followups []protocol.FollowQueue
 }
 
 func (s *Server) publishCatalog() {
 	if s.bus == nil {
 		return
 	}
-	for _, msg := range s.catalogParts() {
-		s.bus.publish(msg)
+	nodes, engines, models, dirs, sessions, followups := s.webCatalog()
+	s.mu.Lock()
+	prev := s.published
+	s.published = catalogSnap{
+		nodes:     nodes,
+		engines:   engines,
+		models:    models,
+		dirs:      dirs,
+		sessions:  sessions,
+		followups: followups,
 	}
+	s.mu.Unlock()
+	nid := ""
+	if len(nodes) > 0 {
+		nid = nodes[0].ID
+	}
+	if changed, removed := diffRows(prev.nodes, nodes, func(n protocol.NodeInfo) string { return n.ID }); len(changed) > 0 || len(removed) > 0 {
+		s.bus.publish(busMsg{Type: "nodes", Nodes: changed, Removed: removed, NodeID: nid})
+	}
+	if changed, removed := diffRows(prev.engines, engines, engineBusKey); len(changed) > 0 || len(removed) > 0 {
+		s.bus.publish(busMsg{Type: "engines", Engines: changed, Removed: removed, NodeID: nid})
+	}
+	if changed, removed := diffRows(prev.models, models, func(m openai.ModelCard) string { return m.ID }); len(changed) > 0 || len(removed) > 0 {
+		s.bus.publish(busMsg{Type: "models", Models: changed, Removed: removed, NodeID: nid})
+	}
+	if changed, removed := diffRows(prev.dirs, dirs, dirBusKey); len(changed) > 0 || len(removed) > 0 {
+		s.bus.publish(busMsg{Type: "dirs", Dirs: changed, Removed: removed, NodeID: nid})
+	}
+	if changed, removed := diffRows(prev.sessions, sessions, sessionBusKey); len(changed) > 0 || len(removed) > 0 {
+		out := make([]protocol.Session, len(changed))
+		for i := range changed {
+			out[i] = changed[i]
+			markGit(&out[i])
+		}
+		s.bus.publish(busMsg{Type: "sessions", Sessions: out, Removed: removed, NodeID: nid})
+	}
+	if changed, removed := diffRows(prev.followups, followups, followBusKey); len(changed) > 0 || len(removed) > 0 {
+		s.bus.publish(busMsg{Type: "followups", Followups: changed, Removed: removed, NodeID: nid})
+	}
+}
+
+func engineBusKey(e engineRow) string {
+	return e.NodeID + "\x1f" + e.Name
+}
+
+func dirBusKey(d dirRow) string {
+	return d.NodeID + "\x1f" + d.Engine + "\x1f" + d.Path
+}
+
+func sessionBusKey(s protocol.Session) string {
+	return s.NodeID + "|" + s.Engine + "|" + s.ID
+}
+
+func followBusKey(q protocol.FollowQueue) string {
+	return q.NodeID + "|" + q.Engine + "|" + q.Session
+}
+
+func diffRows[T any](old, neu []T, key func(T) string) (changed []T, removed []string) {
+	prev := make(map[string]T, len(old))
+	for _, row := range old {
+		prev[key(row)] = row
+	}
+	seen := make(map[string]struct{}, len(neu))
+	for _, row := range neu {
+		k := key(row)
+		seen[k] = struct{}{}
+		was, ok := prev[k]
+		if !ok || !jsonEqual(was, row) {
+			changed = append(changed, row)
+		}
+	}
+	for k := range prev {
+		if _, ok := seen[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	return changed, removed
+}
+
+func jsonEqual(a, b any) bool {
+	ra, errA := json.Marshal(a)
+	rb, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return bytes.Equal(ra, rb)
+}
+
+// markGit sets Git from a single .git stat. It does not run git status.
+func markGit(sess *protocol.Session) {
+	ok := false
+	if cwd := strings.TrimSpace(sess.CWD); cwd != "" {
+		if _, err := os.Stat(filepath.Join(cwd, ".git")); err == nil {
+			ok = true
+		}
+	}
+	sess.Git = &ok
+}
+
+// publishLiveSession pushes one active session without waiting for the snapshot scan.
+func (s *Server) publishLiveSession(engine, session, cwd string) {
+	if s == nil || s.bus == nil || session == "" {
+		return
+	}
+	row := protocol.Session{
+		Engine:    engine,
+		ID:        session,
+		CWD:       cwd,
+		NodeID:    s.Ident.ID,
+		NodeName:  s.Name,
+		Live:      true,
+		Busy:      true,
+		Active:    true,
+		UpdatedAt: time.Now().Unix(),
+	}
+	_, _, _, _, sessions, _ := s.webCatalog()
+	for _, prev := range sessions {
+		if prev.Engine != engine || prev.ID != session {
+			continue
+		}
+		if row.CWD == "" {
+			row.CWD = prev.CWD
+		}
+		if prev.Title != "" {
+			row.Title = prev.Title
+		}
+		if prev.UpdatedAt > row.UpdatedAt {
+			row.UpdatedAt = prev.UpdatedAt
+		}
+		if prev.NodeID != "" {
+			row.NodeID = prev.NodeID
+		}
+		if prev.NodeName != "" {
+			row.NodeName = prev.NodeName
+		}
+		break
+	}
+	markGit(&row)
+	s.bus.publish(busMsg{Type: "sessions", Sessions: []protocol.Session{row}, NodeID: s.Ident.ID})
+}
+
+// publishWatchedSession pushes the opened session with a git marker.
+func (s *Server) publishWatchedSession(engine, session string) {
+	if s == nil || s.bus == nil || session == "" {
+		return
+	}
+	row := protocol.Session{Engine: engine, ID: session, NodeID: s.Ident.ID, NodeName: s.Name}
+	_, _, _, _, sessions, _ := s.webCatalog()
+	for _, prev := range sessions {
+		if prev.Engine == engine && prev.ID == session {
+			row = prev
+			break
+		}
+	}
+	markGit(&row)
+	s.bus.publish(busMsg{Type: "sessions", Sessions: []protocol.Session{row}, NodeID: s.Ident.ID})
 }
 
 func (s *Server) sendWatchHistory(write func(any) error, engine, session string) {

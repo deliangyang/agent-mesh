@@ -90,14 +90,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	bid, bch := s.bus.subscribe()
 	defer s.bus.unsubscribe(bid)
 	// One live subscription per client: only the watched node/engine/session
-	// reaches this socket. An empty watch unsubscribes.
+	// reaches this socket. An empty watch unsubscribes. The full engine and
+	// session lists arrive over HTTP; this socket only forwards increments.
 	var watchMu sync.Mutex
 	var watch watchTarget
-	for _, msg := range s.catalogParts() {
-		if err := write(msg); err != nil {
-			return
-		}
-	}
 	go func() {
 		for {
 			_, raw, err := conn.ReadMessage()
@@ -115,13 +111,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			switch msg.Type {
 			case "refresh":
-				for _, part := range s.catalogParts() {
-					_ = write(part)
-				}
+				// Full lists are HTTP. Ignore so a refresh cannot reset appended pages.
 			case "watch":
 				watchMu.Lock()
 				watch = watchTarget{node: msg.Node, engine: msg.Engine, session: msg.Session}
 				watchMu.Unlock()
+				s.publishWatchedSession(msg.Engine, msg.Session)
 				s.sendWatchHistory(write, msg.Engine, msg.Session)
 			}
 		}
@@ -227,42 +222,6 @@ func (s *Server) handleEngineToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	go s.refreshSnapshot(context.Background())
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "engine": name, "enabled": body.Enabled})
-}
-
-func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
-	engine := r.URL.Query().Get("engine")
-	all := r.URL.Query().Get("all") == "1" || r.URL.Query().Get("all") == "true"
-	if snap := s.peekSnapshot(); len(snap.Sessions) > 0 {
-		out := []protocol.Session{}
-		for _, sess := range snap.Sessions {
-			if engine != "" && sess.Engine != engine {
-				continue
-			}
-			if !all && !sess.Live && !sess.Busy {
-				continue
-			}
-			if sess.NodeID == "" {
-				sess.NodeID = s.Ident.ID
-				sess.NodeName = s.Name
-			}
-			out = append(out, sess)
-		}
-		writeJSON(w, http.StatusOK, out)
-		return
-	}
-	rows, err := s.Drivers.ListAll(r.Context(), engine, all)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	if rows == nil {
-		rows = []protocol.Session{}
-	}
-	for i := range rows {
-		rows[i].NodeID = s.Ident.ID
-		rows[i].NodeName = s.Name
-	}
-	writeJSON(w, http.StatusOK, rows)
 }
 
 func (s *Server) handleOpenHistory(w http.ResponseWriter, r *http.Request) {
@@ -653,6 +612,15 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		turnIDs = append(turnIDs, key)
 	}
 	bindTurn(sid)
+	seenSession := map[string]bool{}
+	noteSession := func(session string) {
+		if session == "" || seenSession[session] {
+			return
+		}
+		seenSession[session] = true
+		s.publishLiveSession(engine, session, req.CWD)
+	}
+	noteSession(sid)
 	defer func() {
 		for _, k := range turnIDs {
 			s.turns.clear(k, handle)
@@ -669,6 +637,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if chunk.Mesh.Session != "" {
 			sid = chunk.Mesh.Session
 			bindTurn(sid)
+			noteSession(sid)
 		}
 	}
 	if req.Stream {
